@@ -42,3 +42,31 @@ class ArticleAdmin(admin.ModelAdmin):
         ("SEO", {"fields": ("meta_title", "meta_description", "meta_keywords", "canonical_url")}),
         ("Timestamps", {"fields": ("created_at", "updated_at")}),
     )
+
+    def _can_manage_articles(self, request):
+        user = request.user
+        if user.is_superuser:
+            return True
+        if getattr(user, "role", "reader") in {"admin", "editor", "author"}:
+            return True
+        return any(
+            [
+                getattr(user, "is_author", False),
+                getattr(user, "is_editor", False),
+                getattr(user, "is_reporter", False),
+            ]
+        )
+
+    def has_add_permission(self, request):
+        return super().has_add_permission(request) and self._can_manage_articles(request)
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and self._can_manage_articles(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return super().has_delete_permission(request, obj) and self._can_manage_articles(request)
+
+    def save_model(self, request, obj, form, change):
+        if not obj.author_id:
+            obj.author = request.user
+        super().save_model(request, obj, form, change)
