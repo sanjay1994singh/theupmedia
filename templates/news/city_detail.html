@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}{{ city.meta_title|default:city.name }} News - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}{{ city.meta_description|default:city.description|default:"Latest local city news, breaking updates, and reports."|truncatechars:160 }}{% endblock %}
+{% block canonical %}{{ request.scheme }}://{{ request.get_host }}{{ city.get_absolute_url }}{% endblock %}
+{% block og_title %}{{ city.name }} News - {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<section class="content-band">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">City News</p>
+      <h1>{{ city.name }} News</h1>
+      <p><a class="text-link" href="{{ state.get_absolute_url }}">{{ state.name }}</a></p>
+      {% if city.description %}<p>{{ city.description }}</p>{% endif %}
+    </div>
+  </div>
+  <div class="card-grid">
+    {% for article in page_obj %}
+      {% include "news/includes/article_card.html" with article=article %}
+    {% empty %}
+      <p>No published news for this city yet.</p>
+    {% endfor %}
+  </div>
+  {% include "news/includes/pagination.html" %}
+</section>
+{% endblock %}

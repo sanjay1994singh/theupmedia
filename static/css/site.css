@@ -202,6 +202,36 @@ button,
   padding: 9px 14px;
 }
 
+.location-list {
+  margin-bottom: 22px;
+}
+
+.location-line {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  margin: -4px 0 8px;
+}
+
+.location-line a,
+.text-link {
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.article-taxonomy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.location-chip {
+  background: #fff1f1;
+  border-radius: 999px;
+  padding: 5px 9px;
+}
+
 .article-page {
   margin: 0 auto;
   max-width: 860px;

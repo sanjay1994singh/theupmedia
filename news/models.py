@@ -36,6 +36,59 @@ class Category(models.Model):
         return self.name
 
 
+class State(models.Model):
+    name = models.CharField(max_length=120, unique=True)
+    slug = models.SlugField(max_length=140, unique=True, blank=True)
+    description = models.TextField(blank=True)
+    meta_title = models.CharField(max_length=160, blank=True)
+    meta_description = models.CharField(max_length=220, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
+
+    def get_absolute_url(self):
+        return reverse("news:state_detail", kwargs={"state_slug": self.slug})
+
+    def __str__(self):
+        return self.name
+
+
+class City(models.Model):
+    state = models.ForeignKey(State, on_delete=models.PROTECT, related_name="cities")
+    name = models.CharField(max_length=120)
+    slug = models.SlugField(max_length=140, blank=True)
+    description = models.TextField(blank=True)
+    meta_title = models.CharField(max_length=160, blank=True)
+    meta_description = models.CharField(max_length=220, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["state__name", "name"]
+        verbose_name_plural = "Cities"
+        constraints = [
+            models.UniqueConstraint(fields=["state", "slug"], name="unique_city_slug_per_state"),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
+
+    def get_absolute_url(self):
+        return reverse("news:city_detail", kwargs={"state_slug": self.state.slug, "city_slug": self.slug})
+
+    def __str__(self):
+        return f"{self.name}, {self.state.name}"
+
+
 class Article(models.Model):
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
@@ -44,6 +97,8 @@ class Article(models.Model):
     title = models.CharField(max_length=220)
     slug = models.SlugField(max_length=240, unique=True, blank=True)
     category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name="articles")
+    state = models.ForeignKey(State, on_delete=models.PROTECT, related_name="articles", blank=True, null=True)
+    city = models.ForeignKey(City, on_delete=models.PROTECT, related_name="articles", blank=True, null=True)
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name="articles", null=True, blank=True)
     summary = models.TextField(help_text="Short summary used on listing pages and search snippets.")
     content = models.TextField()
@@ -70,9 +125,14 @@ class Article(models.Model):
             models.Index(fields=["status", "-published_at"], name="news_articl_status_3401af_idx"),
             models.Index(fields=["slug"], name="news_articl_slug_359fc3_idx"),
             models.Index(fields=["is_featured", "-published_at"], name="news_articl_is_feat_c36d07_idx"),
+            models.Index(fields=["state", "-published_at"], name="news_articl_state_6c1d8b_idx"),
+            models.Index(fields=["city", "-published_at"], name="news_articl_city_9a4e22_idx"),
+            models.Index(fields=["category", "state", "-published_at"], name="news_articl_cat_state_17a5_idx"),
         ]
 
     def save(self, *args, **kwargs):
+        if self.city and not self.state:
+            self.state = self.city.state
         if not self.slug:
             base_slug = slugify(self.title)[:210]
             slug = base_slug

@@ -5,6 +5,17 @@
   <div>
     <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
     <h3><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h3>
+    {% if article.city or article.state %}
+      <p class="location-line">
+        {% if article.city %}
+          <a href="{{ article.city.get_absolute_url }}">{{ article.city.name }}</a>
+        {% endif %}
+        {% if article.city and article.state %}, {% endif %}
+        {% if article.state %}
+          <a href="{{ article.state.get_absolute_url }}">{{ article.state.name }}</a>
+        {% endif %}
+      </p>
+    {% endif %}
     <p>{{ article.summary|truncatewords:22 }}</p>
     <time datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
   </div>

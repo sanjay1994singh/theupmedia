@@ -8,12 +8,12 @@ from django.utils import timezone
 
 from news.feeds import LatestNewsFeed
 from news.models import Article, Category
-from news.sitemaps import ArticleSitemap, CategorySitemap
+from news.sitemaps import ArticleSitemap, CategorySitemap, CitySitemap, StateSitemap
 
 
 def home(request):
-    featured = Article.published.select_related("category", "author").filter(is_featured=True)[:5]
-    latest = Article.published.select_related("category", "author")[:12]
+    featured = Article.published.select_related("category", "state", "city", "author").filter(is_featured=True)[:5]
+    latest = Article.published.select_related("category", "state", "city", "author")[:12]
     categories = Category.objects.filter(is_active=True)[:8]
     return render(request, "core/home.html", {"featured": featured, "latest": latest, "categories": categories})
 
@@ -29,11 +29,11 @@ def robots_txt(request):
 
 
 def sitemap_xml(request):
-    return sitemap(request, {"articles": ArticleSitemap, "categories": CategorySitemap})
+    return sitemap(request, {"articles": ArticleSitemap, "categories": CategorySitemap, "states": StateSitemap, "cities": CitySitemap})
 
 
 def news_sitemap_xml(request):
-    articles = Article.published.select_related("category")[:1000]
+    articles = Article.published.select_related("category", "state", "city")[:1000]
     xml_items = []
     for article in articles:
         xml_items.append(

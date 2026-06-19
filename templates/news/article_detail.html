@@ -17,7 +17,11 @@
 {% block content %}
 <article class="article-page">
   <header class="article-header">
-    <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
+    <div class="article-taxonomy">
+      <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
+      {% if article.state %}<a class="category location-chip" href="{{ article.state.get_absolute_url }}">{{ article.state.name }}</a>{% endif %}
+      {% if article.city %}<a class="category location-chip" href="{{ article.city.get_absolute_url }}">{{ article.city.name }}</a>{% endif %}
+    </div>
     <h1>{{ article.title }}</h1>
     <p>{{ article.summary }}</p>
     <div class="byline">
