@@ -455,6 +455,8 @@ time {
 
   .main-nav {
     border-top: 1px solid var(--line);
+    display: flex;
+    flex-wrap: nowrap;
     gap: 22px;
     grid-column: 1 / -1;
     margin: 0 -16px;
@@ -475,6 +477,7 @@ time {
   }
 
   .account-links {
+    grid-column: 1 / -1;
     gap: 10px;
     justify-content: flex-end;
   }
