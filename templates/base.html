@@ -15,6 +15,9 @@
   <meta property="og:type" content="{% block og_type %}website{% endblock %}">
   <meta property="og:url" content="{{ request.build_absolute_uri }}">
   <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" href="{% static 'img/site_logo/theup_site_logo.png' %}">
+  <link rel="shortcut icon" type="image/png" href="{% static 'img/site_logo/theup_site_logo.png' %}">
+  <link rel="apple-touch-icon" href="{% static 'img/site_logo/theup_site_logo.png' %}">
   <link rel="alternate" type="application/rss+xml" title="{{ SITE_NAME }} RSS" href="{% url 'core:rss' %}">
   <link rel="stylesheet" href="{% static 'css/site.css' %}">
   {% block extra_head %}{% endblock %}
@@ -27,7 +30,9 @@
       <span>State & City Coverage</span>
     </div>
     <div class="topbar">
-      <a class="brand" href="{% url 'core:home' %}">{{ SITE_NAME }}</a>
+      <a class="brand" href="{% url 'core:home' %}" aria-label="{{ SITE_NAME }} home">
+        <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="{{ SITE_NAME }}" width="260" height="82">
+      </a>
       <nav class="main-nav" aria-label="Main navigation">
         <a href="{% url 'news:article_list' %}">News</a>
         {% for category in NAV_CATEGORIES %}
@@ -53,7 +58,9 @@
     {% block content %}{% endblock %}
   </main>
   <footer class="site-footer">
-    <div class="footer-brand">{{ SITE_NAME }}</div>
+    <div class="footer-brand">
+      <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="{{ SITE_NAME }}" width="220" height="70">
+    </div>
     <p>&copy; {% now "Y" %} {{ SITE_NAME }}. Hindi news, local updates, and public-interest stories.</p>
     <p class="footer-links">
       <a href="{% url 'core:about' %}">About</a>
