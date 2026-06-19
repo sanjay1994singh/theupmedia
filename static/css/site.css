@@ -288,10 +288,9 @@ button,
 }
 
 .article-image {
-  aspect-ratio: 16 / 9;
   border-radius: 8px;
+  height: auto;
   margin: 24px 0;
-  object-fit: cover;
   width: 100%;
 }
 
