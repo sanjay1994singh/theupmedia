@@ -5,29 +5,53 @@
 
 {% block content %}
 <section class="hero home-hero">
-  <div class="hero-copy">
-    <p class="eyebrow">Latest Updates</p>
-    <h1>The Up Media</h1>
-    <p>Hindi news, local updates, and public-interest stories from state, city, and digital sources.</p>
-  </div>
   {% if featured %}
-    <div class="lead-grid">
-      {% for article in featured %}
-        <article class="story-card {% if forloop.first %}story-card-large{% endif %}">
+    {% for article in featured %}
+      {% if forloop.first %}
+        <article class="lead-story">
+          <div class="lead-copy">
+            <p class="eyebrow">Top Story</p>
+            <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
+            {% if article.slug %}
+              <h1><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h1>
+            {% else %}
+              <h1>{{ article.title }}</h1>
+            {% endif %}
+            <p>{{ article.summary|truncatewords:34 }}</p>
+            <div class="lead-meta">
+              {% if article.city %}<a href="{{ article.city.get_absolute_url }}">{{ article.city.name }}</a>{% endif %}
+              {% if article.state %}<a href="{{ article.state.get_absolute_url }}">{{ article.state.name }}</a>{% endif %}
+              <time datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
+            </div>
+          </div>
           {% if article.featured_image %}
-            <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+            <a class="lead-image" href="{{ article.get_absolute_url }}">
+              <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+            </a>
           {% endif %}
-          <div>
+        </article>
+      {% endif %}
+    {% endfor %}
+    <div class="headline-rail">
+      {% for article in featured %}
+        {% if not forloop.first %}
+          <article>
             <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
             {% if article.slug %}
               <h2><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h2>
             {% else %}
               <h2>{{ article.title }}</h2>
             {% endif %}
-            <p>{{ article.summary|truncatewords:24 }}</p>
-          </div>
-        </article>
+            <time datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
+          </article>
+        {% endif %}
       {% endfor %}
+    </div>
+  {% else %}
+    <div class="hero-copy">
+      <p class="eyebrow">Latest Updates</p>
+      <h1>The Up Media</h1>
+      <p>Hindi news, local updates, and public-interest stories from state, city, and digital sources.</p>
     </div>
   {% endif %}
 </section>

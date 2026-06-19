@@ -31,7 +31,8 @@
     </div>
     <div class="topbar">
       <a class="brand" href="{% url 'core:home' %}" aria-label="{{ SITE_NAME }} home">
-        <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="{{ SITE_NAME }}" width="260" height="82">
+        <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="" width="72" height="72">
+        <span>{{ SITE_NAME }}</span>
       </a>
       <nav class="main-nav" aria-label="Main navigation">
         <a href="{% url 'news:article_list' %}">News</a>
@@ -59,7 +60,8 @@
   </main>
   <footer class="site-footer">
     <div class="footer-brand">
-      <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="{{ SITE_NAME }}" width="220" height="70">
+      <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="" width="64" height="64">
+      <span>{{ SITE_NAME }}</span>
     </div>
     <p>&copy; {% now "Y" %} {{ SITE_NAME }}. Hindi news, local updates, and public-interest stories.</p>
     <p class="footer-links">
