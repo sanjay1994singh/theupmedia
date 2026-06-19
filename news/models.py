@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db.models import F
 from django.template.defaultfilters import slugify
 from django.urls import reverse
 from django.utils import timezone
@@ -120,6 +121,7 @@ class Article(models.Model):
     meta_description = models.CharField(max_length=220, blank=True)
     meta_keywords = models.CharField(max_length=255, blank=True)
     canonical_url = models.URLField(blank=True)
+    unique_reads = models.PositiveIntegerField(default=0, editable=False)
     published_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -166,3 +168,45 @@ class ArticleSlugRedirect(models.Model):
 
     def __str__(self):
         return f"{self.old_slug} -> {self.article.slug}"
+
+
+class ArticleRead(models.Model):
+    article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name="reads")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, blank=True, null=True, related_name="article_reads")
+    fingerprint = models.CharField(max_length=64)
+    session_key = models.CharField(max_length=40, blank=True)
+    ip_address = models.GenericIPAddressField(blank=True, null=True)
+    user_agent_hash = models.CharField(max_length=64, blank=True)
+    first_read_at = models.DateTimeField(auto_now_add=True)
+    last_read_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-first_read_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["article", "fingerprint"], name="unique_article_read_fingerprint"),
+        ]
+        indexes = [
+            models.Index(fields=["article", "-first_read_at"], name="news_read_article_first_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.article_id} {self.fingerprint}"
+
+    @classmethod
+    def record(cls, article, request, fingerprint, ip_address="", user_agent_hash=""):
+        user = request.user if request.user.is_authenticated else None
+        session_key = request.session.session_key or ""
+        read, created = cls.objects.get_or_create(
+            article=article,
+            fingerprint=fingerprint,
+            defaults={
+                "user": user,
+                "session_key": session_key,
+                "ip_address": ip_address or None,
+                "user_agent_hash": user_agent_hash,
+            },
+        )
+        if created:
+            Article.objects.filter(pk=article.pk).update(unique_reads=F("unique_reads") + 1)
+            article.unique_reads = (article.unique_reads or 0) + 1
+        return read, created

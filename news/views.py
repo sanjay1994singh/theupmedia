@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 from urllib.parse import quote_plus
@@ -10,11 +11,57 @@ from django.urls import reverse
 from django.utils.text import Truncator
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from .models import Article, ArticleSlugRedirect, Category, City, State
+from .models import Article, ArticleRead, ArticleSlugRedirect, Category, City, State
+
+
+BOT_KEYWORDS = (
+    "bot",
+    "crawl",
+    "spider",
+    "slurp",
+    "facebookexternalhit",
+    "whatsapp",
+    "telegrambot",
+    "twitterbot",
+    "linkedinbot",
+)
 
 
 def public_absolute_url(path):
     return f"{settings.SITE_DOMAIN}{path}"
+
+
+def client_ip(request):
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR", "")
+
+
+def is_bot_request(request):
+    user_agent = request.META.get("HTTP_USER_AGENT", "").lower()
+    return any(keyword in user_agent for keyword in BOT_KEYWORDS)
+
+
+def read_fingerprint(request):
+    if request.user.is_authenticated:
+        raw = f"user:{request.user.pk}"
+    else:
+        if not request.session.session_key:
+            request.session.create()
+        raw = "|".join(
+            [
+                "anon",
+                request.session.session_key or "",
+                client_ip(request),
+                request.META.get("HTTP_USER_AGENT", ""),
+            ]
+        )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def user_agent_hash(request):
+    return hashlib.sha256(request.META.get("HTTP_USER_AGENT", "").encode("utf-8")).hexdigest()
 
 
 def _font(size):
@@ -147,6 +194,14 @@ def article_detail(request, slug):
     except Article.DoesNotExist:
         slug_redirect = get_object_or_404(ArticleSlugRedirect.objects.select_related("article"), old_slug=slug)
         return redirect(slug_redirect.article.get_absolute_url(), permanent=True)
+    if not is_bot_request(request):
+        ArticleRead.record(
+            article=article,
+            request=request,
+            fingerprint=read_fingerprint(request),
+            ip_address=client_ip(request),
+            user_agent_hash=user_agent_hash(request),
+        )
     related_articles = Article.published.filter(category=article.category).exclude(pk=article.pk).select_related("category", "state", "city")[:4]
     absolute_url = request.build_absolute_uri(article.get_absolute_url())
     share_image_url = public_absolute_url(reverse("news:share_image", kwargs={"slug": article.slug}))

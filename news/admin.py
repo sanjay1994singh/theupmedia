@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Article, ArticleSlugRedirect, Category, City, State
+from .models import Article, ArticleRead, ArticleSlugRedirect, Category, City, State
 
 
 @admin.register(Category)
@@ -29,15 +29,16 @@ class CityAdmin(admin.ModelAdmin):
 
 @admin.register(Article)
 class ArticleAdmin(admin.ModelAdmin):
-    list_display = ("title", "category", "state", "city", "author", "status", "is_featured", "published_at")
+    list_display = ("title", "category", "state", "city", "author", "status", "is_featured", "unique_reads", "published_at")
     list_filter = ("status", "is_featured", "category", "state", "city")
     search_fields = ("title", "summary", "content", "meta_keywords", "state__name", "city__name")
     prepopulated_fields = {"slug": ("title",)}
     autocomplete_fields = ("state", "city", "author")
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = ("unique_reads", "created_at", "updated_at")
     fieldsets = (
         ("Article", {"fields": ("title", "slug", "category", "state", "city", "author", "summary", "content", "featured_image", "image_alt_text")}),
         ("Publishing", {"fields": ("status", "is_featured", "published_at", "source_name", "source_url")}),
+        ("Analytics", {"fields": ("unique_reads",)}),
         ("SEO", {"fields": ("meta_title", "meta_description", "meta_keywords", "canonical_url")}),
         ("Timestamps", {"fields": ("created_at", "updated_at")}),
     )
@@ -77,3 +78,17 @@ class ArticleSlugRedirectAdmin(admin.ModelAdmin):
     search_fields = ("old_slug", "article__title", "article__slug")
     autocomplete_fields = ("article",)
     readonly_fields = ("created_at",)
+
+
+@admin.register(ArticleRead)
+class ArticleReadAdmin(admin.ModelAdmin):
+    list_display = ("article", "user", "ip_address", "first_read_at", "last_read_at")
+    list_filter = ("first_read_at", "last_read_at")
+    search_fields = ("article__title", "article__slug", "user__username", "ip_address", "fingerprint")
+    readonly_fields = ("article", "user", "fingerprint", "session_key", "ip_address", "user_agent_hash", "first_read_at", "last_read_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
