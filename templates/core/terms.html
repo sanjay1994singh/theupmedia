@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Terms and Conditions - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}Read the terms and conditions for using {{ SITE_NAME }}, including content use, user conduct, and liability limitations.{% endblock %}
+{% block canonical %}{{ request.scheme }}://{{ request.get_host }}{% url 'core:terms' %}{% endblock %}
+{% block og_title %}Terms and Conditions - {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<section class="page-shell">
+  <p class="eyebrow">Terms</p>
+  <h1>Terms and Conditions</h1>
+  <p>By using {{ SITE_NAME }}, you agree to these terms and conditions. If you do not agree, please stop using the website.</p>
+  <div class="info-list">
+    <p><strong>Publisher:</strong> The Up Media</p>
+    <p><strong>Founder:</strong> Mr. Sanjay Singh</p>
+    <p><strong>Location:</strong> Vrindavan, Mathura, Uttar Pradesh, India</p>
+  </div>
+  <h2>Use of Content</h2>
+  <p>All articles, images, graphics, and other content published on this website are for information purposes. You may not copy, republish, or commercially reuse our content without permission.</p>
+  <h2>User Conduct</h2>
+  <p>Users must not misuse the website, attempt unauthorized access, post harmful content, or interfere with website operation.</p>
+  <h2>Accuracy of Information</h2>
+  <p>We try to keep information accurate and updated. However, news situations can change quickly, and we do not guarantee that all information will remain complete or current at all times.</p>
+  <h2>External Links</h2>
+  <p>Our website may contain links to third-party websites. We are not responsible for their content, policies, or practices.</p>
+  <h2>Changes to Terms</h2>
+  <p>We may update these terms when needed. Continued use of the website means you accept the updated terms.</p>
+</section>
+{% endblock %}

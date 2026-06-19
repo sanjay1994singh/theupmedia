@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}About Us - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}Learn about {{ SITE_NAME }}, an independent digital news platform publishing timely Hindi news, local updates, and public-interest stories.{% endblock %}
+{% block canonical %}{{ request.scheme }}://{{ request.get_host }}{% url 'core:about' %}{% endblock %}
+{% block og_title %}About {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<section class="page-shell">
+  <p class="eyebrow">About Us</p>
+  <h1>About The Up Media</h1>
+  <p>{{ SITE_NAME }} is a digital news platform focused on publishing timely, useful, and reader-friendly Hindi news for audiences across India.</p>
+  <p>Our coverage includes local updates, state news, national developments, politics, business, crime, weather, and public-interest stories. We aim to make important information easy to understand and accessible on mobile and desktop devices.</p>
+  <div class="info-list">
+    <p><strong>Founder:</strong> Mr. Sanjay Singh</p>
+    <p><strong>Publisher:</strong> The Up Media</p>
+    <p><strong>Base Location:</strong> Vrindavan, Mathura, Uttar Pradesh, India</p>
+    <p><strong>Website:</strong> https://theupmedia.in/</p>
+  </div>
+  <h2>Our Mission</h2>
+  <p>Our mission is to provide accurate, clear, and responsible news coverage while building a trustworthy platform for readers looking for relevant updates.</p>
+  <h2>Founder</h2>
+  <p>{{ SITE_NAME }} was founded by Mr. Sanjay Singh with the aim of building a reliable Hindi news platform for local, state, and national updates.</p>
+  <h2>Editorial Approach</h2>
+  <p>We work to verify information before publishing and update articles when new details become available. Opinion, promotional, or third-party information is clearly handled according to its context.</p>
+</section>
+{% endblock %}

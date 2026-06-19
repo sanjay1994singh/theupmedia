@@ -9,6 +9,7 @@ from django.utils import timezone
 from news.feeds import LatestNewsFeed
 from news.models import Article, Category
 from news.sitemaps import ArticleSitemap, CategorySitemap, CitySitemap, StateSitemap
+from .sitemaps import StaticPageSitemap
 
 
 def home(request):
@@ -16,6 +17,26 @@ def home(request):
     latest = Article.published.select_related("category", "state", "city", "author")[:12]
     categories = Category.objects.filter(is_active=True)[:8]
     return render(request, "core/home.html", {"featured": featured, "latest": latest, "categories": categories})
+
+
+def about(request):
+    return render(request, "core/about.html")
+
+
+def contact(request):
+    return render(request, "core/contact.html")
+
+
+def privacy_policy(request):
+    return render(request, "core/privacy_policy.html")
+
+
+def terms(request):
+    return render(request, "core/terms.html")
+
+
+def disclaimer(request):
+    return render(request, "core/disclaimer.html")
 
 
 def robots_txt(request):
@@ -29,7 +50,16 @@ def robots_txt(request):
 
 
 def sitemap_xml(request):
-    return sitemap(request, {"articles": ArticleSitemap, "categories": CategorySitemap, "states": StateSitemap, "cities": CitySitemap})
+    return sitemap(
+        request,
+        {
+            "articles": ArticleSitemap,
+            "categories": CategorySitemap,
+            "states": StateSitemap,
+            "cities": CitySitemap,
+            "pages": StaticPageSitemap,
+        },
+    )
 
 
 def news_sitemap_xml(request):

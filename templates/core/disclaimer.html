@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Disclaimer - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}Read the disclaimer for {{ SITE_NAME }} regarding news information, external links, opinions, and liability.{% endblock %}
+{% block canonical %}{{ request.scheme }}://{{ request.get_host }}{% url 'core:disclaimer' %}{% endblock %}
+{% block og_title %}Disclaimer - {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<section class="page-shell">
+  <p class="eyebrow">Disclaimer</p>
+  <h1>Disclaimer</h1>
+  <p>The information published on {{ SITE_NAME }} is provided for general news and informational purposes.</p>
+  <div class="info-list">
+    <p><strong>Publisher:</strong> The Up Media</p>
+    <p><strong>Founder:</strong> Mr. Sanjay Singh</p>
+    <p><strong>Location:</strong> Vrindavan, Mathura, Uttar Pradesh, India</p>
+  </div>
+  <h2>News and Updates</h2>
+  <p>We make efforts to publish accurate and timely information, but we do not guarantee the completeness, accuracy, or reliability of every detail at all times.</p>
+  <h2>Opinions</h2>
+  <p>Any opinions or views expressed in opinion-based content belong to the respective author and do not necessarily represent the views of {{ SITE_NAME }}.</p>
+  <h2>External Sources</h2>
+  <p>Some reports may refer to public statements, agencies, press releases, official sources, or third-party material. We are not responsible for changes made by external sources after publication.</p>
+  <h2>No Liability</h2>
+  <p>{{ SITE_NAME }} will not be liable for any loss or damage arising from use of information published on this website.</p>
+</section>
+{% endblock %}

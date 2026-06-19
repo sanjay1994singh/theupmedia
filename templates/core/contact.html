@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Contact Us - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}Contact {{ SITE_NAME }} for news tips, corrections, advertising, partnerships, and general queries.{% endblock %}
+{% block canonical %}{{ request.scheme }}://{{ request.get_host }}{% url 'core:contact' %}{% endblock %}
+{% block og_title %}Contact {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<section class="page-shell">
+  <p class="eyebrow">Contact</p>
+  <h1>Contact Us</h1>
+  <p>You can contact {{ SITE_NAME }} for news tips, corrections, advertising queries, partnerships, or general communication.</p>
+  <div class="info-list">
+    <p><strong>Founder:</strong> Mr. Sanjay Singh</p>
+    <p><strong>Publisher:</strong> The Up Media</p>
+    <p><strong>Email:</strong> srbc500@gmail.com</p>
+    <p><strong>Mobile:</strong> 8279408396</p>
+    <p><strong>Website:</strong> https://theupmedia.in/</p>
+    <p><strong>Location:</strong> Vrindavan, Mathura, Uttar Pradesh, India</p>
+  </div>
+  <h2>Corrections</h2>
+  <p>If you believe any article contains an error, please share the article URL and the correction details. We review correction requests and update content where required.</p>
+  <h2>News Tips</h2>
+  <p>For local news tips, send clear details, location, date, supporting images or documents if available, and your contact information.</p>
+</section>
+{% endblock %}

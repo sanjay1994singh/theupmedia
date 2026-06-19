@@ -175,6 +175,34 @@ h3 {
   border-top: 1px solid var(--line);
 }
 
+.page-shell {
+  margin: 0 auto;
+  max-width: 860px;
+  padding: 44px 20px;
+}
+
+.page-shell h1 {
+  font-size: 44px;
+}
+
+.page-shell h2 {
+  font-size: 26px;
+  margin-top: 26px;
+}
+
+.page-shell p {
+  color: var(--muted);
+  font-size: 18px;
+}
+
+.info-list {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 20px 0;
+  padding: 16px;
+}
+
 .section-heading {
   align-items: end;
   display: flex;
@@ -429,6 +457,13 @@ time {
   color: var(--accent);
   font-weight: 800;
   margin: 0 6px;
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  justify-content: center;
 }
 
 @media (max-width: 840px) {

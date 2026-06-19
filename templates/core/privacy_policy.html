@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Privacy Policy - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}Read the privacy policy of {{ SITE_NAME }} covering cookies, analytics, advertising, user data, and contact information.{% endblock %}
+{% block canonical %}{{ request.scheme }}://{{ request.get_host }}{% url 'core:privacy_policy' %}{% endblock %}
+{% block og_title %}Privacy Policy - {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<section class="page-shell">
+  <p class="eyebrow">Privacy Policy</p>
+  <h1>Privacy Policy</h1>
+  <p>At {{ SITE_NAME }}, we respect your privacy. This policy explains what information may be collected when you visit our website and how it may be used.</p>
+  <div class="info-list">
+    <p><strong>Website Owner/Publisher:</strong> The Up Media</p>
+    <p><strong>Founder:</strong> Mr. Sanjay Singh</p>
+    <p><strong>Operational Location:</strong> Vrindavan, Mathura, Uttar Pradesh, India</p>
+    <p><strong>Contact:</strong> srbc500@gmail.com</p>
+    <p><strong>Mobile:</strong> 8279408396</p>
+  </div>
+  <h2>Information We Collect</h2>
+  <p>We may collect basic information such as browser type, device information, pages visited, approximate location, IP address, and interaction data to improve the website and understand readership.</p>
+  <h2>Cookies</h2>
+  <p>Our website may use cookies to improve user experience, remember preferences, support login features, measure traffic, and serve relevant advertisements.</p>
+  <h2>Advertising</h2>
+  <p>We may use third-party advertising services, including Google AdSense. These services may use cookies or similar technologies to show ads based on visits to this and other websites.</p>
+  <h2>Analytics</h2>
+  <p>We may use analytics tools to understand website traffic, popular articles, and performance. This helps us improve content and user experience.</p>
+  <h2>User Accounts</h2>
+  <p>If you create an account or sign in through social login, we may store account information needed to provide login and profile features.</p>
+  <h2>Contact</h2>
+  <p>For privacy questions, contact us at srbc500@gmail.com.</p>
+</section>
+{% endblock %}
