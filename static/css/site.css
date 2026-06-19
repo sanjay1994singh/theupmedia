@@ -251,6 +251,42 @@ button,
   font-weight: 700;
 }
 
+.share-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.share-btn {
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 12px 14px;
+}
+
+.share-btn.whatsapp {
+  background: #128c7e;
+}
+
+.share-btn.facebook {
+  background: #1877f2;
+}
+
+.share-btn.twitter {
+  background: #111;
+}
+
+.share-btn.copy-link {
+  background: var(--accent);
+}
+
 .article-image {
   aspect-ratio: 16 / 9;
   border-radius: 8px;

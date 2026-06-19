@@ -11,5 +11,6 @@ urlpatterns = [
     path("state/<slug:state_slug>/category/<slug:category_slug>/", views.state_category_detail, name="state_category_detail"),
     path("state/<slug:state_slug>/<slug:city_slug>/", views.city_detail, name="city_detail"),
     path("state/<slug:state_slug>/<slug:city_slug>/category/<slug:category_slug>/", views.city_category_detail, name="city_category_detail"),
+    path("news/<slug:slug>/share-image.jpg", views.share_image, name="share_image"),
     path("news/<slug:slug>/", views.article_detail, name="article_detail"),
 ]

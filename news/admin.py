@@ -30,11 +30,10 @@ class CityAdmin(admin.ModelAdmin):
 @admin.register(Article)
 class ArticleAdmin(admin.ModelAdmin):
     list_display = ("title", "category", "state", "city", "author", "status", "is_featured", "published_at")
-    list_filter = ("status", "is_featured", "category", "state", "city", "published_at")
+    list_filter = ("status", "is_featured", "category", "state", "city")
     search_fields = ("title", "summary", "content", "meta_keywords", "state__name", "city__name")
     prepopulated_fields = {"slug": ("title",)}
     autocomplete_fields = ("state", "city", "author")
-    date_hierarchy = "published_at"
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (
         ("Article", {"fields": ("title", "slug", "category", "state", "city", "author", "summary", "content", "featured_image", "image_alt_text")}),

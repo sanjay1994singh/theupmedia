@@ -4,7 +4,11 @@
   {% endif %}
   <div>
     <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
-    <h3><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h3>
+    {% if article.slug %}
+      <h3><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h3>
+    {% else %}
+      <h3>{{ article.title }}</h3>
+    {% endif %}
     {% if article.city or article.state %}
       <p class="location-line">
         {% if article.city %}

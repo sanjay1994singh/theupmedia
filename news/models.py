@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 from django.template.defaultfilters import slugify
@@ -135,7 +137,7 @@ class Article(models.Model):
         if self.city and not self.state:
             self.state = self.city.state
         if not self.slug:
-            base_slug = slugify(self.title)[:210]
+            base_slug = slugify(self.title)[:210] or f"news-{timezone.now():%Y%m%d}-{uuid.uuid4().hex[:8]}"
             slug = base_slug
             counter = 2
             while Article.objects.filter(slug=slug).exclude(pk=self.pk).exists():

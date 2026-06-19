@@ -19,7 +19,11 @@
           {% endif %}
           <div>
             <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
-            <h2><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h2>
+            {% if article.slug %}
+              <h2><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h2>
+            {% else %}
+              <h2>{{ article.title }}</h2>
+            {% endif %}
             <p>{{ article.summary|truncatewords:24 }}</p>
           </div>
         </article>
