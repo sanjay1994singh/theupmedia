@@ -113,7 +113,8 @@ img {
 }
 
 .main-nav a,
-.account-links a {
+.account-links a,
+.logout-form button {
   color: #333;
   font-size: 14px;
   font-weight: 700;
@@ -140,13 +141,22 @@ img {
   justify-content: flex-end;
 }
 
-.account-links a {
+.account-links a,
+.logout-form button {
+  background: transparent;
   border: 1px solid transparent;
   border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
   padding: 7px 10px;
 }
 
-.account-links a:hover {
+.logout-form {
+  margin: 0;
+}
+
+.account-links a:hover,
+.logout-form button:hover {
   background: var(--soft-red);
   border-color: #f0c3c8;
   color: var(--accent);
@@ -778,7 +788,8 @@ time {
     justify-content: flex-end;
   }
 
-  .account-links a {
+  .account-links a,
+  .logout-form button {
     background: var(--soft-red);
     border: 1px solid #f0c3c8;
     color: var(--accent-dark);
@@ -865,7 +876,8 @@ time {
     gap: 5px;
   }
 
-  .account-links a {
+  .account-links a,
+  .logout-form button {
     font-size: 12px;
     padding: 8px 8px;
   }
