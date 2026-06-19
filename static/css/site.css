@@ -140,6 +140,18 @@ img {
   justify-content: flex-end;
 }
 
+.account-links a {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 7px 10px;
+}
+
+.account-links a:hover {
+  background: var(--soft-red);
+  border-color: #f0c3c8;
+  color: var(--accent);
+}
+
 .hero {
   display: grid;
   gap: 28px;
@@ -716,7 +728,7 @@ time {
   .topbar {
     align-items: center;
     gap: 12px;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     max-width: 100%;
     padding: 18px 16px 0;
   }
@@ -760,13 +772,19 @@ time {
   }
 
   .account-links {
-    grid-column: 1 / -1;
-    gap: 10px;
+    grid-column: 2;
+    grid-row: 1;
+    gap: 6px;
     justify-content: flex-end;
   }
 
   .account-links a {
-    font-size: 14px;
+    background: var(--soft-red);
+    border: 1px solid #f0c3c8;
+    color: var(--accent-dark);
+    font-size: 13px;
+    line-height: 1;
+    padding: 9px 10px;
     white-space: nowrap;
   }
 
@@ -840,7 +858,16 @@ time {
   }
 
   .brand span {
-    font-size: clamp(24px, 7vw, 32px);
+    font-size: clamp(22px, 6.4vw, 30px);
+  }
+
+  .account-links {
+    gap: 5px;
+  }
+
+  .account-links a {
+    font-size: 12px;
+    padding: 8px 8px;
   }
 
   .main-nav {
