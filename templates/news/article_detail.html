@@ -33,7 +33,7 @@
     <img class="article-image" src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
   {% endif %}
   <div class="article-content">
-    {{ article.content|linebreaks }}
+    {{ article.content|safe }}
   </div>
   {% if article.source_url %}
     <p class="source">Source: <a href="{{ article.source_url }}" rel="nofollow noopener">{{ article.source_name|default:article.source_url }}</a></p>

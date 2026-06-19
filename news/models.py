@@ -3,6 +3,7 @@ from django.db import models
 from django.template.defaultfilters import slugify
 from django.urls import reverse
 from django.utils import timezone
+from django_ckeditor_5.fields import CKEditor5Field
 
 
 class PublishedManager(models.Manager):
@@ -101,7 +102,7 @@ class Article(models.Model):
     city = models.ForeignKey(City, on_delete=models.PROTECT, related_name="articles", blank=True, null=True)
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name="articles", null=True, blank=True)
     summary = models.TextField(help_text="Short summary used on listing pages and search snippets.")
-    content = models.TextField()
+    content = CKEditor5Field("Content", config_name="article")
     featured_image = models.ImageField(upload_to="articles/%Y/%m/", blank=True, null=True)
     image_alt_text = models.CharField(max_length=180, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)

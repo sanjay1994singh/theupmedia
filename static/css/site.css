@@ -266,6 +266,50 @@ button,
   padding: 8px 24px;
 }
 
+.article-content h2,
+.article-content h3,
+.article-content h4 {
+  margin-top: 24px;
+}
+
+.article-content img {
+  border-radius: 8px;
+  height: auto !important;
+  margin: 18px auto;
+  max-width: 100%;
+}
+
+.article-content figure {
+  margin: 22px 0;
+}
+
+.article-content figcaption {
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+.article-content table {
+  border-collapse: collapse;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  width: 100%;
+}
+
+.article-content th,
+.article-content td {
+  border: 1px solid var(--line);
+  padding: 10px;
+}
+
+.article-content blockquote {
+  border-left: 4px solid var(--gold);
+  color: #333;
+  margin: 20px 0;
+  padding: 4px 0 4px 18px;
+}
+
 .source,
 time {
   color: var(--muted);

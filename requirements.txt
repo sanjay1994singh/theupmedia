@@ -3,3 +3,4 @@ Pillow>=10.0
 python-dotenv>=1.0
 social-auth-app-django>=5.4
 PyMySQL>=1.1
+django-ckeditor-5>=0.2.20
