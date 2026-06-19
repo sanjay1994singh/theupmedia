@@ -5,12 +5,12 @@ from urllib.parse import quote_plus
 from django.conf import settings
 from django.core.paginator import Paginator
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import Truncator
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from .models import Article, Category, City, State
+from .models import Article, ArticleSlugRedirect, Category, City, State
 
 
 def public_absolute_url(path):
@@ -142,7 +142,11 @@ def city_category_detail(request, state_slug, city_slug, category_slug):
 
 
 def article_detail(request, slug):
-    article = get_object_or_404(Article.published.select_related("category", "state", "city", "author"), slug=slug)
+    try:
+        article = Article.published.select_related("category", "state", "city", "author").get(slug=slug)
+    except Article.DoesNotExist:
+        slug_redirect = get_object_or_404(ArticleSlugRedirect.objects.select_related("article"), old_slug=slug)
+        return redirect(slug_redirect.article.get_absolute_url(), permanent=True)
     related_articles = Article.published.filter(category=article.category).exclude(pk=article.pk).select_related("category", "state", "city")[:4]
     absolute_url = request.build_absolute_uri(article.get_absolute_url())
     share_image_url = public_absolute_url(reverse("news:share_image", kwargs={"slug": article.slug}))

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Article, Category, City, State
+from .models import Article, ArticleSlugRedirect, Category, City, State
 
 
 @admin.register(Category)
@@ -69,3 +69,11 @@ class ArticleAdmin(admin.ModelAdmin):
         if not obj.author_id:
             obj.author = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(ArticleSlugRedirect)
+class ArticleSlugRedirectAdmin(admin.ModelAdmin):
+    list_display = ("old_slug", "article", "created_at")
+    search_fields = ("old_slug", "article__title", "article__slug")
+    autocomplete_fields = ("article",)
+    readonly_fields = ("created_at",)

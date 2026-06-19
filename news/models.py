@@ -1,11 +1,11 @@
-import uuid
-
 from django.conf import settings
 from django.db import models
 from django.template.defaultfilters import slugify
 from django.urls import reverse
 from django.utils import timezone
 from django_ckeditor_5.fields import CKEditor5Field
+
+from .slug_utils import unique_article_slug
 
 
 class PublishedManager(models.Manager):
@@ -98,7 +98,12 @@ class Article(models.Model):
         PUBLISHED = "published", "Published"
 
     title = models.CharField(max_length=220)
-    slug = models.SlugField(max_length=240, unique=True, blank=True)
+    slug = models.SlugField(
+        max_length=240,
+        unique=True,
+        blank=True,
+        help_text="Leave blank to generate an SEO-friendly Hinglish URL from the Hindi title.",
+    )
     category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name="articles")
     state = models.ForeignKey(State, on_delete=models.PROTECT, related_name="articles", blank=True, null=True)
     city = models.ForeignKey(City, on_delete=models.PROTECT, related_name="articles", blank=True, null=True)
@@ -137,13 +142,7 @@ class Article(models.Model):
         if self.city and not self.state:
             self.state = self.city.state
         if not self.slug:
-            base_slug = slugify(self.title)[:210] or f"news-{timezone.now():%Y%m%d}-{uuid.uuid4().hex[:8]}"
-            slug = base_slug
-            counter = 2
-            while Article.objects.filter(slug=slug).exclude(pk=self.pk).exists():
-                slug = f"{base_slug}-{counter}"
-                counter += 1
-            self.slug = slug
+            self.slug = unique_article_slug(Article, self.title, self.pk)
         if not self.meta_title:
             self.meta_title = self.title[:160]
         if not self.meta_description:
@@ -155,3 +154,15 @@ class Article(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class ArticleSlugRedirect(models.Model):
+    old_slug = models.SlugField(max_length=240, unique=True)
+    article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name="slug_redirects")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.old_slug} -> {self.article.slug}"
