@@ -42,7 +42,10 @@
     </div>
   </header>
   {% if article.featured_image %}
-    <img class="article-image" src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+    <figure class="article-figure">
+      <img class="article-image" src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+      {% if article.image_alt_text %}<figcaption>{{ article.image_alt_text }}</figcaption>{% endif %}
+    </figure>
   {% endif %}
   <div class="article-content">
     {{ article.content|safe }}

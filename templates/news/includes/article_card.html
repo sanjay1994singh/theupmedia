@@ -1,8 +1,16 @@
 <article class="story-card">
   {% if article.featured_image %}
-    <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+    {% if article.slug %}
+      <a class="story-media" href="{{ article.get_absolute_url }}">
+        <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+      </a>
+    {% else %}
+      <div class="story-media">
+        <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+      </div>
+    {% endif %}
   {% endif %}
-  <div>
+  <div class="story-body">
     <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
     {% if article.slug %}
       <h3><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h3>
@@ -21,6 +29,6 @@
       </p>
     {% endif %}
     <p>{{ article.summary|truncatewords:22 }}</p>
-    <time datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
+    <time class="story-time" datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
   </div>
 </article>

@@ -4,11 +4,11 @@
 {% block meta_description %}Read latest breaking news, explainers, and updates from {{ SITE_NAME }}.{% endblock %}
 
 {% block content %}
-<section class="hero">
+<section class="hero home-hero">
   <div class="hero-copy">
     <p class="eyebrow">Latest Updates</p>
     <h1>The Up Media</h1>
-    <p>Fast, searchable, structured publishing for news that is ready for readers and search engines.</p>
+    <p>Hindi news, local updates, and public-interest stories from state, city, and digital sources.</p>
   </div>
   {% if featured %}
     <div class="lead-grid">
@@ -34,7 +34,10 @@
 
 <section class="content-band">
   <div class="section-heading">
-    <h2>Latest News</h2>
+    <div>
+      <p class="eyebrow">Fresh Stories</p>
+      <h2>Latest News</h2>
+    </div>
     <a href="{% url 'news:article_list' %}">View all</a>
   </div>
   <div class="card-grid">
@@ -48,7 +51,10 @@
 
 <section class="content-band muted">
   <div class="section-heading">
-    <h2>Categories</h2>
+    <div>
+      <p class="eyebrow">Explore</p>
+      <h2>Categories</h2>
+    </div>
   </div>
   <div class="category-list">
     {% for category in categories %}
