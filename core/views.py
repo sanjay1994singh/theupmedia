@@ -1,0 +1,67 @@
+from django.conf import settings
+from django.contrib.sitemaps.views import sitemap
+from django.http import HttpResponse
+from django.shortcuts import render
+from django.urls import reverse
+from django.utils.html import escape
+from django.utils import timezone
+
+from news.feeds import LatestNewsFeed
+from news.models import Article, Category
+from news.sitemaps import ArticleSitemap, CategorySitemap
+
+
+def home(request):
+    featured = Article.published.select_related("category", "author").filter(is_featured=True)[:5]
+    latest = Article.published.select_related("category", "author")[:12]
+    categories = Category.objects.filter(is_active=True)[:8]
+    return render(request, "core/home.html", {"featured": featured, "latest": latest, "categories": categories})
+
+
+def robots_txt(request):
+    lines = [
+        "User-agent: *",
+        "Allow: /",
+        f"Sitemap: {settings.SITE_DOMAIN}{reverse('core:sitemap')}",
+        f"Sitemap: {settings.SITE_DOMAIN}{reverse('core:news_sitemap')}",
+    ]
+    return HttpResponse("\n".join(lines), content_type="text/plain")
+
+
+def sitemap_xml(request):
+    return sitemap(request, {"articles": ArticleSitemap, "categories": CategorySitemap})
+
+
+def news_sitemap_xml(request):
+    articles = Article.published.select_related("category")[:1000]
+    xml_items = []
+    for article in articles:
+        xml_items.append(
+            f"""
+  <url>
+    <loc>{settings.SITE_DOMAIN}{article.get_absolute_url()}</loc>
+    <news:news>
+      <news:publication>
+        <news:name>{settings.SITE_NAME}</news:name>
+        <news:language>en</news:language>
+      </news:publication>
+      <news:publication_date>{article.published_at.date().isoformat()}</news:publication_date>
+      <news:title>{escape(article.title)}</news:title>
+    </news:news>
+    <lastmod>{article.updated_at.isoformat()}</lastmod>
+  </url>"""
+        )
+    content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
+{''.join(xml_items)}
+</urlset>"""
+    return HttpResponse(content, content_type="application/xml")
+
+
+def rss_xml(request):
+    return LatestNewsFeed()(request)
+
+
+def health(request):
+    return HttpResponse(f"ok {timezone.now().isoformat()}", content_type="text/plain")

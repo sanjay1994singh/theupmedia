@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}{{ category.meta_title|default:category.name }} - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}{{ category.meta_description|default:category.description|truncatechars:160 }}{% endblock %}
+
+{% block content %}
+<section class="content-band">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">Category</p>
+      <h1>{{ category.name }}</h1>
+      {% if category.description %}<p>{{ category.description }}</p>{% endif %}
+    </div>
+  </div>
+  <div class="card-grid">
+    {% for article in page_obj %}
+      {% include "news/includes/article_card.html" with article=article %}
+    {% empty %}
+      <p>No published articles in this category yet.</p>
+    {% endfor %}
+  </div>
+  {% include "news/includes/pagination.html" %}
+</section>
+{% endblock %}

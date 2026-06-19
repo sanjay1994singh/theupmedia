@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}{{ SITE_NAME }} - Latest News{% endblock %}
+{% block meta_description %}Read latest breaking news, explainers, and updates from {{ SITE_NAME }}.{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="hero-copy">
+    <p class="eyebrow">Latest Updates</p>
+    <h1>The Up Media</h1>
+    <p>Fast, searchable, structured publishing for news that is ready for readers and search engines.</p>
+  </div>
+  {% if featured %}
+    <div class="lead-grid">
+      {% for article in featured %}
+        <article class="story-card {% if forloop.first %}story-card-large{% endif %}">
+          {% if article.featured_image %}
+            <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+          {% endif %}
+          <div>
+            <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
+            <h2><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h2>
+            <p>{{ article.summary|truncatewords:24 }}</p>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>
+
+<section class="content-band">
+  <div class="section-heading">
+    <h2>Latest News</h2>
+    <a href="{% url 'news:article_list' %}">View all</a>
+  </div>
+  <div class="card-grid">
+    {% for article in latest %}
+      {% include "news/includes/article_card.html" with article=article %}
+    {% empty %}
+      <p>No published articles yet. Add articles from Django admin and mark them as published.</p>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="content-band muted">
+  <div class="section-heading">
+    <h2>Categories</h2>
+  </div>
+  <div class="category-list">
+    {% for category in categories %}
+      <a href="{{ category.get_absolute_url }}">{{ category.name }}</a>
+    {% empty %}
+      <p>Add categories from admin to build topic pages.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

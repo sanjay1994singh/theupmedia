@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Login - {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<section class="auth-panel">
+  <h1>Login</h1>
+  {% if request.GET.error %}
+    <div class="message message-error">
+      Social login failed. Please check Google OAuth client ID, secret, and redirect URI.
+    </div>
+  {% endif %}
+  <div class="social-logins">
+    <a href="{% url 'social:begin' 'google-oauth2' %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}">Continue with Google</a>
+    <a href="{% url 'social:begin' 'facebook' %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}">Continue with Facebook</a>
+  </div>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Login</button>
+  </form>
+  <p>New here? <a href="{% url 'accounts:signup' %}">Create an account</a></p>
+</section>
+{% endblock %}

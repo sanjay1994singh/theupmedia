@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Sign Up - {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<section class="auth-panel">
+  <h1>Create Account</h1>
+  <div class="social-logins">
+    <a href="{% url 'social:begin' 'google-oauth2' %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}">Continue with Google</a>
+  </div>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Sign up</button>
+  </form>
+</section>
+{% endblock %}

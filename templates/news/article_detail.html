@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}{{ article.meta_title }} - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}{{ article.meta_description }}{% endblock %}
+{% block meta_keywords %}{{ article.meta_keywords }}{% endblock %}
+{% block canonical %}{{ article.canonical_url|default:absolute_url }}{% endblock %}
+{% block og_title %}{{ article.title }}{% endblock %}
+{% block og_description %}{{ article.meta_description }}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block extra_head %}
+  {% if article.featured_image %}
+    <meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{{ article.featured_image.url }}">
+  {% endif %}
+  <script type="application/ld+json">{{ schema_json|safe }}</script>
+{% endblock %}
+
+{% block content %}
+<article class="article-page">
+  <header class="article-header">
+    <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
+    <h1>{{ article.title }}</h1>
+    <p>{{ article.summary }}</p>
+    <div class="byline">
+      <span>{{ article.author|default:"The Up Media Desk" }}</span>
+      <time datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y, h:i A" }}</time>
+    </div>
+  </header>
+  {% if article.featured_image %}
+    <img class="article-image" src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+  {% endif %}
+  <div class="article-content">
+    {{ article.content|linebreaks }}
+  </div>
+  {% if article.source_url %}
+    <p class="source">Source: <a href="{{ article.source_url }}" rel="nofollow noopener">{{ article.source_name|default:article.source_url }}</a></p>
+  {% endif %}
+</article>
+
+<section class="content-band">
+  <div class="section-heading">
+    <h2>Related News</h2>
+  </div>
+  <div class="card-grid">
+    {% for article in related_articles %}
+      {% include "news/includes/article_card.html" with article=article %}
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

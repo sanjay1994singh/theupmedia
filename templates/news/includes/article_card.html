@@ -1,0 +1,11 @@
+<article class="story-card">
+  {% if article.featured_image %}
+    <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+  {% endif %}
+  <div>
+    <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
+    <h3><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h3>
+    <p>{{ article.summary|truncatewords:22 }}</p>
+    <time datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
+  </div>
+</article>
