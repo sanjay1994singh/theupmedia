@@ -1,0 +1,4 @@
+
+{% include "includes/ad_slot.html" %}
+{% include "includes/ad_slot.html" with size="sidebar" %}
+{% include "includes/ad_slot.html" with title="अपना न्यूज़ पोर्टल बनवाएं" text="24 घंटे में गूगल पर होगा रैंक" contact="8279408396" cta="Call Now" %}
