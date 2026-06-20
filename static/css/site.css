@@ -173,7 +173,7 @@ img {
 
 .home-hero {
   align-items: start;
-  background: linear-gradient(180deg, #fff 0%, var(--paper) 100%);
+  background: var(--paper);
   border-bottom: 1px solid var(--line);
   display: grid;
   gap: 18px;
@@ -186,8 +186,9 @@ img {
 }
 
 .featured-block {
+  background: transparent;
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 .featured-heading {
@@ -197,7 +198,8 @@ img {
 }
 
 .featured-heading h2 {
-  font-size: 34px;
+  font-size: 32px;
+  margin: 0;
 }
 
 .featured-heading a {
@@ -212,18 +214,23 @@ img {
 .featured-layout {
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
 }
 
 .lead-story {
-  align-items: stretch;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
-  box-shadow: var(--shadow);
+  box-shadow: 0 8px 22px rgba(21, 21, 21, 0.05);
   display: grid;
-  grid-template-columns: minmax(280px, 0.95fr) minmax(320px, 1.05fr);
+  grid-template-columns: 1fr;
   overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.lead-story:hover {
+  box-shadow: var(--shadow);
+  transform: translateY(-2px);
 }
 
 .lead-copy {
@@ -234,7 +241,7 @@ img {
 }
 
 .lead-copy h1 {
-  font-size: 36px;
+  font-size: 30px;
   margin: 10px 0 12px;
 }
 
@@ -249,7 +256,7 @@ img {
 }
 
 .lead-image {
-  background: #e9e4dc;
+  background: #f1eee8;
   aspect-ratio: 16 / 9;
   min-height: 0;
   overflow: hidden;
@@ -286,8 +293,14 @@ img {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
-  box-shadow: 0 8px 18px rgba(21, 21, 21, 0.04);
+  box-shadow: 0 6px 16px rgba(21, 21, 21, 0.04);
   padding: 14px;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.headline-rail article:hover {
+  border-color: #e7b6bc;
+  transform: translateY(-1px);
 }
 
 .headline-rail h2 {
@@ -328,7 +341,7 @@ h3 {
 }
 
 .home-hero .lead-copy h1 {
-  font-size: 36px;
+  font-size: 30px;
 }
 
 .hero p,

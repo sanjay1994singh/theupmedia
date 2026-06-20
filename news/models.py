@@ -5,6 +5,7 @@ from django.template.defaultfilters import slugify
 from django.urls import reverse
 from django.utils import timezone
 from django_ckeditor_5.fields import CKEditor5Field
+from PIL import Image, ImageOps
 
 from .slug_utils import unique_article_slug
 
@@ -128,6 +129,8 @@ class Article(models.Model):
 
     objects = models.Manager()
     published = PublishedManager()
+    IMAGE_MAX_SIZE = (1600, 1000)
+    IMAGE_QUALITY = 78
 
     class Meta:
         ordering = ["-published_at"]
@@ -150,6 +153,59 @@ class Article(models.Model):
         if not self.meta_description:
             self.meta_description = self.summary[:220]
         super().save(*args, **kwargs)
+        self.compress_featured_image()
+
+    def compress_featured_image(self):
+        if not self.featured_image:
+            return
+
+        try:
+            image_path = self.featured_image.path
+        except (NotImplementedError, ValueError):
+            return
+
+        try:
+            with Image.open(image_path) as image:
+                image = ImageOps.exif_transpose(image)
+                original_format = (image.format or "").upper()
+                has_alpha = image.mode in ("RGBA", "LA") or (
+                    image.mode == "P" and "transparency" in image.info
+                )
+
+                resampling_filter = getattr(Image, "Resampling", Image).LANCZOS
+                image.thumbnail(self.IMAGE_MAX_SIZE, resampling_filter)
+
+                if original_format in {"JPEG", "JPG"}:
+                    if image.mode not in ("RGB", "L"):
+                        image = image.convert("RGB")
+                    image.save(
+                        image_path,
+                        format="JPEG",
+                        quality=self.IMAGE_QUALITY,
+                        optimize=True,
+                        progressive=True,
+                    )
+                elif original_format == "WEBP":
+                    image.save(
+                        image_path,
+                        format="WEBP",
+                        quality=self.IMAGE_QUALITY,
+                        method=6,
+                    )
+                elif original_format == "PNG":
+                    if has_alpha:
+                        image.save(image_path, format="PNG", optimize=True)
+                    else:
+                        image.convert("RGB").save(
+                            image_path,
+                            format="PNG",
+                            optimize=True,
+                            compress_level=8,
+                        )
+                else:
+                    image.save(image_path, optimize=True)
+        except (OSError, ValueError):
+            return
 
     def get_absolute_url(self):
         return reverse("news:article_detail", kwargs={"slug": self.slug})
