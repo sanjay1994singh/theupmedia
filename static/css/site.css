@@ -236,13 +236,14 @@ img {
   }
 
   .lead-image {
-    height: 300px;
+    background: #111;
+    height: 260px;
     overflow: hidden;
   }
 
   .home-hero .lead-image img {
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
   }
 }
 
@@ -358,7 +359,9 @@ img {
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: 0 6px 16px rgba(21, 21, 21, 0.04);
-  min-height: 0;
+  display: grid;
+  gap: 8px;
+  min-height: 128px;
   padding: 14px;
   transition: border-color 0.2s ease, transform 0.2s ease;
 }
@@ -369,8 +372,13 @@ img {
 }
 
 .headline-rail h2 {
+  display: -webkit-box;
   font-size: 18px;
+  line-height: 1.15;
   margin-top: 7px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .headline-rail h2 a:hover {
