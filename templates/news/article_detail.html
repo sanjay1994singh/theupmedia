@@ -47,7 +47,7 @@
       {% if article.image_alt_text %}<figcaption>{{ article.image_alt_text }}</figcaption>{% endif %}
     </figure>
   {% endif %}
-    {% include "includes/ad_slot.html" with title="अपना न्यूज़ पोर्टल बनवाएं" text="24 घंटे में गूगल पर होगा रैंक" contact="8279408396" cta="Call Now" %}
+    {% include "advertisements/news_portal.html" %}
   <div class="article-content">
     {{ article.content|safe }}
   </div>

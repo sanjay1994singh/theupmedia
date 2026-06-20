@@ -4,7 +4,7 @@
 {% block meta_description %}Read latest breaking news, explainers, and updates from {{ SITE_NAME }}.{% endblock %}
 {% block content %}
 <section class="hero home-hero">
-    {% include "includes/ad_slot.html" with cta="Call Now" %}
+    {% include "advertisements/news_portal.html" %}
       {% if featured %}
         <div class="featured-block">
           <div class="featured-heading">
@@ -54,7 +54,10 @@
                   </article>
                 {% endif %}
               {% endfor %}
-              {% include "includes/ad_slot.html" with size="sidebar" cta="Call Now" %}
+                {% include "advertisements/gen_ai_course.html" with size="sidebar" %}
+              {% include "advertisements/news_portal.html" with size="sidebar" %}
+
+
             </div>
           </div>
         </div>
@@ -83,6 +86,7 @@
       <p>No published articles yet. Add articles from Django admin and mark them as published.</p>
     {% endfor %}
   </div>
+  {% include "advertisements/gen_ai_course.html" %}
 </section>
 
 <section class="content-band muted">

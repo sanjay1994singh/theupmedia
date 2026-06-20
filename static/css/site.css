@@ -215,7 +215,7 @@ img {
   align-items: start;
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+  grid-template-columns: minmax(0, 760px) minmax(300px, 1fr);
 }
 
 .lead-story {
@@ -238,11 +238,11 @@ img {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 24px;
+  padding: 26px;
 }
 
 .lead-copy h1 {
-  font-size: 30px;
+  font-size: 36px;
   margin: 10px 0 12px;
 }
 
@@ -252,19 +252,20 @@ img {
 
 .lead-copy p {
   color: var(--muted);
-  font-size: 17px;
+  font-size: 18px;
   margin: 0;
 }
 
 .lead-image {
   background: #f1eee8;
-  aspect-ratio: 16 / 9;
+  height: auto;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
+  width: 100%;
 }
 
 .lead-image img {
-  height: 100%;
+  height: auto;
   object-fit: contain;
   width: 100%;
 }
@@ -373,7 +374,7 @@ h3 {
 }
 
 .home-hero .lead-copy h1 {
-  font-size: 30px;
+  font-size: 36px;
 }
 
 .hero p,
@@ -611,6 +612,35 @@ button,
 
 .ad-slot--sidebar .ad-slot__cta {
   justify-self: start;
+}
+
+.ad-slot--learning {
+  background: linear-gradient(135deg, #ffffff 0%, #eef7ff 54%, #f4fff2 100%);
+  border-color: #a9d6f5;
+  grid-template-columns: 1fr;
+}
+
+.ad-slot--learning::before {
+  background: #1877f2;
+}
+
+.ad-slot--learning .ad-slot__label,
+.ad-slot--learning .ad-slot__contact {
+  color: #0b5cad !important;
+}
+
+.ad-slot--learning .ad-slot__cta {
+  background: #0b5cad;
+  justify-self: start;
+}
+
+.ad-slot--learning .ad-slot__badge {
+  justify-self: start;
+}
+
+.ad-slot--learning .ad-slot__creative strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .location-list {
@@ -982,18 +1012,18 @@ time {
   }
 
   .lead-copy h1 {
-    font-size: clamp(26px, 8vw, 34px);
+    font-size: clamp(28px, 8.5vw, 38px);
   }
 
   .lead-image {
-    aspect-ratio: 16 / 9;
+    height: auto;
     min-height: 0;
     order: -1;
-    overflow: hidden;
+    overflow: visible;
   }
 
   .home-hero .lead-image img {
-    height: 100% !important;
+    height: auto !important;
     object-fit: contain !important;
     transform: none !important;
     width: 100%;
@@ -1105,6 +1135,10 @@ time {
 
   .main-nav a {
     font-size: 17px;
+  }
+
+  .lead-image {
+    height: auto;
   }
 
   .share-bar {
