@@ -54,10 +54,8 @@
                   </article>
                 {% endif %}
               {% endfor %}
-                {% include "advertisements/gen_ai_course.html" with size="sidebar" %}
               {% include "advertisements/news_portal.html" with size="sidebar" %}
-
-
+              {% include "advertisements/gen_ai_course.html" with size="sidebar" %}
             </div>
           </div>
         </div>
@@ -68,7 +66,7 @@
           <p>Hindi news, local updates, and public-interest stories from state, city, and digital sources.</p>
         </div>
       {% endif %}
-
+    {% include "advertisements/property_plot.html" %}
 </section>
 
 <section class="content-band">
@@ -86,6 +84,7 @@
       <p>No published articles yet. Add articles from Django admin and mark them as published.</p>
     {% endfor %}
   </div>
+  {% include "advertisements/property_plot.html" %}
   {% include "advertisements/gen_ai_course.html" %}
 </section>
 
