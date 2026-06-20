@@ -907,19 +907,27 @@ time {
     overflow: visible;
   }
 
-  .lead-image img {
-    height: auto;
-    object-fit: contain;
+  .home-hero .lead-image img {
+    aspect-ratio: auto !important;
+    height: auto !important;
+    max-height: none !important;
+    object-fit: contain !important;
+    transform: none !important;
+    width: 100%;
   }
 
-  .story-media {
-    overflow: visible;
+  .content-band .story-card .story-media {
+    background: #f7f5f1;
+    overflow: visible !important;
   }
 
-  .story-card img {
-    aspect-ratio: auto;
-    height: auto;
-    object-fit: contain;
+  .content-band .story-card .story-media img {
+    aspect-ratio: auto !important;
+    height: auto !important;
+    max-height: none !important;
+    object-fit: contain !important;
+    transform: none !important;
+    width: 100%;
   }
 
   .hero-copy {
