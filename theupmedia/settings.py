@@ -148,7 +148,7 @@ STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
 
-MEDIA_URL = "media/"
+MEDIA_URL = os.getenv("MEDIA_URL", "https://theupmedia.in/media/")
 MEDIA_ROOT = BASE_DIR / "media"
 
 CKEDITOR_5_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"

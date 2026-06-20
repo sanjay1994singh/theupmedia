@@ -6,46 +6,56 @@
 <section class="hero home-hero">
     {% include "includes/ad_slot.html" with cta="Call Now" %}
       {% if featured %}
-        {% for article in featured %}
-          {% if forloop.first %}
-            <article class="lead-story">
-              <div class="lead-copy">
-                <p class="eyebrow">Top Story</p>
-                <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
-                {% if article.slug %}
-                  <h1><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h1>
-                {% else %}
-                  <h1>{{ article.title }}</h1>
-                {% endif %}
-                <p>{{ article.summary|truncatewords:34 }}</p>
-                <div class="lead-meta">
-                  {% if article.city %}<a href="{{ article.city.get_absolute_url }}">{{ article.city.name }}</a>{% endif %}
-                  {% if article.state %}<a href="{{ article.state.get_absolute_url }}">{{ article.state.name }}</a>{% endif %}
-                  <time datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
-                </div>
-              </div>
-              {% if article.featured_image %}
-                <a class="lead-image" href="{{ article.get_absolute_url }}">
-                  <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
-                </a>
+        <div class="featured-block">
+          <div class="featured-heading">
+            <div>
+              <p class="eyebrow">Top Updates</p>
+              <h2>Featured News</h2>
+            </div>
+            <a href="{% url 'news:article_list' %}">View all</a>
+          </div>
+          <div class="featured-layout">
+            {% for article in featured %}
+              {% if forloop.first %}
+                <article class="lead-story">
+                  {% if article.featured_image %}
+                    <a class="lead-image" href="{{ article.get_absolute_url }}">
+                      <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+                    </a>
+                  {% endif %}
+                  <div class="lead-copy">
+                    <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
+                    {% if article.slug %}
+                      <h1><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h1>
+                    {% else %}
+                      <h1>{{ article.title }}</h1>
+                    {% endif %}
+                    <p>{{ article.summary|truncatewords:24 }}</p>
+                    <div class="lead-meta">
+                      {% if article.city %}<a href="{{ article.city.get_absolute_url }}">{{ article.city.name }}</a>{% endif %}
+                      {% if article.state %}<a href="{{ article.state.get_absolute_url }}">{{ article.state.name }}</a>{% endif %}
+                      <time datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
+                    </div>
+                  </div>
+                </article>
               {% endif %}
-            </article>
-          {% endif %}
-        {% endfor %}
-        <div class="headline-rail">
-          {% for article in featured %}
-            {% if not forloop.first %}
-              <article>
-                <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
-                {% if article.slug %}
-                  <h2><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h2>
-                {% else %}
-                  <h2>{{ article.title }}</h2>
+            {% endfor %}
+            <div class="headline-rail">
+              {% for article in featured %}
+                {% if not forloop.first %}
+                  <article>
+                    <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
+                    {% if article.slug %}
+                      <h2><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h2>
+                    {% else %}
+                      <h2>{{ article.title }}</h2>
+                    {% endif %}
+                    <time datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
+                  </article>
                 {% endif %}
-                <time datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
-              </article>
-            {% endif %}
-          {% endfor %}
+              {% endfor %}
+            </div>
+          </div>
         </div>
       {% else %}
         <div class="hero-copy">
