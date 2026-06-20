@@ -4,7 +4,7 @@
 {% block meta_description %}Read latest breaking news, explainers, and updates from {{ SITE_NAME }}.{% endblock %}
 {% block content %}
 <section class="hero home-hero">
-    {% include "includes/ad_slot.html" with title="अपना न्यूज़ पोर्टल बनवाएं" text="24 घंटे में गूगल पर होगा रैंक" contact="8279408396" cta="Call Now" %}
+    {% include "includes/ad_slot.html" with cta="Call Now" %}
       {% if featured %}
         {% for article in featured %}
           {% if forloop.first %}

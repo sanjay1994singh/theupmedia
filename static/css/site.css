@@ -902,8 +902,24 @@ time {
   }
 
   .lead-image {
-    min-height: 260px;
+    min-height: 0;
     order: -1;
+    overflow: visible;
+  }
+
+  .lead-image img {
+    height: auto;
+    object-fit: contain;
+  }
+
+  .story-media {
+    overflow: visible;
+  }
+
+  .story-card img {
+    aspect-ratio: auto;
+    height: auto;
+    object-fit: contain;
   }
 
   .hero-copy {
