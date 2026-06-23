@@ -373,9 +373,11 @@ img {
 
 .headline-rail h2 {
   display: -webkit-box;
-  font-size: 18px;
-  line-height: 1.15;
-  margin-top: 7px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.5;
+  margin: 8px 0 4px;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
