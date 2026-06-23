@@ -11,6 +11,11 @@ from .forms import ProfileForm, SignUpForm
 class UserLoginView(LoginView):
     template_name = "accounts/login.html"
 
+    def get_success_url(self):
+        if self.request.user.is_superuser:
+            return reverse_lazy("live_tv:dashboard")
+        return super().get_success_url()
+
 
 class UserLogoutView(LogoutView):
     next_page = reverse_lazy("core:home")
@@ -31,6 +36,8 @@ def signup(request):
 
 @login_required
 def profile(request):
+    if request.method == "GET" and request.user.is_superuser:
+        return redirect("live_tv:dashboard")
     if request.method == "POST":
         form = ProfileForm(request.POST, request.FILES, instance=request.user)
         if form.is_valid():

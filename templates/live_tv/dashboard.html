@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Live TV Dashboard - {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<section class="tv-dashboard">
+  <aside class="tv-dashboard-sidebar">
+    <div class="tv-dashboard-brand">
+      <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="">
+      <strong>{{ SITE_NAME }}</strong>
+    </div>
+    <a class="active" href="{% url 'live_tv:dashboard' %}">Live TV Setup</a>
+    <a href="{% url 'live_tv:home' %}" target="_blank" rel="noopener">Frontend Preview</a>
+    <a href="{% url 'admin:index' %}">Django Admin</a>
+  </aside>
+
+  <div class="tv-dashboard-main">
+    <div class="tv-dashboard-title">
+      <div>
+        <p class="eyebrow">Superuser Dashboard</p>
+        <h1>Add / Edit Live TV</h1>
+      </div>
+      <a href="{% url 'live_tv:dashboard' %}">+ Add New Live TV</a>
+    </div>
+
+    <div class="tv-dashboard-grid">
+      <form class="tv-control-panel" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {% if selected_channel %}<input type="hidden" name="channel_id" value="{{ selected_channel.pk }}">{% endif %}
+
+        <div class="tv-panel-header">
+          <strong>{% if selected_channel %}Edit Live TV{% else %}New Live TV{% endif %}</strong>
+          <button type="submit">Save Live TV</button>
+        </div>
+
+        {% if form.errors %}
+          <div class="message message-error">{{ form.errors }}</div>
+        {% endif %}
+
+        <div class="tv-form-section">
+          <h2>1. Video Source</h2>
+          <div class="source-options">{{ form.source_type }}</div>
+          <label>Title / Headline {{ form.title }}</label>
+          <label>Slug {{ form.slug }}</label>
+          <label>Description {{ form.description }}</label>
+        </div>
+
+        <div class="tv-form-section tv-form-two">
+          <label>YouTube URL {{ form.youtube_url }}</label>
+          <label>HLS / M3U8 / External Video URL {{ form.stream_url }}</label>
+        </div>
+
+        <div class="tv-form-section tv-upload-box">
+          <h2>2. Direct Video Upload</h2>
+          {{ form.video_file }}
+          <p>MP4, WebM, HLS/M3U8 supported. Server upload size depends on your VPS/nginx setting.</p>
+          <p>Current video URL will use your MEDIA_URL setting. For local testing use /media/; for VPS use https://theupmedia.in/media/.</p>
+        </div>
+
+        <div class="tv-form-section tv-form-two">
+          <label>Poster / Thumbnail {{ form.poster_image }}</label>
+          <label>Channel Logo {{ form.channel_logo }}</label>
+        </div>
+
+        <div class="tv-form-section">
+          <h2>3. Graphics Options</h2>
+          <div class="tv-toggle-grid">
+            <label>{{ form.is_active }} Active</label>
+            <label>{{ form.is_live }} Live Indicator</label>
+            <label>{{ form.autoplay }} Auto Play</label>
+            <label>{{ form.show_channel_logo }} Channel Logo</label>
+            <label>{{ form.show_lower_third }} Lower Third</label>
+            <label>{{ form.show_ticker }} News Ticker</label>
+          </div>
+        </div>
+
+        <div class="tv-form-section tv-form-two">
+          <label>Lower Third Label {{ form.lower_third_label }}</label>
+          <label>Headline Text {{ form.headline }}</label>
+          <label>Ticker Label {{ form.ticker_label }}</label>
+          <label>Ticker Text {{ form.ticker_text }}</label>
+        </div>
+
+        <div class="tv-form-section tv-form-two">
+          <label>Display Order {{ form.display_order }}</label>
+          <label>Meta Title {{ form.meta_title }}</label>
+          <label>Meta Description {{ form.meta_description }}</label>
+        </div>
+      </form>
+
+      <aside class="tv-preview-column">
+        <div class="tv-preview-box">
+          <h2>Preview</h2>
+          {% if preview_channel %}
+            <div class="live-player-frame dashboard-preview">
+              {% if preview_channel.is_live %}<span class="live-badge"><span></span>Live</span>{% endif %}
+              {% if preview_channel.show_channel_logo %}
+                <div class="live-channel-logo">
+                  {% if preview_channel.channel_logo %}
+                    <img src="{{ preview_channel.channel_logo.url }}" alt="">
+                  {% else %}
+                    <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="">
+                  {% endif %}
+                  <strong>Live</strong>
+                </div>
+              {% endif %}
+              {% if preview_channel.poster_image %}
+                <img class="live-fallback-poster" src="{{ preview_channel.poster_image.url }}" alt="{{ preview_channel.title }}">
+              {% else %}
+                <div class="live-empty-player"><strong>{{ preview_channel.title }}</strong><span>{{ preview_channel.get_source_type_display }}</span></div>
+              {% endif %}
+              {% if preview_channel.show_lower_third %}
+                <div class="lower-third">
+                  <span>{{ preview_channel.lower_third_label }}</span>
+                  <strong>{{ preview_channel.headline }}</strong>
+                  <em>News</em>
+                </div>
+              {% endif %}
+              {% if preview_channel.show_ticker %}
+                <div class="news-ticker">
+                  <span>{{ preview_channel.ticker_label }}</span>
+                  <p>{{ preview_channel.ticker_text }}</p>
+                </div>
+              {% endif %}
+            </div>
+            <a class="tv-open-link" href="{{ preview_channel.get_absolute_url }}" target="_blank" rel="noopener">Open Frontend Live TV</a>
+          {% else %}
+            <p>No live TV added yet.</p>
+          {% endif %}
+        </div>
+
+        <div class="tv-supported-box">
+          <h2>Supported Formats</h2>
+          <ul>
+            <li>MP4 / WebM upload</li>
+            <li>YouTube video URL</li>
+            <li>YouTube Live URL</li>
+            <li>HLS / M3U8 stream</li>
+            <li>Lower Third</li>
+            <li>News Ticker</li>
+            <li>Channel Logo</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+
+    <section class="tv-management">
+      <div class="section-heading compact">
+        <h2>Live TV Management</h2>
+      </div>
+      <div class="tv-table">
+        <div class="tv-table-row tv-table-head">
+          <span>#</span>
+          <span>Title</span>
+          <span>Source</span>
+          <span>Status</span>
+          <span>Actions</span>
+        </div>
+        {% for channel in channels %}
+          <div class="tv-table-row">
+            <span>{{ forloop.counter }}</span>
+            <span>
+              <strong>{{ channel.title }}</strong>
+              <small>{{ channel.headline }}</small>
+            </span>
+            <span>{{ channel.get_source_type_display }}</span>
+            <span>{% if channel.is_active %}<em class="status-on">Active</em>{% else %}<em class="status-off">Inactive</em>{% endif %}</span>
+            <span class="tv-row-actions">
+              <a href="{% url 'live_tv:dashboard' %}?edit={{ channel.pk }}">Edit</a>
+              <a href="{{ channel.get_absolute_url }}" target="_blank" rel="noopener">View</a>
+              <form method="post" action="{% url 'live_tv:delete_channel' channel.pk %}">
+                {% csrf_token %}
+                <button type="submit">Delete</button>
+              </form>
+            </span>
+          </div>
+        {% empty %}
+          <p>No live TV channels yet. Add your first live TV from the form above.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+</section>
+{% endblock %}

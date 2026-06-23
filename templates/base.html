@@ -37,6 +37,10 @@
       </a>
       <nav class="main-nav" aria-label="Main navigation">
         <a href="{% url 'news:article_list' %}">News</a>
+        <a href="{% url 'live_tv:home' %}">Live TV</a>
+        {% if user.is_superuser %}
+          <a href="{% url 'live_tv:dashboard' %}">Dashboard</a>
+        {% endif %}
         <a href="{% url 'blog:post_list' %}">Blog</a>
         <a href="{% url 'services:service_list' %}">Services</a>
         {% for category in NAV_CATEGORIES %}
@@ -73,6 +77,7 @@
     <p class="footer-links">
       <a href="{% url 'core:about' %}">About</a>
       <a href="{% url 'core:contact' %}">Contact</a>
+      <a href="{% url 'live_tv:home' %}">Live TV</a>
       <a href="{% url 'blog:post_list' %}">Blog</a>
       <a href="{% url 'services:service_list' %}">Services</a>
       <a href="{% url 'core:privacy_policy' %}">Privacy Policy</a>

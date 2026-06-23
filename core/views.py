@@ -13,6 +13,7 @@ from blog.models import BlogPost
 from blog.sitemaps import BlogPostSitemap
 from services.models import Service
 from services.sitemaps import ServiceSitemap
+from live_tv.models import LiveTVChannel
 from .sitemaps import StaticPageSitemap
 
 
@@ -22,6 +23,7 @@ def home(request):
     categories = Category.objects.filter(is_active=True)[:8]
     latest_blogs = BlogPost.published.select_related("author")[:3]
     services = Service.objects.filter(is_active=True, is_featured=True)[:6]
+    home_live_tv = LiveTVChannel.objects.filter(is_active=True).first()
     return render(
         request,
         "core/home.html",
@@ -31,6 +33,7 @@ def home(request):
             "categories": categories,
             "latest_blogs": latest_blogs,
             "business_services": services,
+            "home_live_tv": home_live_tv,
         },
     )
 
