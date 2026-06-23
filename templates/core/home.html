@@ -5,57 +5,65 @@
 {% block meta_description %}Read latest breaking news, explainers, and updates from {{ SITE_NAME }}.{% endblock %}
 {% block content %}
 <section class="hero home-hero">
-    {% include "advertisements/news_portal.html" %}
-      {% if featured %}
-        <div class="featured-block">
-          <div class="featured-heading">
-            <div>
-              <p class="eyebrow">Top Updates</p>
-              <h2>Featured News</h2>
-            </div>
-            <a href="{% url 'news:article_list' %}">View all</a>
-          </div>
-          <div class="featured-layout">
-            {% for article in featured %}
-              {% if forloop.first %}
-                <article class="lead-story">
-                  {% if article.featured_image %}
-                    <a class="lead-image" href="{{ article.get_absolute_url }}">
-                      <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
-                    </a>
-                  {% endif %}
-                  <div class="lead-copy">
-                    <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
-                    {% if article.slug %}
-                      <h1><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h1>
-                    {% else %}
-                      <h1>{{ article.title }}</h1>
-                    {% endif %}
-                    <p>{{ article.summary|truncatewords:24 }}</p>
-                    <div class="lead-meta">
-                      {% if article.city %}<a href="{{ article.city.get_absolute_url }}">{{ article.city.name }}</a>{% endif %}
-                      {% if article.state %}<a href="{{ article.state.get_absolute_url }}">{{ article.state.name }}</a>{% endif %}
-                      <time datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
-                    </div>
-                  </div>
-                </article>
-              {% endif %}
-            {% endfor %}
-            <div class="headline-rail">
-              {% for article in featured|slice:"1:3" %}
-                <article>
-                  <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
-                  {% if article.slug %}
-                    <h2><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h2>
-                  {% else %}
-                    <h2>{{ article.title }}</h2>
-                  {% endif %}
-                  <time datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
-                </article>
-              {% endfor %}
-              {% include "advertisements/news_portal.html" with size="sidebar" %}
-              {% include "advertisements/gen_ai_course.html" with size="sidebar" %}
-            </div>
+  <div class="home-showcase">
+    <div class="home-showcase-main">
+      {% if home_live_tv %}
+        <div class="live-player-card">
+          <div class="live-player-frame {% if home_live_tv.player_source_type == 'direct' or home_live_tv.player_source_type == 'hls' %}live-player-frame--native-controls{% endif %}">
+            {% if home_live_tv.is_live %}
+              <span class="live-badge"><span></span>Live</span>
+            {% endif %}
+
+            {% if home_live_tv.show_channel_logo %}
+              <div class="live-channel-logo">
+                {% if home_live_tv.channel_logo %}
+                  <img src="{{ home_live_tv.channel_logo.url }}" alt="{{ home_live_tv.title }} logo">
+                {% else %}
+                  <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="{{ SITE_NAME }} logo">
+                {% endif %}
+                <strong>Live</strong>
+              </div>
+            {% endif %}
+
+            {% if home_live_tv.player_source_type == "youtube" %}
+              <iframe
+                src="{{ home_live_tv.youtube_embed_url }}"
+                title="{{ home_live_tv.title }}"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowfullscreen></iframe>
+            {% elif home_live_tv.player_source_type == "direct" %}
+              <video controls {% if home_live_tv.autoplay %}autoplay muted{% endif %} playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
+                <source src="{{ home_live_tv.video_file.url }}" type="{{ home_live_tv.video_mime_type }}">
+                Your browser does not support video playback.
+              </video>
+            {% elif home_live_tv.player_source_type == "hls" %}
+              <video controls {% if home_live_tv.autoplay %}autoplay muted{% endif %} playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
+                <source src="{{ home_live_tv.stream_url }}" type="application/x-mpegURL">
+                Your browser does not support this live stream.
+              </video>
+            {% elif home_live_tv.poster_image %}
+              <img class="live-fallback-poster" src="{{ home_live_tv.poster_image.url }}" alt="{{ home_live_tv.title }}">
+            {% else %}
+              <div class="live-empty-player">
+                <strong>{{ home_live_tv.title }}</strong>
+                <span>Live TV source will appear here.</span>
+              </div>
+            {% endif %}
+
+            {% if home_live_tv.show_lower_third %}
+              <div class="lower-third">
+                <span>{{ home_live_tv.lower_third_label }}</span>
+                <strong>{{ home_live_tv.headline }}</strong>
+                <em>News</em>
+              </div>
+            {% endif %}
+
+            {% if home_live_tv.show_ticker %}
+              <div class="news-ticker">
+                <span>{{ home_live_tv.ticker_label }}</span>
+                <p>{{ home_live_tv.ticker_text }}</p>
+              </div>
+            {% endif %}
           </div>
         </div>
       {% else %}
@@ -65,82 +73,38 @@
           <p>Hindi news, local updates, and public-interest stories from state, city, and digital sources.</p>
         </div>
       {% endif %}
-    {% include "advertisements/property_plot.html" %}
-</section>
-
-{% if home_live_tv %}
-<section class="content-band home-live-tv">
-  <div class="section-heading">
-    <div>
-      <p class="eyebrow">Live Broadcast</p>
-      <h2>Live TV</h2>
-      <p>{{ home_live_tv.title }}</p>
+      {% include "advertisements/news_portal.html" %}
+      {% include "advertisements/gen_ai_course.html" %}
     </div>
-    <a href="{% url 'live_tv:home' %}">Watch full</a>
-  </div>
 
-  <div class="home-live-layout home-live-layout--player-only">
-    <div class="live-player-card">
-      <div class="live-player-frame">
-        {% if home_live_tv.is_live %}
-          <span class="live-badge"><span></span>Live</span>
-        {% endif %}
-
-        {% if home_live_tv.show_channel_logo %}
-          <div class="live-channel-logo">
-            {% if home_live_tv.channel_logo %}
-              <img src="{{ home_live_tv.channel_logo.url }}" alt="{{ home_live_tv.title }} logo">
-            {% else %}
-              <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="{{ SITE_NAME }} logo">
-            {% endif %}
-            <strong>Live</strong>
-          </div>
-        {% endif %}
-
-        {% if home_live_tv.player_source_type == "youtube" %}
-          <iframe
-            src="{{ home_live_tv.youtube_embed_url }}"
-            title="{{ home_live_tv.title }}"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowfullscreen></iframe>
-        {% elif home_live_tv.player_source_type == "direct" %}
-          <video controls {% if home_live_tv.autoplay %}autoplay muted{% endif %} playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
-            <source src="{{ home_live_tv.video_file.url }}" type="{{ home_live_tv.video_mime_type }}">
-            Your browser does not support video playback.
-          </video>
-        {% elif home_live_tv.player_source_type == "hls" %}
-          <video controls {% if home_live_tv.autoplay %}autoplay muted{% endif %} playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
-            <source src="{{ home_live_tv.stream_url }}" type="application/x-mpegURL">
-            Your browser does not support this live stream.
-          </video>
-        {% elif home_live_tv.poster_image %}
-          <img class="live-fallback-poster" src="{{ home_live_tv.poster_image.url }}" alt="{{ home_live_tv.title }}">
-        {% else %}
-          <div class="live-empty-player">
-            <strong>{{ home_live_tv.title }}</strong>
-            <span>Live TV source will appear here.</span>
-          </div>
-        {% endif %}
-
-        {% if home_live_tv.show_lower_third %}
-          <div class="lower-third">
-            <span>{{ home_live_tv.lower_third_label }}</span>
-            <strong>{{ home_live_tv.headline }}</strong>
-            <em>News</em>
-          </div>
-        {% endif %}
-
-        {% if home_live_tv.show_ticker %}
-          <div class="news-ticker">
-            <span>{{ home_live_tv.ticker_label }}</span>
-            <p>{{ home_live_tv.ticker_text }}</p>
-          </div>
-        {% endif %}
+    <aside class="live-news-sidebar home-latest-sidebar">
+      <div class="section-heading compact">
+        <div>
+          <p class="eyebrow">Latest Updates</p>
+          <h2>Latest News</h2>
+        </div>
       </div>
-    </div>
+      <div class="live-news-list">
+        {% for article in latest|slice:":4" %}
+          <article>
+            {% if article.featured_image %}
+              <a class="live-news-thumb" href="{{ article.get_absolute_url }}">
+                <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+              </a>
+            {% endif %}
+            <div>
+              <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
+              <h3><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h3>
+              <time datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
+            </div>
+          </article>
+        {% empty %}
+          <p>No latest news yet.</p>
+        {% endfor %}
+      </div>
+    </aside>
   </div>
 </section>
-{% endif %}
 
 <section class="content-band">
   <div class="section-heading">

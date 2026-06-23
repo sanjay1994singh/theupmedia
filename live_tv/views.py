@@ -5,6 +5,16 @@ from django.views.decorators.http import require_POST
 
 from .forms import LiveTVChannelForm
 from .models import LiveTVChannel
+from news.models import Article
+
+
+def live_tv_context(active_channel, channels):
+    latest_news = Article.published.select_related("category", "state", "city")[:6]
+    return {
+        "active_channel": active_channel,
+        "channels": channels,
+        "latest_news": latest_news,
+    }
 
 
 def superuser_required(view_func):
@@ -14,13 +24,13 @@ def superuser_required(view_func):
 def live_tv_home(request):
     channels = LiveTVChannel.objects.filter(is_active=True)
     active_channel = channels.first()
-    return render(request, "live_tv/live_tv_home.html", {"active_channel": active_channel, "channels": channels})
+    return render(request, "live_tv/live_tv_home.html", live_tv_context(active_channel, channels))
 
 
 def live_tv_detail(request, slug):
     channels = LiveTVChannel.objects.filter(is_active=True)
     active_channel = get_object_or_404(channels, slug=slug)
-    return render(request, "live_tv/live_tv_home.html", {"active_channel": active_channel, "channels": channels})
+    return render(request, "live_tv/live_tv_home.html", live_tv_context(active_channel, channels))
 
 
 @superuser_required

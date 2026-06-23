@@ -11,7 +11,7 @@
     {% if active_channel %}
       <div class="live-tv-main">
         <div class="live-player-card">
-          <div class="live-player-frame">
+          <div class="live-player-frame {% if active_channel.player_source_type == 'direct' or active_channel.player_source_type == 'hls' %}live-player-frame--native-controls{% endif %}">
             {% if active_channel.is_live %}
               <span class="live-badge"><span></span>Live</span>
             {% endif %}
@@ -48,7 +48,7 @@
             {% else %}
               <div class="live-empty-player">
                 <strong>Live TV Source Not Set</strong>
-                <span>Add YouTube URL, uploaded video, or stream URL from Django admin.</span>
+                <span>Add video from Live TV Dashboard.</span>
               </div>
             {% endif %}
 
@@ -67,18 +67,14 @@
               </div>
             {% endif %}
           </div>
-        </div>
-
-        <div class="live-tv-copy">
-          <p class="eyebrow">Live TV</p>
-          <h1>{{ active_channel.title }}</h1>
-          {% if active_channel.description %}<p>{{ active_channel.description }}</p>{% endif %}
+            {% include "advertisements/news_portal.html" %}
+            {% include "advertisements/gen_ai_course.html" %}
         </div>
 
         {% if channels|length > 1 %}
           <div class="live-playlist">
             <div class="section-heading compact">
-              <h2>Live TV Playlist</h2>
+              <h2>More Live TV</h2>
             </div>
             <div class="live-playlist-list">
               {% for channel in channels %}
@@ -99,43 +95,40 @@
       </div>
 
       <aside class="live-tv-side">
-        <div class="live-admin-preview">
-          <p class="eyebrow">Setup From Admin</p>
-          <h2>Add / Edit Live TV</h2>
-          <ul>
-            <li>YouTube URL</li>
-            <li>Direct Video Upload</li>
-            <li>HLS / M3U8 Stream URL</li>
-            <li>Poster / Thumbnail</li>
-            <li>Lower Third Headline</li>
-            <li>Live Indicator</li>
-            <li>News Ticker</li>
-            <li>Channel Logo</li>
-          </ul>
-          {% if user.is_staff %}
-            <a href="{% url 'admin:live_tv_livetvchannel_changelist' %}">Manage Live TV</a>
-          {% endif %}
-        </div>
-
-        <div class="live-feature-box">
-          <h2>Live TV Setup</h2>
-          <p>अपने न्यूज़ चैनल को professional look दें with live indicator, ticker, logo overlay और breaking lower third.</p>
-          <ul>
-            <li>Lower Third</li>
-            <li>Live Indicator</li>
-            <li>News Ticker</li>
-            <li>Channel Logo</li>
-            <li>Mobile Friendly</li>
-          </ul>
+        <div class="live-news-sidebar">
+          <div class="section-heading compact">
+            <div>
+              <p class="eyebrow">Latest Updates</p>
+              <h2>Latest News</h2>
+            </div>
+          </div>
+          <div class="live-news-list">
+            {% for article in latest_news %}
+              <article>
+                {% if article.featured_image %}
+                  <a class="live-news-thumb" href="{{ article.get_absolute_url }}">
+                    <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+                  </a>
+                {% endif %}
+                <div>
+                  <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
+                  <h3><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h3>
+                  <time datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
+                </div>
+              </article>
+            {% empty %}
+              <p>No latest news yet.</p>
+            {% endfor %}
+          </div>
         </div>
       </aside>
     {% else %}
       <div class="live-empty-state">
         <p class="eyebrow">Live TV</p>
         <h1>No Live TV Added Yet</h1>
-        <p>Add your first live channel from Django admin. You can use YouTube URL, direct uploaded video, or HLS/M3U8 stream URL.</p>
-        {% if user.is_staff %}
-          <a href="{% url 'admin:live_tv_livetvchannel_add' %}">Add Live TV</a>
+        <p>Live TV will appear here after superuser adds it from dashboard.</p>
+        {% if user.is_superuser %}
+          <a href="{% url 'live_tv:dashboard' %}">Add Live TV</a>
         {% endif %}
       </div>
     {% endif %}
