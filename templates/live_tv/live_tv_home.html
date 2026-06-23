@@ -19,9 +19,9 @@
             {% if active_channel.show_channel_logo %}
               <div class="live-channel-logo">
                 {% if active_channel.channel_logo %}
-                  <img src="{{ active_channel.channel_logo.url }}" alt="{{ active_channel.title }} logo">
+                  <img src="{{ active_channel.channel_logo.url }}" alt="{{ active_channel.title }} logo" loading="eager" decoding="async">
                 {% else %}
-                  <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="{{ SITE_NAME }} logo">
+                  <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="{{ SITE_NAME }} logo" loading="eager" decoding="async">
                 {% endif %}
                 <strong>Live</strong>
               </div>
@@ -31,20 +31,21 @@
               <iframe
                 src="{{ active_channel.youtube_embed_url }}"
                 title="{{ active_channel.title }}"
+                loading="lazy"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowfullscreen></iframe>
             {% elif active_channel.player_source_type == "direct" %}
-              <video controls {% if active_channel.autoplay %}autoplay muted{% endif %} playsinline {% if active_channel.poster_image %}poster="{{ active_channel.poster_image.url }}"{% endif %}>
+              <video controls preload="none" {% if active_channel.autoplay %}autoplay muted{% endif %} playsinline {% if active_channel.poster_image %}poster="{{ active_channel.poster_image.url }}"{% endif %}>
                 <source src="{{ active_channel.video_file.url }}" type="{{ active_channel.video_mime_type }}">
                 Your browser does not support video playback.
               </video>
             {% elif active_channel.player_source_type == "hls" %}
-              <video controls {% if active_channel.autoplay %}autoplay muted{% endif %} playsinline {% if active_channel.poster_image %}poster="{{ active_channel.poster_image.url }}"{% endif %}>
+              <video controls preload="none" {% if active_channel.autoplay %}autoplay muted{% endif %} playsinline {% if active_channel.poster_image %}poster="{{ active_channel.poster_image.url }}"{% endif %}>
                 <source src="{{ active_channel.stream_url }}" type="application/x-mpegURL">
                 Your browser does not support this live stream.
               </video>
             {% elif active_channel.poster_image %}
-              <img class="live-fallback-poster" src="{{ active_channel.poster_image.url }}" alt="{{ active_channel.title }}">
+              <img class="live-fallback-poster" src="{{ active_channel.poster_image.url }}" alt="{{ active_channel.title }}" loading="eager" decoding="async" fetchpriority="high">
             {% else %}
               <div class="live-empty-player">
                 <strong>Live TV Source Not Set</strong>
@@ -80,7 +81,7 @@
               {% for channel in channels %}
                 <a class="{% if channel.pk == active_channel.pk %}active{% endif %}" href="{{ channel.get_absolute_url }}">
                   {% if channel.poster_image %}
-                    <img src="{{ channel.poster_image.url }}" alt="{{ channel.title }}">
+                    <img src="{{ channel.poster_image.url }}" alt="{{ channel.title }}" loading="lazy" decoding="async">
                   {% endif %}
                   <span>
                     <strong>{{ channel.title }}</strong>
@@ -107,7 +108,7 @@
               <article>
                 {% if article.featured_image %}
                   <a class="live-news-thumb" href="{{ article.get_absolute_url }}">
-                    <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+                    <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}" loading="lazy" decoding="async">
                   </a>
                 {% endif %}
                 <div>

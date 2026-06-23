@@ -18,10 +18,12 @@
     }, 4500);
   }
 
-  document.querySelectorAll(".live-player-frame").forEach(function (frame) {
+  function initLiveTvFrames() {
+    document.querySelectorAll(".live-player-frame").forEach(function (frame) {
     const video = frame.querySelector("video");
     if (video && frame.classList.contains("live-player-frame--native-controls")) {
       video.controls = false;
+      video.preload = "none";
     }
 
     frame.addEventListener("mouseenter", function () {
@@ -61,5 +63,12 @@
         setFrameControlState(frame, true);
       });
     }
-  });
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initLiveTvFrames);
+  } else {
+    initLiveTvFrames();
+  }
 })();

@@ -17,9 +17,9 @@
             {% if home_live_tv.show_channel_logo %}
               <div class="live-channel-logo">
                 {% if home_live_tv.channel_logo %}
-                  <img src="{{ home_live_tv.channel_logo.url }}" alt="{{ home_live_tv.title }} logo">
+                  <img src="{{ home_live_tv.channel_logo.url }}" alt="{{ home_live_tv.title }} logo" loading="eager" decoding="async">
                 {% else %}
-                  <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="{{ SITE_NAME }} logo">
+                  <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="{{ SITE_NAME }} logo" loading="eager" decoding="async">
                 {% endif %}
                 <strong>Live</strong>
               </div>
@@ -29,20 +29,21 @@
               <iframe
                 src="{{ home_live_tv.youtube_embed_url }}"
                 title="{{ home_live_tv.title }}"
+                loading="lazy"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowfullscreen></iframe>
             {% elif home_live_tv.player_source_type == "direct" %}
-              <video controls {% if home_live_tv.autoplay %}autoplay muted{% endif %} playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
+              <video controls preload="none" {% if home_live_tv.autoplay %}autoplay muted{% endif %} playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
                 <source src="{{ home_live_tv.video_file.url }}" type="{{ home_live_tv.video_mime_type }}">
                 Your browser does not support video playback.
               </video>
             {% elif home_live_tv.player_source_type == "hls" %}
-              <video controls {% if home_live_tv.autoplay %}autoplay muted{% endif %} playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
+              <video controls preload="none" {% if home_live_tv.autoplay %}autoplay muted{% endif %} playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
                 <source src="{{ home_live_tv.stream_url }}" type="application/x-mpegURL">
                 Your browser does not support this live stream.
               </video>
             {% elif home_live_tv.poster_image %}
-              <img class="live-fallback-poster" src="{{ home_live_tv.poster_image.url }}" alt="{{ home_live_tv.title }}">
+              <img class="live-fallback-poster" src="{{ home_live_tv.poster_image.url }}" alt="{{ home_live_tv.title }}" loading="eager" decoding="async" fetchpriority="high">
             {% else %}
               <div class="live-empty-player">
                 <strong>{{ home_live_tv.title }}</strong>
@@ -89,7 +90,7 @@
           <article>
             {% if article.featured_image %}
               <a class="live-news-thumb" href="{{ article.get_absolute_url }}">
-                <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+                <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}" loading="lazy" decoding="async">
               </a>
             {% endif %}
             <div>
@@ -170,7 +171,7 @@
       <article class="story-card">
         {% if post.featured_image %}
           <a class="story-media" href="{{ post.get_absolute_url }}">
-            <img src="{{ post.featured_image.url }}" alt="{{ post.image_alt_text|default:post.title }}">
+            <img src="{{ post.featured_image.url }}" alt="{{ post.image_alt_text|default:post.title }}" loading="lazy" decoding="async">
           </a>
         {% endif %}
         <div class="story-body">

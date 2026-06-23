@@ -2,11 +2,11 @@
   {% if article.featured_image %}
     {% if article.slug %}
       <a class="story-media" href="{{ article.get_absolute_url }}">
-        <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+        <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}" loading="lazy" decoding="async">
       </a>
     {% else %}
       <div class="story-media">
-        <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
+        <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}" loading="lazy" decoding="async">
       </div>
     {% endif %}
   {% endif %}

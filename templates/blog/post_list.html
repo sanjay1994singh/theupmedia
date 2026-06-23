@@ -18,7 +18,7 @@
       <article class="story-card">
         {% if post.featured_image %}
           <a class="story-media" href="{{ post.get_absolute_url }}">
-            <img src="{{ post.featured_image.url }}" alt="{{ post.image_alt_text|default:post.title }}">
+            <img src="{{ post.featured_image.url }}" alt="{{ post.image_alt_text|default:post.title }}" loading="lazy" decoding="async">
           </a>
         {% endif %}
         <div class="story-body">
