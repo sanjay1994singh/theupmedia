@@ -36,6 +36,8 @@
       </a>
       <nav class="main-nav" aria-label="Main navigation">
         <a href="{% url 'news:article_list' %}">News</a>
+        <a href="{% url 'blog:post_list' %}">Blog</a>
+        <a href="{% url 'services:service_list' %}">Services</a>
         {% for category in NAV_CATEGORIES %}
           <a href="{{ category.get_absolute_url }}">{{ category.name }}</a>
         {% endfor %}
@@ -70,6 +72,8 @@
     <p class="footer-links">
       <a href="{% url 'core:about' %}">About</a>
       <a href="{% url 'core:contact' %}">Contact</a>
+      <a href="{% url 'blog:post_list' %}">Blog</a>
+      <a href="{% url 'services:service_list' %}">Services</a>
       <a href="{% url 'core:privacy_policy' %}">Privacy Policy</a>
       <a href="{% url 'core:terms' %}">Terms</a>
       <a href="{% url 'core:disclaimer' %}">Disclaimer</a>

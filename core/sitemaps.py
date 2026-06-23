@@ -8,7 +8,15 @@ class StaticPageSitemap(Sitemap):
     protocol = "https"
 
     def items(self):
-        return ["core:about", "core:contact", "core:privacy_policy", "core:terms", "core:disclaimer"]
+        return [
+            "core:about",
+            "core:contact",
+            "core:privacy_policy",
+            "core:terms",
+            "core:disclaimer",
+            "blog:post_list",
+            "services:service_list",
+        ]
 
     def location(self, item):
         return reverse(item)

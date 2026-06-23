@@ -9,6 +9,10 @@ from django.utils import timezone
 from news.feeds import LatestNewsFeed
 from news.models import Article, Category
 from news.sitemaps import ArticleSitemap, CategorySitemap, CitySitemap, StateSitemap
+from blog.models import BlogPost
+from blog.sitemaps import BlogPostSitemap
+from services.models import Service
+from services.sitemaps import ServiceSitemap
 from .sitemaps import StaticPageSitemap
 
 
@@ -16,7 +20,19 @@ def home(request):
     featured = Article.published.select_related("category", "state", "city", "author").filter(is_featured=True)[:5]
     latest = Article.published.select_related("category", "state", "city", "author")[:12]
     categories = Category.objects.filter(is_active=True)[:8]
-    return render(request, "core/home.html", {"featured": featured, "latest": latest, "categories": categories})
+    latest_blogs = BlogPost.published.select_related("author")[:3]
+    services = Service.objects.filter(is_active=True, is_featured=True)[:6]
+    return render(
+        request,
+        "core/home.html",
+        {
+            "featured": featured,
+            "latest": latest,
+            "categories": categories,
+            "latest_blogs": latest_blogs,
+            "business_services": services,
+        },
+    )
 
 
 def about(request):
@@ -57,6 +73,8 @@ def sitemap_xml(request):
             "categories": CategorySitemap,
             "states": StateSitemap,
             "cities": CitySitemap,
+            "blog": BlogPostSitemap,
+            "services": ServiceSitemap,
             "pages": StaticPageSitemap,
         },
     )

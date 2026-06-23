@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}{{ service.meta_title }} - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}{{ service.meta_description }}{% endblock %}
+{% block meta_keywords %}{{ service.meta_keywords }}{% endblock %}
+
+{% block content %}
+<article class="page-shell">
+  <p class="eyebrow">Service</p>
+  <h1>{% if service.name_hi %}{{ service.name_hi }}{% else %}{{ service.name }}{% endif %}</h1>
+  {% if service.name_hi %}<p class="service-english-title">{{ service.name }}</p>{% endif %}
+  {% if service.short_description_hi %}<p>{{ service.short_description_hi }}</p>{% endif %}
+  <p>{{ service.short_description }}</p>
+  <div class="info-list">
+    {% if service.starting_price %}<p><strong>Starting Price:</strong> {{ service.starting_price }}</p>{% endif %}
+    {% if service.delivery_time %}<p><strong>Delivery Time:</strong> {{ service.delivery_time }}</p>{% endif %}
+    <p><strong>Contact:</strong> 8279408396 | WhatsApp: 6397712918</p>
+    <p><a class="whatsapp-cta" href="{{ service.whatsapp_url }}" target="_blank" rel="noopener">Direct WhatsApp Chat</a></p>
+  </div>
+  <div class="article-content">
+    {% if service.description_hi %}
+      {{ service.description_hi|linebreaks }}
+      <hr>
+    {% endif %}
+    {{ service.description|linebreaks }}
+  </div>
+</article>
+
+<section class="content-band">
+  <div class="section-heading">
+    <h2>More Services</h2>
+  </div>
+  <div class="service-grid">
+    {% for item in related_services %}
+      <article class="service-card">
+        {% if item.icon_label %}<span class="service-icon">{{ item.icon_label }}</span>{% endif %}
+        <h3>
+          <a href="{{ item.get_absolute_url }}">
+            {% if item.name_hi %}<span class="service-title-hi">{{ item.name_hi }}</span>{% endif %}
+            <span>{{ item.name }}</span>
+          </a>
+        </h3>
+        {% if item.short_description_hi %}<p class="service-hi">{{ item.short_description_hi }}</p>{% endif %}
+        <p>{{ item.short_description }}</p>
+        <div class="service-actions">
+          <a class="text-link" href="{{ item.get_absolute_url }}">View details</a>
+          <a class="whatsapp-cta" href="{{ item.whatsapp_url }}" target="_blank" rel="noopener">WhatsApp Chat</a>
+        </div>
+      </article>
+    {% empty %}
+      <p>More services will be added soon.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -32,6 +32,8 @@ INSTALLED_APPS = [
     "django_ckeditor_5",
     "accounts",
     "news",
+    "blog",
+    "services",
     "core",
 ]
 

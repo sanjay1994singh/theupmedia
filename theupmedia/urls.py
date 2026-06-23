@@ -12,6 +12,8 @@ urlpatterns = [
     path("accounts/", include("accounts.urls")),
     path("auth/", include("social_django.urls", namespace="social")),
     path("ckeditor5/", include("django_ckeditor_5.urls")),
+    path("blog/", include("blog.urls")),
+    path("services/", include("services.urls")),
     path("", include("core.urls")),
     path("", include("news.urls")),
 ]

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}{{ post.meta_title }} - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}{{ post.meta_description }}{% endblock %}
+{% block meta_keywords %}{{ post.meta_keywords }}{% endblock %}
+{% block canonical %}{{ post.canonical_url|default:request.build_absolute_uri }}{% endblock %}
+{% block og_title %}{{ post.title }}{% endblock %}
+{% block og_description %}{{ post.meta_description }}{% endblock %}
+{% block og_type %}article{% endblock %}
+
+{% block content %}
+<article class="article-page">
+  <header class="article-header">
+    {% if post.focus_keyword %}<p class="eyebrow">{{ post.focus_keyword }}</p>{% endif %}
+    <h1>{{ post.title }}</h1>
+    <p>{{ post.excerpt }}</p>
+    <div class="byline">
+      <span>{{ post.author|default:"The Up Media" }}</span>
+      <time datetime="{{ post.published_at|date:'c' }}">{{ post.published_at|date:"M d, Y" }}</time>
+    </div>
+  </header>
+  {% if post.featured_image %}
+    <figure class="article-figure">
+      <img class="article-image" src="{{ post.featured_image.url }}" alt="{{ post.image_alt_text|default:post.title }}">
+      {% if post.image_alt_text %}<figcaption>{{ post.image_alt_text }}</figcaption>{% endif %}
+    </figure>
+  {% endif %}
+  {% include "advertisements/gen_ai_course.html" %}
+  <div class="article-content">
+    {{ post.content|safe }}
+  </div>
+</article>
+
+<section class="content-band">
+  <div class="section-heading">
+    <h2>Related Blogs</h2>
+  </div>
+  <div class="card-grid">
+    {% for item in related_posts %}
+      <article class="story-card">
+        <div class="story-body">
+          {% if item.focus_keyword %}<span class="category">{{ item.focus_keyword }}</span>{% endif %}
+          <h3><a href="{{ item.get_absolute_url }}">{{ item.title }}</a></h3>
+          <p>{{ item.excerpt|truncatewords:20 }}</p>
+        </div>
+      </article>
+    {% empty %}
+      <p>More blogs will be published soon.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

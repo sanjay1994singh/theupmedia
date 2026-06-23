@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Software Engineering Blog - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}Read practical blogs on Django, Python, web development, SEO, automation, and Gen AI by {{ SITE_NAME }}.{% endblock %}
+{% block meta_keywords %}Django blog, Python development, web development, Gen AI, SEO, automation{% endblock %}
+
+{% block content %}
+<section class="content-band">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">Software Engineering</p>
+      <h1>Blog</h1>
+      <p>Practical guides, business growth ideas, and technical notes for websites, automation, SEO, and AI-powered apps.</p>
+    </div>
+  </div>
+  <div class="card-grid">
+    {% for post in page_obj %}
+      <article class="story-card">
+        {% if post.featured_image %}
+          <a class="story-media" href="{{ post.get_absolute_url }}">
+            <img src="{{ post.featured_image.url }}" alt="{{ post.image_alt_text|default:post.title }}">
+          </a>
+        {% endif %}
+        <div class="story-body">
+          {% if post.focus_keyword %}<span class="category">{{ post.focus_keyword }}</span>{% endif %}
+          <h3><a href="{{ post.get_absolute_url }}">{{ post.title }}</a></h3>
+          <p>{{ post.excerpt|truncatewords:24 }}</p>
+          <time datetime="{{ post.published_at|date:'c' }}">{{ post.published_at|date:"M d, Y" }}</time>
+        </div>
+      </article>
+    {% empty %}
+      <p>No blog posts published yet.</p>
+    {% endfor %}
+  </div>
+  {% include "news/includes/pagination.html" %}
+</section>
+{% endblock %}
