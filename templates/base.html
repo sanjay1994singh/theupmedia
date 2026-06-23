@@ -37,7 +37,6 @@
         <span>{{ SITE_NAME }}</span>
       </a>
       <nav class="main-nav" aria-label="Main navigation">
-        <a href="{% url 'news:article_list' %}">News</a>
         {% if user.is_superuser %}
           <details class="nav-dropdown">
             <summary>Live TV</summary>
