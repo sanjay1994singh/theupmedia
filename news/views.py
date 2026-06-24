@@ -67,15 +67,13 @@ def share_image(request, slug):
     article = get_object_or_404(Article.published.select_related("category", "state", "city"), slug=slug)
     cache_dir = settings.MEDIA_ROOT / "share" / "articles"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_dir / f"{article.slug}-clean.jpg"
+    cache_path = cache_dir / f"{article.slug}-cover.jpg"
 
     if not cache_path.exists() or cache_path.stat().st_mtime < article.updated_at.timestamp():
         size = (1200, 630)
         if article.featured_image and Path(article.featured_image.path).exists():
             source = Image.open(article.featured_image.path).convert("RGB")
-            image = Image.new("RGB", size, "#f7f4ee")
-            source = ImageOps.contain(source, size, method=Image.Resampling.LANCZOS)
-            image.paste(source, ((size[0] - source.width) // 2, (size[1] - source.height) // 2))
+            image = ImageOps.fit(source, size, method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
         else:
             image = Image.new("RGB", size, "#b51f2a")
 
