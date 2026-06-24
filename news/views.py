@@ -8,8 +8,7 @@ from django.core.paginator import Paginator
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils.text import Truncator
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageOps
 
 from .models import Article, ArticleRead, ArticleSlugRedirect, Category, City, State
 
@@ -64,73 +63,28 @@ def user_agent_hash(request):
     return hashlib.sha256(request.META.get("HTTP_USER_AGENT", "").encode("utf-8")).hexdigest()
 
 
-def _font(size):
-    font_paths = [
-        "C:/Windows/Fonts/arialbd.ttf",
-        "C:/Windows/Fonts/arial.ttf",
-    ]
-    for font_path in font_paths:
-        if Path(font_path).exists():
-            return ImageFont.truetype(font_path, size)
-    return ImageFont.load_default()
-
-
-def _wrap_text(text, font, max_width, draw):
-    words = text.split()
-    lines = []
-    current = ""
-    for word in words:
-        test = f"{current} {word}".strip()
-        if draw.textbbox((0, 0), test, font=font)[2] <= max_width:
-            current = test
-        else:
-            if current:
-                lines.append(current)
-            current = word
-    if current:
-        lines.append(current)
-    return lines[:4]
-
-
 def share_image(request, slug):
     article = get_object_or_404(Article.published.select_related("category", "state", "city"), slug=slug)
     cache_dir = settings.MEDIA_ROOT / "share" / "articles"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_dir / f"{article.slug}.jpg"
+    cache_path = cache_dir / f"{article.slug}-clean.jpg"
 
     if not cache_path.exists() or cache_path.stat().st_mtime < article.updated_at.timestamp():
         size = (1200, 630)
         if article.featured_image and Path(article.featured_image.path).exists():
-            image = Image.open(article.featured_image.path).convert("RGB")
-            image = ImageOps.fit(image, size, method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+            source = Image.open(article.featured_image.path).convert("RGB")
+            image = Image.new("RGB", size, "#f7f4ee")
+            source = ImageOps.contain(source, size, method=Image.Resampling.LANCZOS)
+            image.paste(source, ((size[0] - source.width) // 2, (size[1] - source.height) // 2))
         else:
             image = Image.new("RGB", size, "#b51f2a")
 
-        overlay = Image.new("RGBA", size, (0, 0, 0, 0))
-        overlay_draw = ImageDraw.Draw(overlay)
-        overlay_draw.rectangle((0, 0, 1200, 630), fill=(0, 0, 0, 72))
-        overlay_draw.rectangle((0, 360, 1200, 630), fill=(0, 0, 0, 188))
-        image = Image.alpha_composite(image.convert("RGBA"), overlay)
+        image.save(cache_path, "JPEG", quality=90, optimize=True)
+        with open(cache_path, "rb") as image_file:
+            response = HttpResponse(image_file.read(), content_type="image/jpeg")
+        response["Cache-Control"] = "public, max-age=86400"
+        return response
 
-        draw = ImageDraw.Draw(image)
-        title_font = _font(58)
-        meta_font = _font(28)
-        brand_font = _font(32)
-        category = article.category.name.upper()
-        location = ""
-        if article.city:
-            location = f" • {article.city.name}"
-        elif article.state:
-            location = f" • {article.state.name}"
-        draw.text((60, 42), settings.SITE_NAME, font=brand_font, fill="#ffffff")
-        draw.text((60, 384), f"{category}{location}", font=meta_font, fill="#f5c451")
-        title = Truncator(article.title).chars(105)
-        y = 428
-        for line in _wrap_text(title, title_font, 1080, draw):
-            draw.text((60, y), line, font=title_font, fill="#ffffff")
-            y += 66
-
-        image.convert("RGB").save(cache_path, "JPEG", quality=88, optimize=True)
 
     with open(cache_path, "rb") as image_file:
         response = HttpResponse(image_file.read(), content_type="image/jpeg")
@@ -205,6 +159,7 @@ def article_detail(request, slug):
     related_articles = Article.published.filter(category=article.category).exclude(pk=article.pk).select_related("category", "state", "city")[:4]
     absolute_url = request.build_absolute_uri(article.get_absolute_url())
     share_image_url = public_absolute_url(reverse("news:share_image", kwargs={"slug": article.slug}))
+    share_image_url = f"{share_image_url}?v={int(article.updated_at.timestamp())}"
     image_url = share_image_url
     schema = {
         "@context": "https://schema.org",
