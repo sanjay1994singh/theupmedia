@@ -64,7 +64,10 @@
             {% if home_live_tv.show_ticker %}
               <div class="news-ticker">
                 <span>{{ home_live_tv.ticker_label }}</span>
-                <p>{{ home_live_tv.ticker_text }}</p>
+                <div class="ticker-track" aria-label="{{ home_live_tv.ticker_text }}">
+                  <p>{{ home_live_tv.ticker_text }}</p>
+                  <p aria-hidden="true">{{ home_live_tv.ticker_text }}</p>
+                </div>
               </div>
             {% endif %}
           </div>

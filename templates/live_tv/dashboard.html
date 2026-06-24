@@ -120,7 +120,10 @@
               {% if preview_channel.show_ticker %}
                 <div class="news-ticker">
                   <span>{{ preview_channel.ticker_label }}</span>
-                  <p>{{ preview_channel.ticker_text }}</p>
+                  <div class="ticker-track" aria-label="{{ preview_channel.ticker_text }}">
+                    <p>{{ preview_channel.ticker_text }}</p>
+                    <p aria-hidden="true">{{ preview_channel.ticker_text }}</p>
+                  </div>
                 </div>
               {% endif %}
             </div>

@@ -66,7 +66,10 @@
             {% if active_channel.show_ticker %}
               <div class="news-ticker">
                 <span>{{ active_channel.ticker_label }}</span>
-                <p>{{ active_channel.ticker_text }}</p>
+                <div class="ticker-track" aria-label="{{ active_channel.ticker_text }}">
+                  <p>{{ active_channel.ticker_text }}</p>
+                  <p aria-hidden="true">{{ active_channel.ticker_text }}</p>
+                </div>
               </div>
             {% endif %}
           </div>
