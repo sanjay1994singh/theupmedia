@@ -214,6 +214,63 @@ class Article(models.Model):
         return self.title
 
 
+class NewsSource(models.Model):
+    name = models.CharField(max_length=160)
+    rss_url = models.URLField(unique=True)
+    is_active = models.BooleanField(default=True)
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, related_name="news_sources", blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        indexes = [
+            models.Index(fields=["is_active", "name"], name="news_source_active_name_idx"),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class FetchedNews(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        DRAFT = "draft", "Draft"
+        PUBLISHED = "published", "Published"
+        FAILED = "failed", "Failed"
+
+    source = models.ForeignKey(NewsSource, on_delete=models.CASCADE, related_name="fetched_news")
+    original_title = models.CharField(max_length=300)
+    original_url = models.URLField(unique=True)
+    original_summary = models.TextField(blank=True)
+    ai_title = models.CharField(max_length=220, blank=True)
+    ai_summary = models.TextField(blank=True)
+    ai_content = CKEditor5Field("AI Content", config_name="article", blank=True)
+    ai_slug = models.SlugField(max_length=240, blank=True)
+    source_credit = models.CharField(max_length=180, blank=True)
+    source_url = models.URLField(blank=True)
+    fact_points = models.TextField(blank=True)
+    seo_keywords = models.CharField(max_length=255, blank=True)
+    internal_note = models.TextField(default="Draft generated from source facts; editor review required.")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    error_message = models.TextField(blank=True)
+    created_article = models.ForeignKey(Article, on_delete=models.SET_NULL, related_name="import_logs", blank=True, null=True)
+    fetched_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-fetched_at"]
+        verbose_name = "Fetched news"
+        verbose_name_plural = "Fetched news"
+        indexes = [
+            models.Index(fields=["status", "-fetched_at"], name="news_fetch_status_time_idx"),
+            models.Index(fields=["source", "-fetched_at"], name="news_fetch_source_time_idx"),
+        ]
+
+    def __str__(self):
+        return self.ai_title or self.original_title
+
+
 class ArticleSlugRedirect(models.Model):
     old_slug = models.SlugField(max_length=240, unique=True)
     article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name="slug_redirects")

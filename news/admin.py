@@ -1,6 +1,8 @@
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.utils import timezone
 
-from .models import Article, ArticleRead, ArticleSlugRedirect, Category, City, State
+from .models import Article, ArticleRead, ArticleSlugRedirect, Category, City, FetchedNews, NewsSource, State
+from .services.social_hooks import run_publish_hooks
 
 
 @admin.register(Category)
@@ -70,6 +72,108 @@ class ArticleAdmin(admin.ModelAdmin):
         if not obj.author_id:
             obj.author = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(NewsSource)
+class NewsSourceAdmin(admin.ModelAdmin):
+    list_display = ("name", "category", "is_active", "rss_url", "updated_at")
+    list_filter = ("is_active", "category")
+    search_fields = ("name", "rss_url", "category__name")
+    autocomplete_fields = ("category",)
+
+
+@admin.register(FetchedNews)
+class FetchedNewsAdmin(admin.ModelAdmin):
+    list_display = ("original_title", "source", "status", "created_article", "fetched_at")
+    list_filter = ("status", "source", "source__category", "fetched_at")
+    search_fields = ("original_title", "original_summary", "ai_title", "ai_summary", "original_url", "source_credit", "source_url")
+    autocomplete_fields = ("source", "created_article")
+    readonly_fields = ("fetched_at", "updated_at")
+    actions = ("create_article_drafts", "publish_imports", "run_social_share_hooks")
+    fieldsets = (
+        ("Source", {"fields": ("source", "original_title", "original_url", "original_summary")}),
+        ("AI Draft", {"fields": ("ai_title", "ai_summary", "ai_content", "ai_slug", "fact_points", "seo_keywords")}),
+        ("Source Credit", {"fields": ("source_credit", "source_url")}),
+        ("Workflow", {"fields": ("status", "created_article", "internal_note", "error_message")}),
+        ("Timestamps", {"fields": ("fetched_at", "updated_at")}),
+    )
+
+    def _create_article_from_import(self, fetched_news, status, author=None):
+        if fetched_news.created_article:
+            article = fetched_news.created_article
+            article.status = status
+            if status == Article.Status.PUBLISHED:
+                article.published_at = timezone.now()
+            article.save()
+            fetched_news.status = FetchedNews.Status.PUBLISHED if status == Article.Status.PUBLISHED else FetchedNews.Status.DRAFT
+            fetched_news.save(update_fields=["status", "updated_at"])
+            return article, False
+
+        category = fetched_news.source.category
+        if not category:
+            raise ValueError("Source category is required before creating an article.")
+
+        article = Article.objects.create(
+            title=fetched_news.ai_title or fetched_news.original_title,
+            slug="",
+            category=category,
+            author=author,
+            summary=fetched_news.ai_summary or fetched_news.original_summary[:220],
+            content=fetched_news.ai_content,
+            status=status,
+            source_name=fetched_news.source_credit or fetched_news.source.name,
+            source_url=fetched_news.source_url or fetched_news.original_url,
+            meta_title=(fetched_news.ai_title or fetched_news.original_title)[:160],
+            meta_description=(fetched_news.ai_summary or fetched_news.original_summary)[:220],
+            meta_keywords=fetched_news.seo_keywords,
+            canonical_url="",
+            published_at=timezone.now(),
+        )
+        fetched_news.created_article = article
+        fetched_news.status = FetchedNews.Status.PUBLISHED if status == Article.Status.PUBLISHED else FetchedNews.Status.DRAFT
+        fetched_news.error_message = ""
+        fetched_news.save(update_fields=["created_article", "status", "error_message", "updated_at"])
+        return article, True
+
+    @admin.action(description="Create Article drafts from selected imports")
+    def create_article_drafts(self, request, queryset):
+        created = 0
+        failed = 0
+        for fetched_news in queryset.select_related("source", "source__category", "created_article"):
+            try:
+                _, was_created = self._create_article_from_import(fetched_news, Article.Status.DRAFT, request.user)
+                created += int(was_created)
+            except ValueError as exc:
+                failed += 1
+                fetched_news.status = FetchedNews.Status.FAILED
+                fetched_news.error_message = str(exc)
+                fetched_news.save(update_fields=["status", "error_message", "updated_at"])
+        self.message_user(request, f"Draft action complete. New drafts: {created}, failed: {failed}", messages.INFO)
+
+    @admin.action(description="Approve and publish selected imports")
+    def publish_imports(self, request, queryset):
+        published = 0
+        failed = 0
+        for fetched_news in queryset.select_related("source", "source__category", "created_article"):
+            try:
+                article, _ = self._create_article_from_import(fetched_news, Article.Status.PUBLISHED, request.user)
+                published += 1
+                run_publish_hooks(article)
+            except ValueError as exc:
+                failed += 1
+                fetched_news.status = FetchedNews.Status.FAILED
+                fetched_news.error_message = str(exc)
+                fetched_news.save(update_fields=["status", "error_message", "updated_at"])
+        self.message_user(request, f"Publish action complete. Published: {published}, failed: {failed}", messages.INFO)
+
+    @admin.action(description="Run social share hooks for published imported articles")
+    def run_social_share_hooks(self, request, queryset):
+        triggered = 0
+        for fetched_news in queryset.select_related("created_article"):
+            if fetched_news.created_article and fetched_news.created_article.status == Article.Status.PUBLISHED:
+                run_publish_hooks(fetched_news.created_article)
+                triggered += 1
+        self.message_user(request, f"Social hook placeholders triggered for {triggered} article(s).", messages.INFO)
 
 
 @admin.register(ArticleSlugRedirect)
