@@ -5,7 +5,9 @@
 {% block meta_keywords %}{{ service.meta_keywords }}{% endblock %}
 
 {% block content %}
+
 <article class="page-shell">
+    {% include "advertisements/news_portal.html" %}
   <p class="eyebrow">Service</p>
   <h1>{% if service.name_hi %}{{ service.name_hi }}{% else %}{{ service.name }}{% endif %}</h1>
   {% if service.name_hi %}<p class="service-english-title">{{ service.name }}</p>{% endif %}
@@ -27,6 +29,7 @@
 </article>
 
 <section class="content-band">
+    {% include "advertisements/gen_ai_course.html" %}
   <div class="section-heading">
     <h2>More Services</h2>
   </div>
@@ -51,5 +54,6 @@
       <p>More services will be added soon.</p>
     {% endfor %}
   </div>
+    {% include "advertisements/property_plot.html" %}
 </section>
 {% endblock %}
