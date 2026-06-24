@@ -11,7 +11,7 @@
     {% if active_channel %}
       <div class="live-tv-main">
         <div class="live-player-card">
-          <div class="live-player-frame {% if active_channel.player_source_type == 'direct' or active_channel.player_source_type == 'hls' %}live-player-frame--native-controls{% endif %}">
+          <div class="live-player-frame {% if active_channel.player_source_type == 'direct' or active_channel.player_source_type == 'hls' %}live-player-frame--native-controls{% endif %}" data-next-url="{% if next_channel %}{{ next_channel.get_absolute_url }}{% endif %}" data-loop-same="{% if loop_same_channel %}true{% else %}false{% endif %}" data-force-autoplay="{% if force_autoplay %}true{% else %}false{% endif %}">
             {% if active_channel.is_live %}
               <span class="live-badge"><span></span>Live</span>
             {% endif %}
@@ -29,6 +29,7 @@
 
             {% if active_channel.player_source_type == "youtube" %}
               <iframe
+                class="youtube-live-iframe"
                 src="{{ active_channel.youtube_embed_url }}"
                 title="{{ active_channel.title }}"
                 loading="lazy"
@@ -36,12 +37,12 @@
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowfullscreen></iframe>
             {% elif active_channel.player_source_type == "direct" %}
-              <video controls preload="none" {% if active_channel.autoplay %}autoplay muted{% endif %} playsinline {% if active_channel.poster_image %}poster="{{ active_channel.poster_image.url }}"{% endif %}>
+              <video controls preload="none" {% if active_channel.autoplay or force_autoplay %}autoplay muted{% endif %} playsinline {% if active_channel.poster_image %}poster="{{ active_channel.poster_image.url }}"{% endif %}>
                 <source src="{{ active_channel.video_file.url }}" type="{{ active_channel.video_mime_type }}">
                 Your browser does not support video playback.
               </video>
             {% elif active_channel.player_source_type == "hls" %}
-              <video controls preload="none" {% if active_channel.autoplay %}autoplay muted{% endif %} playsinline {% if active_channel.poster_image %}poster="{{ active_channel.poster_image.url }}"{% endif %}>
+              <video controls preload="none" {% if active_channel.autoplay or force_autoplay %}autoplay muted{% endif %} playsinline {% if active_channel.poster_image %}poster="{{ active_channel.poster_image.url }}"{% endif %}>
                 <source src="{{ active_channel.stream_url }}" type="application/x-mpegURL">
                 Your browser does not support this live stream.
               </video>

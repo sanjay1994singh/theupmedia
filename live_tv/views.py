@@ -8,11 +8,26 @@ from .models import LiveTVChannel
 from news.models import Article
 
 
-def live_tv_context(active_channel, channels):
+def next_live_tv_channel(active_channel, channels):
+    channels = list(channels)
+    if not active_channel or not channels:
+        return None
+    for index, channel in enumerate(channels):
+        if channel.pk == active_channel.pk:
+            return channels[(index + 1) % len(channels)]
+    return channels[0]
+
+
+def live_tv_context(active_channel, channels, force_autoplay=False):
+    channels = list(channels)
+    next_channel = next_live_tv_channel(active_channel, channels)
     latest_news = Article.published.select_related("category", "state", "city")[:6]
     return {
         "active_channel": active_channel,
         "channels": channels,
+        "next_channel": next_channel,
+        "loop_same_channel": bool(active_channel and next_channel and active_channel.pk == next_channel.pk),
+        "force_autoplay": force_autoplay,
         "latest_news": latest_news,
     }
 
@@ -24,13 +39,15 @@ def superuser_required(view_func):
 def live_tv_home(request):
     channels = LiveTVChannel.objects.filter(is_active=True)
     active_channel = channels.first()
-    return render(request, "live_tv/live_tv_home.html", live_tv_context(active_channel, channels))
+    force_autoplay = request.GET.get("autoplay") == "1"
+    return render(request, "live_tv/live_tv_home.html", live_tv_context(active_channel, channels, force_autoplay))
 
 
 def live_tv_detail(request, slug):
     channels = LiveTVChannel.objects.filter(is_active=True)
     active_channel = get_object_or_404(channels, slug=slug)
-    return render(request, "live_tv/live_tv_home.html", live_tv_context(active_channel, channels))
+    force_autoplay = request.GET.get("autoplay") == "1"
+    return render(request, "live_tv/live_tv_home.html", live_tv_context(active_channel, channels, force_autoplay))
 
 
 @superuser_required

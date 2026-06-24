@@ -154,6 +154,7 @@ class LiveTVChannel(models.Model):
             "rel": "0",
             "modestbranding": "1",
             "playsinline": "1",
+            "enablejsapi": "1",
             "origin": settings.SITE_DOMAIN,
         }
         if self.autoplay:

@@ -9,7 +9,7 @@
     <div class="home-showcase-main">
       {% if home_live_tv %}
         <div class="live-player-card">
-          <div class="live-player-frame {% if home_live_tv.player_source_type == 'direct' or home_live_tv.player_source_type == 'hls' %}live-player-frame--native-controls{% endif %}">
+          <div class="live-player-frame {% if home_live_tv.player_source_type == 'direct' or home_live_tv.player_source_type == 'hls' %}live-player-frame--native-controls{% endif %}" data-next-url="{% if home_live_tv_next %}{{ home_live_tv_next.get_absolute_url }}{% endif %}" data-loop-same="{% if home_live_tv_loop_same %}true{% else %}false{% endif %}">
             {% if home_live_tv.is_live %}
               <span class="live-badge"><span></span>Live</span>
             {% endif %}
@@ -27,6 +27,7 @@
 
             {% if home_live_tv.player_source_type == "youtube" %}
               <iframe
+                class="youtube-live-iframe"
                 src="{{ home_live_tv.youtube_embed_url }}"
                 title="{{ home_live_tv.title }}"
                 loading="lazy"

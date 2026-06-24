@@ -23,7 +23,11 @@ def home(request):
     categories = Category.objects.filter(is_active=True)[:8]
     latest_blogs = BlogPost.published.select_related("author")[:3]
     services = Service.objects.filter(is_active=True, is_featured=True)[:6]
-    home_live_tv = LiveTVChannel.objects.filter(is_active=True).first()
+    home_live_tv_channels = list(LiveTVChannel.objects.filter(is_active=True))
+    home_live_tv = home_live_tv_channels[0] if home_live_tv_channels else None
+    home_live_tv_next = None
+    if home_live_tv_channels:
+        home_live_tv_next = home_live_tv_channels[1] if len(home_live_tv_channels) > 1 else home_live_tv
     return render(
         request,
         "core/home.html",
@@ -34,6 +38,8 @@ def home(request):
             "latest_blogs": latest_blogs,
             "business_services": services,
             "home_live_tv": home_live_tv,
+            "home_live_tv_next": home_live_tv_next,
+            "home_live_tv_loop_same": bool(home_live_tv and home_live_tv_next and home_live_tv.pk == home_live_tv_next.pk),
         },
     )
 
