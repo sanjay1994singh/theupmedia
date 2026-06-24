@@ -32,6 +32,7 @@
                 src="{{ active_channel.youtube_embed_url }}"
                 title="{{ active_channel.title }}"
                 loading="lazy"
+                referrerpolicy="strict-origin-when-cross-origin"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowfullscreen></iframe>
             {% elif active_channel.player_source_type == "direct" %}

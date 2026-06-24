@@ -30,6 +30,7 @@
                 src="{{ home_live_tv.youtube_embed_url }}"
                 title="{{ home_live_tv.title }}"
                 loading="lazy"
+                referrerpolicy="strict-origin-when-cross-origin"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowfullscreen></iframe>
             {% elif home_live_tv.player_source_type == "direct" %}

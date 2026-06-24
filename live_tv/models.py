@@ -1,6 +1,7 @@
-from urllib.parse import parse_qs, urlparse
 from pathlib import Path
+from urllib.parse import parse_qs, urlencode, urlparse
 
+from django.conf import settings
 from django.db import models
 from django.template.defaultfilters import slugify
 from django.urls import reverse
@@ -141,13 +142,20 @@ class LiveTVChannel(models.Model):
                 video_id = parsed.path.split("/embed/", 1)[1].split("/")[0]
             elif parsed.path.startswith("/live/"):
                 video_id = parsed.path.split("/live/", 1)[1].split("/")[0]
+            elif parsed.path.startswith("/shorts/"):
+                video_id = parsed.path.split("/shorts/", 1)[1].split("/")[0]
             else:
                 video_id = parse_qs(parsed.query).get("v", [""])[0]
 
         if not video_id:
             return self.youtube_url
 
-        params = "rel=0&modestbranding=1"
+        params = {
+            "rel": "0",
+            "modestbranding": "1",
+            "playsinline": "1",
+            "origin": settings.SITE_DOMAIN,
+        }
         if self.autoplay:
-            params += "&autoplay=1&mute=1"
-        return f"https://www.youtube.com/embed/{video_id}?{params}"
+            params.update({"autoplay": "1", "mute": "1"})
+        return f"https://www.youtube-nocookie.com/embed/{video_id}?{urlencode(params)}"
