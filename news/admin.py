@@ -1,7 +1,10 @@
+import json
+
 from django.contrib import admin, messages
 from django.utils import timezone
 
 from .models import Article, ArticleRead, ArticleSlugRedirect, Category, City, FetchedNews, NewsSource, State
+from .services.ai_writer import build_hindi_news_draft
 from .services.social_hooks import run_publish_hooks
 
 
@@ -89,7 +92,7 @@ class FetchedNewsAdmin(admin.ModelAdmin):
     search_fields = ("original_title", "original_summary", "ai_title", "ai_summary", "original_url", "source_credit", "source_url")
     autocomplete_fields = ("source", "created_article")
     readonly_fields = ("fetched_at", "updated_at")
-    actions = ("create_article_drafts", "publish_imports", "run_social_share_hooks")
+    actions = ("regenerate_ai_drafts", "create_article_drafts", "publish_imports", "run_social_share_hooks")
     fieldsets = (
         ("Source", {"fields": ("source", "original_title", "original_url", "original_summary")}),
         ("AI Draft", {"fields": ("ai_title", "ai_summary", "ai_content", "ai_slug", "fact_points", "seo_keywords")}),
@@ -134,6 +137,35 @@ class FetchedNewsAdmin(admin.ModelAdmin):
         fetched_news.error_message = ""
         fetched_news.save(update_fields=["created_article", "status", "error_message", "updated_at"])
         return article, True
+
+    @admin.action(description="Regenerate AI fields for selected pending imports")
+    def regenerate_ai_drafts(self, request, queryset):
+        updated = 0
+        skipped = 0
+        for fetched_news in queryset.select_related("source"):
+            if fetched_news.created_article_id or fetched_news.status == FetchedNews.Status.PUBLISHED:
+                skipped += 1
+                continue
+            draft = build_hindi_news_draft(
+                original_title=fetched_news.original_title,
+                original_summary=fetched_news.original_summary,
+                source_name=fetched_news.source.name,
+                source_url=fetched_news.original_url,
+            )
+            fetched_news.ai_title = draft.ai_title
+            fetched_news.ai_summary = draft.ai_summary
+            fetched_news.ai_content = draft.ai_content
+            fetched_news.ai_slug = draft.slug
+            fetched_news.source_credit = draft.source_credit
+            fetched_news.source_url = draft.source_url
+            fetched_news.fact_points = json.dumps(draft.fact_points, ensure_ascii=False)
+            fetched_news.seo_keywords = draft.seo_keywords
+            fetched_news.internal_note = draft.internal_note
+            fetched_news.status = FetchedNews.Status.PENDING
+            fetched_news.error_message = ""
+            fetched_news.save()
+            updated += 1
+        self.message_user(request, f"AI regenerated: {updated}, skipped locked/published: {skipped}", messages.INFO)
 
     @admin.action(description="Create Article drafts from selected imports")
     def create_article_drafts(self, request, queryset):
