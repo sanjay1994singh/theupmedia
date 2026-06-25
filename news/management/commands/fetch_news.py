@@ -5,7 +5,7 @@ from django.db import IntegrityError
 from django.utils import timezone
 
 from news.models import FetchedNews, NewsSource
-from news.services.ai_writer import build_hindi_news_draft
+from news.services.ai_writer import build_hindi_news_draft, clean_text
 from news.services.rss_fetcher import fetch_source_items
 
 
@@ -41,17 +41,19 @@ class Command(BaseCommand):
                     continue
 
                 try:
+                    original_title = clean_text(item.title)
+                    original_summary = clean_text(item.summary)
                     draft = build_hindi_news_draft(
-                        original_title=item.title,
-                        original_summary=item.summary,
+                        original_title=original_title,
+                        original_summary=original_summary,
                         source_name=source.name,
                         source_url=item.url,
                     )
                     FetchedNews.objects.create(
                         source=source,
-                        original_title=item.title[:300],
+                        original_title=original_title[:300],
                         original_url=item.url,
-                        original_summary=item.summary,
+                        original_summary=original_summary,
                         ai_title=draft.ai_title,
                         ai_summary=draft.ai_summary,
                         ai_content=draft.ai_content,
@@ -73,8 +75,8 @@ class Command(BaseCommand):
                         original_url=item.url,
                         defaults={
                             "source": source,
-                            "original_title": item.title[:300],
-                            "original_summary": item.summary,
+                            "original_title": clean_text(item.title)[:300],
+                            "original_summary": clean_text(item.summary),
                             "status": FetchedNews.Status.FAILED,
                             "error_message": str(exc),
                             "source_credit": source.name,

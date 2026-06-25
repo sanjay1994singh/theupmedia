@@ -4,7 +4,7 @@ from django.contrib import admin, messages
 from django.utils import timezone
 
 from .models import Article, ArticleRead, ArticleSlugRedirect, Category, City, FetchedNews, NewsSource, State
-from .services.ai_writer import build_hindi_news_draft
+from .services.ai_writer import build_hindi_news_draft, clean_text, repair_mojibake
 from .services.social_hooks import run_publish_hooks
 
 
@@ -40,6 +40,7 @@ class ArticleAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("title",)}
     autocomplete_fields = ("state", "city", "author")
     readonly_fields = ("unique_reads", "created_at", "updated_at")
+    actions = ("repair_hindi_encoding",)
     fieldsets = (
         ("Article", {"fields": ("title", "slug", "category", "state", "city", "author", "summary", "content", "featured_image", "image_alt_text")}),
         ("Publishing", {"fields": ("status", "is_featured", "published_at", "source_name", "source_url")}),
@@ -76,6 +77,20 @@ class ArticleAdmin(admin.ModelAdmin):
             obj.author = request.user
         super().save_model(request, obj, form, change)
 
+    @admin.action(description="Repair Hindi encoding for selected articles")
+    def repair_hindi_encoding(self, request, queryset):
+        updated = 0
+        for article in queryset:
+            article.title = clean_text(article.title)
+            article.summary = clean_text(article.summary)
+            article.content = repair_mojibake(article.content)
+            article.meta_title = clean_text(article.meta_title)
+            article.meta_description = clean_text(article.meta_description)
+            article.meta_keywords = clean_text(article.meta_keywords)
+            article.save()
+            updated += 1
+        self.message_user(request, f"Hindi encoding repaired for {updated} article(s).", messages.INFO)
+
 
 @admin.register(NewsSource)
 class NewsSourceAdmin(admin.ModelAdmin):
@@ -92,7 +107,13 @@ class FetchedNewsAdmin(admin.ModelAdmin):
     search_fields = ("original_title", "original_summary", "ai_title", "ai_summary", "original_url", "source_credit", "source_url")
     autocomplete_fields = ("source", "created_article")
     readonly_fields = ("fetched_at", "updated_at")
-    actions = ("regenerate_ai_drafts", "create_article_drafts", "publish_imports", "run_social_share_hooks")
+    actions = (
+        "regenerate_ai_drafts",
+        "repair_text_and_update_articles",
+        "create_article_drafts",
+        "publish_imports",
+        "run_social_share_hooks",
+    )
     fieldsets = (
         ("Source", {"fields": ("source", "original_title", "original_url", "original_summary")}),
         ("AI Draft", {"fields": ("ai_title", "ai_summary", "ai_content", "ai_slug", "fact_points", "seo_keywords")}),
@@ -166,6 +187,52 @@ class FetchedNewsAdmin(admin.ModelAdmin):
             fetched_news.save()
             updated += 1
         self.message_user(request, f"AI regenerated: {updated}, skipped locked/published: {skipped}", messages.INFO)
+
+    @admin.action(description="Repair Hindi text and update linked Articles")
+    def repair_text_and_update_articles(self, request, queryset):
+        updated_imports = 0
+        updated_articles = 0
+        for fetched_news in queryset.select_related("source", "created_article"):
+            original_title = clean_text(fetched_news.original_title)
+            original_summary = clean_text(fetched_news.original_summary)
+            draft = build_hindi_news_draft(
+                original_title=original_title,
+                original_summary=original_summary,
+                source_name=fetched_news.source.name,
+                source_url=fetched_news.original_url,
+            )
+            fetched_news.original_title = original_title[:300]
+            fetched_news.original_summary = original_summary
+            fetched_news.ai_title = draft.ai_title
+            fetched_news.ai_summary = draft.ai_summary
+            fetched_news.ai_content = draft.ai_content
+            fetched_news.ai_slug = draft.slug
+            fetched_news.source_credit = draft.source_credit
+            fetched_news.source_url = draft.source_url
+            fetched_news.fact_points = json.dumps(draft.fact_points, ensure_ascii=False)
+            fetched_news.seo_keywords = draft.seo_keywords
+            fetched_news.internal_note = draft.internal_note
+            fetched_news.error_message = ""
+            fetched_news.save()
+            updated_imports += 1
+
+            article = fetched_news.created_article
+            if article:
+                article.title = draft.ai_title
+                article.summary = draft.ai_summary
+                article.content = draft.ai_content
+                article.source_name = draft.source_credit
+                article.source_url = draft.source_url or fetched_news.original_url
+                article.meta_title = draft.ai_title[:160]
+                article.meta_description = draft.ai_summary[:220]
+                article.meta_keywords = draft.seo_keywords
+                article.save()
+                updated_articles += 1
+        self.message_user(
+            request,
+            f"Text repaired. Imports updated: {updated_imports}, linked articles updated: {updated_articles}",
+            messages.INFO,
+        )
 
     @admin.action(description="Create Article drafts from selected imports")
     def create_article_drafts(self, request, queryset):

@@ -35,11 +35,41 @@ class AINewsDraft:
     internal_note: str
 
 
+def repair_mojibake(value):
+    value = value or ""
+    if not any(marker in value for marker in ("à¤", "à¥", "â€", "â€œ", "â€", "Â")):
+        return value
+
+    for encoding in ("latin1", "cp1252"):
+        try:
+            repaired = value.encode(encoding).decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            continue
+        if repaired:
+            return repaired
+
+    byte_values = bytearray()
+    for char in value:
+        codepoint = ord(char)
+        if codepoint <= 255:
+            byte_values.append(codepoint)
+            continue
+        try:
+            byte_values.extend(char.encode("cp1252"))
+        except UnicodeEncodeError:
+            byte_values.extend(char.encode("utf-8"))
+    try:
+        repaired = bytes(byte_values).decode("utf-8")
+    except UnicodeDecodeError:
+        return value
+    return repaired if repaired else value
+
+
 def clean_text(value):
-    value = html.unescape(value or "")
+    value = repair_mojibake(html.unescape(value or ""))
     parser = HTMLTextExtractor()
     parser.feed(value)
-    text = parser.text() or value
+    text = repair_mojibake(parser.text() or value)
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
@@ -161,10 +191,11 @@ def build_hindi_news_draft(original_title, original_summary="", source_name="", 
         else ""
     )
 
-    summary = Truncator(
+    summary_text = repair_mojibake(
         f"{topic} à¤¸à¥‡ à¤œà¥à¤¡à¤¼à¥€ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤œà¤¾à¤¨à¤•à¤¾à¤°à¥€ à¤•à¥‡ à¤†à¤§à¤¾à¤° à¤ªà¤° à¤¯à¤¹ à¤–à¤¬à¤° à¤¤à¥ˆà¤¯à¤¾à¤° à¤•à¥€ à¤—à¤ˆ à¤¹à¥ˆà¥¤ à¤‡à¤¸à¤®à¥‡à¤‚ à¤®à¥à¤–à¥à¤¯ à¤¤à¤¥à¥à¤¯, "
         "à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯ à¤¸à¤‚à¤¦à¤°à¥à¤­ à¤”à¤° à¤†à¤® à¤²à¥‹à¤—à¥‹à¤‚ à¤ªà¤° à¤¸à¤‚à¤­à¤¾à¤µà¤¿à¤¤ à¤…à¤¸à¤° à¤•à¥‹ à¤¸à¤°à¤² à¤­à¤¾à¤·à¤¾ à¤®à¥‡à¤‚ à¤¸à¤®à¤à¤¾à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤"
-    ).chars(220)
+    )
+    summary = Truncator(summary_text).chars(220)
 
     content_parts = [
         f"<h2>{html.escape(title)}: à¤•à¥à¤¯à¤¾ à¤¹à¥ˆ à¤ªà¥‚à¤°à¤¾ à¤®à¤¾à¤®à¤²à¤¾</h2>",
@@ -202,6 +233,12 @@ def build_hindi_news_draft(original_title, original_summary="", source_name="", 
     content = "\n".join(part for part in content_parts if part)
     keywords = ", ".join(_keyword_candidates(title, original_summary, source_name))
     slug = seo_slugify(title)
+    title = repair_mojibake(title)
+    summary = repair_mojibake(summary)
+    content = repair_mojibake(content)
+    source_label = repair_mojibake(source_label)
+    fact_points = [repair_mojibake(point) for point in fact_points]
+    keywords = repair_mojibake(keywords)
     return AINewsDraft(
         ai_title=title,
         ai_summary=summary,
