@@ -1,4 +1,4 @@
-﻿import html
+import html
 import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -6,6 +6,9 @@ from html.parser import HTMLParser
 from django.utils.text import Truncator
 
 from news.slug_utils import seo_slugify
+
+
+MOJIBAKE_MARKERS = ("à¤", "à¥", "â€", "â€œ", "â€", "Â")
 
 
 class HTMLTextExtractor(HTMLParser):
@@ -35,11 +38,28 @@ class AINewsDraft:
     internal_note: str
 
 
+def has_mojibake(value):
+    value = value or ""
+    return any(marker in value for marker in MOJIBAKE_MARKERS)
+
+
 def repair_mojibake(value):
     value = value or ""
-    if not any(marker in value for marker in ("à¤", "à¥", "â€", "â€œ", "â€", "Â")):
+    if not has_mojibake(value):
         return value
 
+    repaired = value
+    for _ in range(3):
+        if not has_mojibake(repaired):
+            break
+        previous = repaired
+        repaired = _repair_once(repaired)
+        if repaired == previous:
+            break
+    return repaired
+
+
+def _repair_once(value):
     for encoding in ("latin1", "cp1252"):
         try:
             repaired = value.encode(encoding).decode("utf-8")
@@ -58,11 +78,12 @@ def repair_mojibake(value):
             byte_values.extend(char.encode("cp1252"))
         except UnicodeEncodeError:
             byte_values.extend(char.encode("utf-8"))
+
     try:
         repaired = bytes(byte_values).decode("utf-8")
     except UnicodeDecodeError:
         return value
-    return repaired if repaired else value
+    return repaired or value
 
 
 def clean_text(value):
@@ -70,6 +91,7 @@ def clean_text(value):
     parser = HTMLTextExtractor()
     parser.feed(value)
     text = repair_mojibake(parser.text() or value)
+    text = text.replace("\ufffd", "").replace("□", "")
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
@@ -94,22 +116,24 @@ def _keyword_candidates(title, summary, source_name):
         "live",
         "latest",
         "breaking",
-        "à¤¹à¥ˆ",
-        "à¤¹à¥ˆà¤‚",
-        "à¤”à¤°",
-        "à¤®à¥‡à¤‚",
-        "à¤•à¤¾",
-        "à¤•à¥€",
-        "à¤•à¥‡",
-        "à¤¸à¥‡",
-        "à¤ªà¤°",
-        "à¤•à¥‹",
-        "à¤¨à¥‡",
-        "à¤²à¤¿à¤",
+        "है",
+        "हैं",
+        "और",
+        "में",
+        "का",
+        "की",
+        "के",
+        "से",
+        "पर",
+        "को",
+        "ने",
+        "लिए",
+        "यह",
+        "इस",
     }
     seen = []
     for word in words:
-        normalized = word.strip(" -_").lower()
+        normalized = clean_text(word).strip(" -_").lower()
         if len(normalized) < 3 or normalized in stop_words:
             continue
         if normalized not in seen:
@@ -117,31 +141,31 @@ def _keyword_candidates(title, summary, source_name):
     return seen[:12]
 
 
-def _sentences(text, limit=4):
-    parts = re.split(r"(?<=[.!?à¥¤])\s+", clean_text(text))
-    return [part.strip() for part in parts if part.strip()][:limit]
-
-
 def _topic_from_title(title):
-    return re.sub(r"\s+à¤®à¤¾à¤®à¤²à¥‡ à¤®à¥‡à¤‚ à¤¨à¤¯à¤¾ à¤…à¤ªà¤¡à¥‡à¤Ÿ$", "", title).strip() or title
+    title = clean_text(title)
+    title = re.sub(r"\s+मामले में नया अपडेट$", "", title).strip()
+    return title or "स्थानीय अपडेट"
 
 
 def _fact_points(title, summary):
     text = clean_text(summary)
     topic = Truncator(_topic_from_title(title)).chars(120)
-    points = [f"{topic} à¤¸à¥‡ à¤œà¥à¤¡à¤¼à¤¾ à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤¸à¤¾à¤°à¥à¤µà¤œà¤¨à¤¿à¤• à¤¸à¥à¤°à¥‹à¤¤à¥‹à¤‚ à¤®à¥‡à¤‚ à¤¸à¤¾à¤®à¤¨à¥‡ à¤†à¤¯à¤¾ à¤¹à¥ˆà¥¤"]
+    points = [f"{topic} से जुड़ा अपडेट सार्वजनिक स्रोतों में सामने आया है।"]
 
     numbers = re.findall(r"\b\d+[\w%/-]*\b", text)
     if numbers:
-        points.append(f"à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤œà¤¾à¤¨à¤•à¤¾à¤°à¥€ à¤®à¥‡à¤‚ {', '.join(numbers[:4])} à¤œà¥ˆà¤¸à¥‡ à¤¤à¤¥à¥à¤¯à¤¾à¤¤à¥à¤®à¤• à¤†à¤‚à¤•à¤¡à¤¼à¥‹à¤‚ à¤•à¤¾ à¤‰à¤²à¥à¤²à¥‡à¤– à¤¹à¥ˆ; à¤ªà¥à¤°à¤•à¤¾à¤¶à¤¨ à¤¸à¥‡ à¤ªà¤¹à¤²à¥‡ à¤‡à¤¨à¤•à¥€ à¤ªà¥à¤·à¥à¤Ÿà¤¿ à¤œà¤°à¥‚à¤°à¥€ à¤¹à¥ˆà¥¤")
+        points.append(
+            f"उपलब्ध जानकारी में {', '.join(numbers[:4])} जैसे तथ्यात्मक आंकड़ों का उल्लेख है; "
+            "प्रकाशन से पहले इनकी पुष्टि जरूरी है।"
+        )
 
     lower_text = text.lower()
-    if any(word in lower_text for word in ["police", "arrest", "case", "investigation", "court", "fir", "accused"]):
-        points.append("à¤®à¤¾à¤®à¤²à¤¾ à¤•à¤¾à¤¨à¥‚à¤¨-à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾, à¤œà¤¾à¤‚à¤š à¤¯à¤¾ à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤• à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤¸à¥‡ à¤œà¥à¤¡à¤¼à¤¾ à¤¹à¥‹ à¤¸à¤•à¤¤à¤¾ à¤¹à¥ˆà¥¤")
-    if any(word in lower_text for word in ["hospital", "health", "doctor", "patient", "medical", "fire", "school", "student"]):
-        points.append("à¤‡à¤¸ à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤•à¤¾ à¤…à¤¸à¤° à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯ à¤¸à¥‡à¤µà¤¾à¤“à¤‚, à¤¸à¥à¤°à¤•à¥à¤·à¤¾ à¤¯à¤¾ à¤†à¤® à¤²à¥‹à¤—à¥‹à¤‚ à¤•à¥€ à¤¸à¥à¤µà¤¿à¤§à¤¾ à¤ªà¤° à¤ªà¤¡à¤¼ à¤¸à¤•à¤¤à¤¾ à¤¹à¥ˆà¥¤")
+    if any(word in lower_text for word in ["police", "arrest", "case", "investigation", "court", "fir", "accused", "पुलिस", "गिरफ्तार", "जांच"]):
+        points.append("मामला कानून-व्यवस्था, जांच या प्रशासनिक कार्रवाई से जुड़ा हो सकता है।")
+    if any(word in lower_text for word in ["hospital", "health", "doctor", "patient", "medical", "fire", "school", "student", "अस्पताल", "स्वास्थ्य", "आग"]):
+        points.append("इस अपडेट का असर स्थानीय सेवाओं, सुरक्षा या आम लोगों की सुविधा पर पड़ सकता है।")
 
-    points.append("à¤†à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤• à¤ªà¥à¤·à¥à¤Ÿà¤¿, à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯ à¤¬à¤¯à¤¾à¤¨ à¤”à¤° à¤†à¤—à¥‡ à¤•à¥‡ à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤•à¥‡ à¤†à¤§à¤¾à¤° à¤ªà¤° à¤–à¤¬à¤° à¤•à¥‹ à¤…à¤‚à¤¤à¤¿à¤® à¤°à¥‚à¤ª à¤¦à¥‡à¤¨à¤¾ à¤šà¤¾à¤¹à¤¿à¤à¥¤")
+    points.append("आधिकारिक पुष्टि, स्थानीय बयान और आगे के अपडेट के आधार पर खबर को अंतिम रूप देना चाहिए।")
     return points[:4]
 
 
@@ -178,11 +202,11 @@ def build_hindi_news_draft(original_title, original_summary="", source_name="", 
     original_summary = clean_text(original_summary)
     source_name = clean_text(source_name)
 
-    title = _original_title(original_title)
+    title = clean_text(_original_title(original_title))
     topic = _topic_from_title(title)
-    fact_points = _fact_points(title, original_summary)
+    fact_points = [clean_text(point) for point in _fact_points(title, original_summary)]
     first_fact = fact_points[0]
-    source_label = source_name or "à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤¸à¥à¤°à¥‹à¤¤"
+    source_label = source_name or "संबंधित स्रोत"
     fact_list = "\n".join(f"<li>{html.escape(point)}</li>" for point in fact_points)
     source_html = (
         f'<p><strong>Reference:</strong> <a href="{html.escape(source_url)}" rel="nofollow noopener" '
@@ -191,54 +215,48 @@ def build_hindi_news_draft(original_title, original_summary="", source_name="", 
         else ""
     )
 
-    summary_text = repair_mojibake(
-        f"{topic} à¤¸à¥‡ à¤œà¥à¤¡à¤¼à¥€ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤œà¤¾à¤¨à¤•à¤¾à¤°à¥€ à¤•à¥‡ à¤†à¤§à¤¾à¤° à¤ªà¤° à¤¯à¤¹ à¤–à¤¬à¤° à¤¤à¥ˆà¤¯à¤¾à¤° à¤•à¥€ à¤—à¤ˆ à¤¹à¥ˆà¥¤ à¤‡à¤¸à¤®à¥‡à¤‚ à¤®à¥à¤–à¥à¤¯ à¤¤à¤¥à¥à¤¯, "
-        "à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯ à¤¸à¤‚à¤¦à¤°à¥à¤­ à¤”à¤° à¤†à¤® à¤²à¥‹à¤—à¥‹à¤‚ à¤ªà¤° à¤¸à¤‚à¤­à¤¾à¤µà¤¿à¤¤ à¤…à¤¸à¤° à¤•à¥‹ à¤¸à¤°à¤² à¤­à¤¾à¤·à¤¾ à¤®à¥‡à¤‚ à¤¸à¤®à¤à¤¾à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤"
+    summary_text = (
+        f"{topic} से जुड़ी उपलब्ध जानकारी के आधार पर यह खबर तैयार की गई है। "
+        "इसमें मुख्य तथ्य, स्थानीय संदर्भ और आम लोगों पर संभावित असर को सरल भाषा में समझाया गया है।"
     )
-    summary = Truncator(summary_text).chars(220)
+    summary = Truncator(clean_text(summary_text)).chars(220)
 
     content_parts = [
-        f"<h2>{html.escape(title)}: à¤•à¥à¤¯à¤¾ à¤¹à¥ˆ à¤ªà¥‚à¤°à¤¾ à¤®à¤¾à¤®à¤²à¤¾</h2>",
+        f"<h2>{html.escape(title)}: क्या है पूरा मामला</h2>",
         (
-            f"<p>{html.escape(first_fact)} à¤‡à¤¸ à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤¨à¥‡ à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯ à¤¸à¥à¤¤à¤° à¤ªà¤° à¤šà¤°à¥à¤šà¤¾ à¤¬à¤¢à¤¼à¤¾à¤ˆ à¤¹à¥ˆà¥¤ "
-            "The Up Media à¤¨à¥‡ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¸à¤¾à¤°à¥à¤µà¤œà¤¨à¤¿à¤• à¤œà¤¾à¤¨à¤•à¤¾à¤°à¥€ à¤•à¥‹ à¤†à¤§à¤¾à¤° à¤¬à¤¨à¤¾à¤•à¤° à¤¯à¤¹ à¤¸à¥à¤µà¤¤à¤‚à¤¤à¥à¤° à¤¡à¥à¤°à¤¾à¤«à¥à¤Ÿ à¤¤à¥ˆà¤¯à¤¾à¤° à¤•à¤¿à¤¯à¤¾ à¤¹à¥ˆ, "
-            "à¤¤à¤¾à¤•à¤¿ à¤ªà¤¾à¤ à¤•à¥‹à¤‚ à¤•à¥‹ à¤˜à¤Ÿà¤¨à¤¾ à¤•à¤¾ à¤¸à¤‚à¤¦à¤°à¥à¤­ à¤¸à¤¾à¤« à¤”à¤° à¤¸à¤°à¤² à¤­à¤¾à¤·à¤¾ à¤®à¥‡à¤‚ à¤®à¤¿à¤² à¤¸à¤•à¥‡à¥¤</p>"
+            f"<p>{html.escape(first_fact)} इस अपडेट ने स्थानीय स्तर पर चर्चा बढ़ाई है। "
+            "The Up Media ने उपलब्ध सार्वजनिक जानकारी को आधार बनाकर यह स्वतंत्र ड्राफ्ट तैयार किया है, "
+            "ताकि पाठकों को घटना का संदर्भ साफ और सरल भाषा में मिल सके।</p>"
         ),
-        "<h3>à¤…à¤¬ à¤¤à¤• à¤¸à¤¾à¤®à¤¨à¥‡ à¤†à¤ à¤®à¥à¤–à¥à¤¯ à¤¤à¤¥à¥à¤¯</h3>",
+        "<h3>अब तक सामने आए मुख्य तथ्य</h3>",
         f"<ul>{fact_list}</ul>",
-        "<h3>à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯ à¤¸à¤‚à¤¦à¤°à¥à¤­ à¤”à¤° à¤…à¤¸à¤°</h3>",
+        "<h3>स्थानीय संदर्भ और असर</h3>",
         (
-            "<p>à¤‡à¤¸ à¤¤à¤°à¤¹ à¤•à¥€ à¤–à¤¬à¤°à¥‹à¤‚ à¤•à¤¾ à¤…à¤¸à¤° à¤†à¤® à¤ªà¤¾à¤ à¤•à¥‹à¤‚, à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯ à¤²à¥‹à¤—à¥‹à¤‚ à¤”à¤° à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤ªà¤•à¥à¤·à¥‹à¤‚ à¤ªà¤° à¤ªà¤¡à¤¼ à¤¸à¤•à¤¤à¤¾ à¤¹à¥ˆà¥¤ "
-            "à¤‡à¤¸à¤²à¤¿à¤ à¤¸à¤¿à¤°à¥à¤« à¤˜à¤Ÿà¤¨à¤¾ à¤¬à¤¤à¤¾à¤¨à¤¾ à¤•à¤¾à¤«à¥€ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆ; à¤¯à¤¹ à¤¸à¤®à¤à¤¨à¤¾ à¤­à¥€ à¤œà¤°à¥‚à¤°à¥€ à¤¹à¥ˆ à¤•à¤¿ à¤‡à¤¸à¤¸à¥‡ à¤¸à¥à¤°à¤•à¥à¤·à¤¾, à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾, "
-            "à¤¸à¥à¤µà¤¿à¤§à¤¾, à¤œà¤¨à¤¹à¤¿à¤¤ à¤¯à¤¾ à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯ à¤®à¤¾à¤¹à¥Œà¤² à¤ªà¤° à¤•à¥à¤¯à¤¾ à¤ªà¥à¤°à¤­à¤¾à¤µ à¤ªà¤¡à¤¼ à¤¸à¤•à¤¤à¤¾ à¤¹à¥ˆà¥¤</p>"
+            "<p>इस तरह की खबरों का असर आम पाठकों, स्थानीय लोगों और संबंधित पक्षों पर पड़ सकता है। "
+            "इसलिए सिर्फ घटना बताना काफी नहीं है; यह समझना भी जरूरी है कि इससे सुरक्षा, व्यवस्था, "
+            "सुविधा, जनहित या स्थानीय माहौल पर क्या प्रभाव पड़ सकता है।</p>"
         ),
-        "<h3>à¤ªà¥ƒà¤·à¥à¤ à¤­à¥‚à¤®à¤¿</h3>",
+        "<h3>पृष्ठभूमि</h3>",
         (
-            "<p>à¤®à¤¾à¤®à¤²à¥‡ à¤¸à¥‡ à¤œà¥à¤¡à¤¼à¥€ à¤œà¤¾à¤¨à¤•à¤¾à¤°à¥€ à¤…à¤­à¥€ à¤¸à¤¾à¤°à¥à¤µà¤œà¤¨à¤¿à¤• à¤¸à¥à¤°à¥‹à¤¤à¥‹à¤‚ à¤”à¤° à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤ªà¤° à¤†à¤§à¤¾à¤°à¤¿à¤¤ à¤¹à¥ˆà¥¤ "
-            "à¤¸à¤‚à¤ªà¤¾à¤¦à¤•à¥€à¤¯ à¤Ÿà¥€à¤® à¤•à¥‹ à¤ªà¥à¤°à¤•à¤¾à¤¶à¤¨ à¤¸à¥‡ à¤ªà¤¹à¤²à¥‡ à¤¨à¤¾à¤®, à¤¸à¥à¤¥à¤¾à¤¨, à¤¤à¤¾à¤°à¥€à¤–, à¤¸à¤‚à¤–à¥à¤¯à¤¾ à¤”à¤° à¤†à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤• à¤¬à¤¯à¤¾à¤¨ à¤œà¥ˆà¤¸à¥‡ "
-            "à¤¤à¤¥à¥à¤¯à¥‹à¤‚ à¤•à¥€ à¤¦à¥‹à¤¬à¤¾à¤°à¤¾ à¤œà¤¾à¤‚à¤š à¤•à¤°à¤¨à¥€ à¤šà¤¾à¤¹à¤¿à¤à¥¤</p>"
+            "<p>मामले से जुड़ी जानकारी अभी सार्वजनिक स्रोतों और उपलब्ध अपडेट पर आधारित है। "
+            "संपादकीय टीम को प्रकाशन से पहले नाम, स्थान, तारीख, संख्या और आधिकारिक बयान जैसे "
+            "तथ्यों की दोबारा जांच करनी चाहिए।</p>"
         ),
-        "<h3>à¤†à¤—à¥‡ à¤•à¥à¤¯à¤¾ à¤¦à¥‡à¤–à¤¨à¤¾ à¤œà¤°à¥‚à¤°à¥€ à¤¹à¥ˆ</h3>",
+        "<h3>आगे क्या देखना जरूरी है</h3>",
         (
-            "<p>à¤†à¤—à¥‡ à¤•à¥€ à¤¸à¥à¤¥à¤¿à¤¤à¤¿ à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤µà¤¿à¤­à¤¾à¤—, à¤¸à¤‚à¤¸à¥à¤¥à¤¾, à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯ à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨ à¤¯à¤¾ à¤†à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤• à¤¸à¥à¤°à¥‹à¤¤à¥‹à¤‚ à¤¸à¥‡ à¤®à¤¿à¤²à¤¨à¥‡ à¤µà¤¾à¤²à¥€ "
-            "à¤ªà¥à¤·à¥à¤Ÿà¤¿ à¤ªà¤° à¤¨à¤¿à¤°à¥à¤­à¤° à¤•à¤°à¥‡à¤—à¥€à¥¤ à¤¯à¤¦à¤¿ à¤¨à¤ à¤¤à¤¥à¥à¤¯ à¤¸à¤¾à¤®à¤¨à¥‡ à¤†à¤¤à¥‡ à¤¹à¥ˆà¤‚, à¤¤à¥‹ à¤–à¤¬à¤° à¤•à¥‹ à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤•à¤¿à¤¯à¤¾ à¤œà¤¾à¤¨à¤¾ à¤šà¤¾à¤¹à¤¿à¤à¥¤</p>"
+            "<p>आगे की स्थिति संबंधित विभाग, संस्था, स्थानीय प्रशासन या आधिकारिक स्रोतों से मिलने वाली "
+            "पुष्टि पर निर्भर करेगी। यदि नए तथ्य सामने आते हैं, तो खबर को अपडेट किया जाना चाहिए।</p>"
         ),
         (
-            "<p><strong>Editorial note:</strong> à¤¯à¤¹ à¤¡à¥à¤°à¤¾à¤«à¥à¤Ÿ à¤®à¥‚à¤² à¤¸à¥à¤°à¥‹à¤¤ à¤•à¥€ à¤­à¤¾à¤·à¤¾, à¤ªà¥ˆà¤°à¤¾à¤—à¥à¤°à¤¾à¤« à¤•à¥à¤°à¤® à¤¯à¤¾ "
-            "à¤µà¤¾à¤•à¥à¤¯ à¤¸à¤‚à¤°à¤šà¤¨à¤¾ à¤•à¥‹ à¤•à¥‰à¤ªà¥€ à¤•à¤°à¤•à¥‡ à¤¨à¤¹à¥€à¤‚ à¤¬à¤¨à¤¾à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤‡à¤¸à¥‡ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¤à¤¥à¥à¤¯à¥‹à¤‚ à¤•à¥‡ à¤†à¤§à¤¾à¤° à¤ªà¤° à¤¸à¥à¤µà¤¤à¤‚à¤¤à¥à¤° "
-            "à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤²à¥‡à¤– à¤•à¥‡ à¤°à¥‚à¤ª à¤®à¥‡à¤‚ à¤¤à¥ˆà¤¯à¤¾à¤° à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤</p>"
+            "<p><strong>Editorial note:</strong> यह ड्राफ्ट मूल स्रोत की भाषा, पैराग्राफ क्रम या "
+            "वाक्य संरचना को कॉपी करके नहीं बनाया गया है। इसे उपलब्ध तथ्यों के आधार पर स्वतंत्र "
+            "समाचार लेख के रूप में तैयार किया गया है।</p>"
         ),
         source_html,
     ]
-    content = "\n".join(part for part in content_parts if part)
-    keywords = ", ".join(_keyword_candidates(title, original_summary, source_name))
+    content = repair_mojibake("\n".join(part for part in content_parts if part))
+    keywords = clean_text(", ".join(_keyword_candidates(title, original_summary, source_name)))
     slug = seo_slugify(title)
-    title = repair_mojibake(title)
-    summary = repair_mojibake(summary)
-    content = repair_mojibake(content)
-    source_label = repair_mojibake(source_label)
-    fact_points = [repair_mojibake(point) for point in fact_points]
-    keywords = repair_mojibake(keywords)
     return AINewsDraft(
         ai_title=title,
         ai_summary=summary,
