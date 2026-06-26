@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from .models import Article, ArticleRead, ArticleSlugRedirect, Category, City, FetchedNews, NewsSource, State
 from .services.ai_writer import build_hindi_news_draft, clean_text, repair_mojibake
-from .services.social_hooks import run_publish_hooks
+from .services.social_hooks import notify_facebook_page, run_publish_hooks
 
 
 @admin.register(Category)
@@ -34,16 +34,28 @@ class CityAdmin(admin.ModelAdmin):
 
 @admin.register(Article)
 class ArticleAdmin(admin.ModelAdmin):
-    list_display = ("title", "category", "state", "city", "author", "status", "is_featured", "unique_reads", "published_at")
+    list_display = (
+        "title",
+        "category",
+        "state",
+        "city",
+        "author",
+        "status",
+        "is_featured",
+        "unique_reads",
+        "facebook_posted_at",
+        "published_at",
+    )
     list_filter = ("status", "is_featured", "category", "state", "city")
     search_fields = ("title", "summary", "content", "meta_keywords", "state__name", "city__name")
     prepopulated_fields = {"slug": ("title",)}
     autocomplete_fields = ("state", "city", "author")
-    readonly_fields = ("unique_reads", "created_at", "updated_at")
-    actions = ("repair_hindi_encoding",)
+    readonly_fields = ("unique_reads", "facebook_post_id", "facebook_posted_at", "facebook_post_error", "created_at", "updated_at")
+    actions = ("repair_hindi_encoding", "post_selected_to_facebook")
     fieldsets = (
         ("Article", {"fields": ("title", "slug", "category", "state", "city", "author", "summary", "content", "featured_image", "image_alt_text")}),
         ("Publishing", {"fields": ("status", "is_featured", "published_at", "source_name", "source_url")}),
+        ("Facebook Auto Post", {"fields": ("facebook_post_id", "facebook_posted_at", "facebook_post_error")}),
         ("Analytics", {"fields": ("unique_reads",)}),
         ("SEO", {"fields": ("meta_title", "meta_description", "meta_keywords", "canonical_url")}),
         ("Timestamps", {"fields": ("created_at", "updated_at")}),
@@ -73,9 +85,25 @@ class ArticleAdmin(admin.ModelAdmin):
         return super().has_delete_permission(request, obj) and self._can_manage_articles(request)
 
     def save_model(self, request, obj, form, change):
+        old_status = None
+        if obj.pk:
+            old_status = Article.objects.filter(pk=obj.pk).values_list("status", flat=True).first()
         if not obj.author_id:
             obj.author = request.user
         super().save_model(request, obj, form, change)
+        became_published = obj.status == Article.Status.PUBLISHED and old_status != Article.Status.PUBLISHED
+        if became_published:
+            result = notify_facebook_page(obj)
+            if result.get("sent"):
+                self.message_user(request, "Article auto-posted to Facebook Page.", messages.SUCCESS)
+            elif result.get("skipped"):
+                self.message_user(request, "Facebook auto-post skipped because this article was already posted.", messages.INFO)
+            else:
+                self.message_user(
+                    request,
+                    f"Article published, but Facebook auto-post failed: {result.get('reason') or result.get('response')}",
+                    messages.WARNING,
+                )
 
     @admin.action(description="Repair Hindi encoding for selected articles")
     def repair_hindi_encoding(self, request, queryset):
@@ -90,6 +118,24 @@ class ArticleAdmin(admin.ModelAdmin):
             article.save()
             updated += 1
         self.message_user(request, f"Hindi encoding repaired for {updated} article(s).", messages.INFO)
+
+    @admin.action(description="Post selected published articles to Facebook")
+    def post_selected_to_facebook(self, request, queryset):
+        posted = 0
+        skipped = 0
+        failed = 0
+        for article in queryset:
+            if article.status != Article.Status.PUBLISHED:
+                skipped += 1
+                continue
+            result = notify_facebook_page(article)
+            if result.get("sent"):
+                posted += 1
+            elif result.get("skipped"):
+                skipped += 1
+            else:
+                failed += 1
+        self.message_user(request, f"Facebook posting complete. Posted: {posted}, skipped: {skipped}, failed: {failed}", messages.INFO)
 
 
 @admin.register(NewsSource)

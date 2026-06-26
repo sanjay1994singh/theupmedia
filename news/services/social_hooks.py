@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from django.conf import settings
+from django.utils import timezone
 
 
 logger = logging.getLogger(__name__)
@@ -47,18 +48,37 @@ def notify_telegram(article):
 
 
 def notify_facebook_page(article):
+    if article.facebook_post_id:
+        return {"provider": "facebook_page", "sent": False, "skipped": True, "reason": "already posted"}
+
     page_id = os.getenv("FACEBOOK_PAGE_ID", "")
     token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN", "")
     if not page_id or not token:
         return {"provider": "facebook_page", "sent": False, "reason": "FACEBOOK_PAGE_ID or FACEBOOK_PAGE_ACCESS_TOKEN missing"}
+    graph_version = os.getenv("FACEBOOK_GRAPH_API_VERSION", "v20.0")
     query = urlencode({"access_token": token})
-    url = f"https://graph.facebook.com/v20.0/{page_id}/feed?{query}"
-    payload = {"message": article.title, "link": absolute_article_url(article)}
+    url = f"https://graph.facebook.com/{graph_version}/{page_id}/feed?{query}"
+    payload = {
+        "message": f"{article.title}\n\n{article.summary[:220]}",
+        "link": absolute_article_url(article),
+    }
     try:
         status, body = _post_json(url, payload)
-        return {"provider": "facebook_page", "sent": 200 <= status < 300, "response": body[:300]}
+        sent = 200 <= status < 300
+        response = json.loads(body or "{}")
+        if sent:
+            article.facebook_post_id = response.get("id", "")
+            article.facebook_posted_at = timezone.now()
+            article.facebook_post_error = ""
+            article.save(update_fields=["facebook_post_id", "facebook_posted_at", "facebook_post_error", "updated_at"])
+        else:
+            article.facebook_post_error = body[:1000]
+            article.save(update_fields=["facebook_post_error", "updated_at"])
+        return {"provider": "facebook_page", "sent": sent, "post_id": response.get("id", ""), "response": body[:300]}
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
         logger.warning("Facebook page share failed for article %s: %s", article.pk, exc)
+        article.facebook_post_error = str(exc)
+        article.save(update_fields=["facebook_post_error", "updated_at"])
         return {"provider": "facebook_page", "sent": False, "reason": str(exc)}
 
 
