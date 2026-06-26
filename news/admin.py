@@ -1,6 +1,7 @@
 import json
 
 from django.contrib import admin, messages
+from django.db import transaction
 from django.utils import timezone
 
 from .models import Article, ArticleRead, ArticleSlugRedirect, Category, City, FetchedNews, NewsSource, State
@@ -94,17 +95,18 @@ class ArticleAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         became_published = obj.status == Article.Status.PUBLISHED and old_status != Article.Status.PUBLISHED
         if became_published:
-            result = notify_facebook_page(obj)
-            if result.get("sent"):
-                self.message_user(request, "Article auto-posted to Facebook Page.", messages.SUCCESS)
-            elif result.get("skipped"):
-                self.message_user(request, "Facebook auto-post skipped because this article was already posted.", messages.INFO)
-            else:
-                self.message_user(
-                    request,
-                    f"Article published, but Facebook auto-post failed: {result.get('reason') or result.get('response')}",
-                    messages.WARNING,
-                )
+            article_pk = obj.pk
+
+            def post_after_commit():
+                article = Article.objects.get(pk=article_pk)
+                notify_facebook_page(article)
+
+            transaction.on_commit(post_after_commit)
+            self.message_user(
+                request,
+                "Article saved. Facebook auto-post will run after database commit.",
+                messages.INFO,
+            )
 
     @admin.action(description="Repair Hindi encoding for selected articles")
     def repair_hindi_encoding(self, request, queryset):
@@ -312,7 +314,8 @@ class FetchedNewsAdmin(admin.ModelAdmin):
             try:
                 article, _ = self._create_article_from_import(fetched_news, Article.Status.PUBLISHED, request.user)
                 published += 1
-                run_publish_hooks(article)
+                article_pk = article.pk
+                transaction.on_commit(lambda article_pk=article_pk: run_publish_hooks(Article.objects.get(pk=article_pk)))
             except ValueError as exc:
                 failed += 1
                 fetched_news.status = FetchedNews.Status.FAILED

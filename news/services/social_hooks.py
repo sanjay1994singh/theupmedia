@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -75,7 +76,14 @@ def notify_facebook_page(article):
     if not is_public_article(article):
         return {"provider": "facebook_page", "sent": False, "reason": "article is not public yet"}
     article_url = absolute_article_url(article)
-    is_public, status_code = _url_is_public(article_url)
+    is_public = False
+    status_code = None
+    for attempt in range(3):
+        is_public, status_code = _url_is_public(article_url)
+        if is_public:
+            break
+        if attempt < 2:
+            time.sleep(2)
     if not is_public:
         article.facebook_post_error = f"Article URL is not public yet: {article_url} returned {status_code or 'network error'}"
         article.save(update_fields=["facebook_post_error", "updated_at"])
