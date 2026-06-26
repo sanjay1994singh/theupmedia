@@ -7,7 +7,7 @@ from django.utils import timezone
 from django_ckeditor_5.fields import CKEditor5Field
 from PIL import Image, ImageOps
 
-from .slug_utils import unique_article_slug
+from .slug_utils import is_bad_article_slug, unique_article_slug
 
 
 class PublishedManager(models.Manager):
@@ -149,7 +149,7 @@ class Article(models.Model):
     def save(self, *args, **kwargs):
         if self.city and not self.state:
             self.state = self.city.state
-        if not self.slug:
+        if is_bad_article_slug(self.slug):
             self.slug = unique_article_slug(Article, self.title, self.pk)
         if not self.meta_title:
             self.meta_title = self.title[:160]

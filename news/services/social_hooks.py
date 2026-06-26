@@ -10,7 +10,7 @@ from django.utils import timezone
 
 
 logger = logging.getLogger(__name__)
-TIMEOUT = 12
+TIMEOUT = int(os.getenv("SOCIAL_POST_TIMEOUT", "30"))
 
 
 def absolute_article_url(article):

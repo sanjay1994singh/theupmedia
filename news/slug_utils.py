@@ -53,9 +53,6 @@ CONSONANTS = {
     "ष": "sh",
     "स": "s",
     "ह": "h",
-    "क्ष": "ksh",
-    "त्र": "tr",
-    "ज्ञ": "gy",
 }
 
 VOWEL_SIGNS = {
@@ -80,12 +77,15 @@ SPECIAL_SIGNS = {
 }
 
 COMMON_NEWS_WORDS = {
-    "यूपी": "up",
-    "यू पी": "up",
-    "बिहार": "bihar",
     "उत्तर प्रदेश": "uttar pradesh",
     "उत्तर भारत": "uttar bharat",
+    "यूपी": "up",
+    "बिहार": "bihar",
     "भारत": "bharat",
+    "मथुरा": "mathura",
+    "वृंदावन": "vrindavan",
+    "लखनऊ": "lucknow",
+    "दिल्ली": "delhi",
     "समेत": "samet",
     "मौसम": "mausam",
     "अलर्ट": "alert",
@@ -110,12 +110,13 @@ COMMON_NEWS_WORDS = {
 
 
 def transliterate_hindi(text):
+    text = text or ""
     for hindi, english in sorted(COMMON_NEWS_WORDS.items(), key=lambda item: len(item[0]), reverse=True):
         text = text.replace(hindi, english)
     text = text.replace("क्ष", "ksh").replace("त्र", "tr").replace("ज्ञ", "gy")
+
     result = []
     skip_next_vowel = False
-
     for index, char in enumerate(text):
         if char in CONSONANTS:
             result.append(CONSONANTS[char])
@@ -135,7 +136,6 @@ def transliterate_hindi(text):
         else:
             result.append(char)
             skip_next_vowel = False
-
     return "".join(result)
 
 
@@ -146,16 +146,21 @@ def seo_slugify(text, max_length=210):
     return slug[:max_length].strip("-")
 
 
+def is_bad_article_slug(slug):
+    slug = (slug or "").strip()
+    return not slug or slug.isdigit() or re.fullmatch(r"news-\d+", slug) is not None
+
+
 def unique_article_slug(article_model, title, instance_pk=None):
     base_slug = seo_slugify(title) or f"news-{timezone.now():%Y%m%d}-{uuid.uuid4().hex[:8]}"
-    slug = base_slug
+    slug = base_slug[:240].strip("-")
     counter = 2
     queryset = article_model.objects.filter(slug=slug)
     if instance_pk:
         queryset = queryset.exclude(pk=instance_pk)
     while queryset.exists():
         suffix = f"-{counter}"
-        slug = f"{base_slug[:240 - len(suffix)]}{suffix}"
+        slug = f"{base_slug[:240 - len(suffix)]}{suffix}".strip("-")
         counter += 1
         queryset = article_model.objects.filter(slug=slug)
         if instance_pk:

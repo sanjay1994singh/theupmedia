@@ -48,7 +48,6 @@ class ArticleAdmin(admin.ModelAdmin):
     )
     list_filter = ("status", "is_featured", "category", "state", "city")
     search_fields = ("title", "summary", "content", "meta_keywords", "state__name", "city__name")
-    prepopulated_fields = {"slug": ("title",)}
     autocomplete_fields = ("state", "city", "author")
     readonly_fields = ("unique_reads", "facebook_post_id", "facebook_posted_at", "facebook_post_error", "created_at", "updated_at")
     actions = ("repair_hindi_encoding", "post_selected_to_facebook")
