@@ -32,6 +32,24 @@ def _post_json(url, payload, headers=None):
         return response.status, response.read().decode("utf-8", errors="ignore")
 
 
+def _url_is_public(url):
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+            "Accept": "text/html,application/xhtml+xml",
+        },
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=TIMEOUT) as response:
+            return 200 <= response.status < 400, response.status
+    except HTTPError as exc:
+        return False, exc.code
+    except (URLError, TimeoutError, OSError):
+        return False, None
+
+
 def notify_telegram(article):
     token = os.getenv("TELEGRAM_BOT_TOKEN", "")
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
@@ -56,6 +74,16 @@ def notify_facebook_page(article):
         return {"provider": "facebook_page", "sent": False, "skipped": True, "reason": "already posted"}
     if not is_public_article(article):
         return {"provider": "facebook_page", "sent": False, "reason": "article is not public yet"}
+    article_url = absolute_article_url(article)
+    is_public, status_code = _url_is_public(article_url)
+    if not is_public:
+        article.facebook_post_error = f"Article URL is not public yet: {article_url} returned {status_code or 'network error'}"
+        article.save(update_fields=["facebook_post_error", "updated_at"])
+        return {
+            "provider": "facebook_page",
+            "sent": False,
+            "reason": article.facebook_post_error,
+        }
 
     page_id = os.getenv("FACEBOOK_PAGE_ID", "")
     token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN", "")
@@ -66,7 +94,7 @@ def notify_facebook_page(article):
     url = f"https://graph.facebook.com/{graph_version}/{page_id}/feed?{query}"
     payload = {
         "message": f"{article.title}\n\n{article.summary[:220]}",
-        "link": absolute_article_url(article),
+        "link": article_url,
     }
     try:
         status, body = _post_json(url, payload)

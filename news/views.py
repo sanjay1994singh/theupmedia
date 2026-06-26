@@ -144,6 +144,9 @@ def article_detail(request, slug):
     try:
         article = Article.published.select_related("category", "state", "city", "author").get(slug=slug)
     except Article.DoesNotExist:
+        if slug.isdigit():
+            article_by_id = get_object_or_404(Article.published.select_related("category", "state", "city", "author"), pk=int(slug))
+            return redirect(article_by_id.get_absolute_url(), permanent=True)
         slug_redirect = get_object_or_404(ArticleSlugRedirect.objects.select_related("article"), old_slug=slug)
         return redirect(slug_redirect.article.get_absolute_url(), permanent=True)
     if not is_bot_request(request):

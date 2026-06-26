@@ -50,7 +50,7 @@ class ArticleAdmin(admin.ModelAdmin):
     search_fields = ("title", "summary", "content", "meta_keywords", "state__name", "city__name")
     autocomplete_fields = ("state", "city", "author")
     readonly_fields = ("unique_reads", "facebook_post_id", "facebook_posted_at", "facebook_post_error", "created_at", "updated_at")
-    actions = ("repair_hindi_encoding", "post_selected_to_facebook")
+    actions = ("repair_hindi_encoding", "post_selected_to_facebook", "clear_facebook_post_tracking")
     fieldsets = (
         ("Article", {"fields": ("title", "slug", "category", "state", "city", "author", "summary", "content", "featured_image", "image_alt_text")}),
         ("Publishing", {"fields": ("status", "is_featured", "published_at", "source_name", "source_url")}),
@@ -140,6 +140,11 @@ class ArticleAdmin(admin.ModelAdmin):
             else:
                 failed += 1
         self.message_user(request, f"Facebook posting complete. Posted: {posted}, skipped: {skipped}, failed: {failed}", messages.INFO)
+
+    @admin.action(description="Clear Facebook post tracking for selected articles")
+    def clear_facebook_post_tracking(self, request, queryset):
+        updated = queryset.update(facebook_post_id="", facebook_posted_at=None, facebook_post_error="")
+        self.message_user(request, f"Facebook tracking cleared for {updated} article(s).", messages.INFO)
 
 
 @admin.register(NewsSource)
