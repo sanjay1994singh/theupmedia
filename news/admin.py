@@ -89,6 +89,8 @@ class ArticleAdmin(admin.ModelAdmin):
             old_status = Article.objects.filter(pk=obj.pk).values_list("status", flat=True).first()
         if not obj.author_id:
             obj.author = request.user
+        if obj.status == Article.Status.PUBLISHED and old_status != Article.Status.PUBLISHED:
+            obj.published_at = timezone.now()
         super().save_model(request, obj, form, change)
         became_published = obj.status == Article.Status.PUBLISHED and old_status != Article.Status.PUBLISHED
         if became_published:
@@ -127,6 +129,9 @@ class ArticleAdmin(admin.ModelAdmin):
             if article.status != Article.Status.PUBLISHED:
                 skipped += 1
                 continue
+            if article.published_at > timezone.now():
+                article.published_at = timezone.now()
+                article.save(update_fields=["published_at", "updated_at"])
             result = notify_facebook_page(article)
             if result.get("sent"):
                 posted += 1

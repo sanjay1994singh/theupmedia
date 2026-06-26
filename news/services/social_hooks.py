@@ -17,6 +17,10 @@ def absolute_article_url(article):
     return f"{settings.SITE_DOMAIN}{article.get_absolute_url()}"
 
 
+def is_public_article(article):
+    return article.status == article.Status.PUBLISHED and article.published_at <= timezone.now()
+
+
 def _post_json(url, payload, headers=None):
     request = Request(
         url,
@@ -50,6 +54,8 @@ def notify_telegram(article):
 def notify_facebook_page(article):
     if article.facebook_post_id:
         return {"provider": "facebook_page", "sent": False, "skipped": True, "reason": "already posted"}
+    if not is_public_article(article):
+        return {"provider": "facebook_page", "sent": False, "reason": "article is not public yet"}
 
     page_id = os.getenv("FACEBOOK_PAGE_ID", "")
     token = os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN", "")
