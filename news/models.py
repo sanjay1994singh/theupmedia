@@ -12,7 +12,7 @@ from .slug_utils import is_bad_article_slug, unique_article_slug
 
 class PublishedManager(models.Manager):
     def get_queryset(self):
-        return super().get_queryset().filter(status=Article.Status.PUBLISHED, published_at__lte=timezone.now())
+        return super().get_queryset().filter(status=Article.Status.PUBLISHED)
 
 
 class Category(models.Model):

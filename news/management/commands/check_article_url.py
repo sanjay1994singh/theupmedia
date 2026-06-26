@@ -30,6 +30,7 @@ class Command(BaseCommand):
         self.stdout.write(f"Published at: {article.published_at}")
         self.stdout.write(f"Now: {timezone.now()}")
         self.stdout.write(f"Public URL: {url}")
+        self.stdout.write(f"Public manager can find it: {Article.published.filter(pk=article.pk).exists()}")
 
         request = Request(url, headers={"User-Agent": "facebookexternalhit/1.1"})
         try:

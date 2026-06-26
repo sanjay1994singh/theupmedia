@@ -18,7 +18,7 @@ def absolute_article_url(article):
 
 
 def is_public_article(article):
-    return article.status == article.Status.PUBLISHED and article.published_at <= timezone.now()
+    return article.status == article.Status.PUBLISHED
 
 
 def _post_json(url, payload, headers=None):
