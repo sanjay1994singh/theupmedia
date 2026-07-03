@@ -1,8 +1,13 @@
+import os
+import shutil
+import subprocess
 from pathlib import Path
+from uuid import uuid4
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate
+from django.core.files import File
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -12,7 +17,7 @@ from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_POST
 
 from .forms import LiveTVChannelForm
-from .models import LiveTVChannel, MobileAdminToken, MobileVideoUpload
+from .models import LiveTVChannel, MobileAdminToken, MobileVideoUpload, SocialRenderedVideo
 from news.models import Article
 
 
@@ -75,13 +80,44 @@ def serialize_channel_for_mobile(request, channel):
         "ticker": ticker_items(channel),
         "player_type": player_type,
         "stream_url": stream_url,
+        "youtube_url": channel.youtube_url,
         "youtube_embed_url": youtube_embed_url,
         "poster_image": absolute_media_url(request, channel.poster_image),
         "channel_logo": absolute_media_url(request, channel.channel_logo),
         "is_live": channel.is_live,
         "autoplay": channel.autoplay,
         "web_url": request.build_absolute_uri(channel.get_absolute_url()),
+        "ads": mobile_live_tv_ads(),
     }
+
+
+def mobile_live_tv_ads():
+    return [
+        {
+            "label": "The Up Media Services",
+            "title": "Apna news portal banvaye",
+            "text": "News website, admin panel, SEO, ads section aur deployment support.",
+            "contact": "8279408396 | WhatsApp: 6397712918",
+            "cta": "Call Now",
+            "style": "services",
+        },
+        {
+            "label": "The Up Media Academy",
+            "title": "Learn Python and Web Development with Gen AI",
+            "text": "Practical web development course for students and creators.",
+            "contact": "8279408396 | WhatsApp: 6397712918",
+            "cta": "Join Now",
+            "style": "learning",
+        },
+        {
+            "label": "Property Promotion",
+            "title": "Plot, property aur local business promotion",
+            "text": "The Up Media par local advertisement aur promotion.",
+            "contact": "8279408396 | WhatsApp: 6397712918",
+            "cta": "Advertise",
+            "style": "property",
+        },
+    ]
 
 
 def mobile_api_authorized(request):
@@ -140,6 +176,98 @@ def serialize_channel_for_admin(request, channel):
         }
     )
     return data
+
+
+def ffmpeg_binary():
+    return getattr(settings, "FFMPEG_BINARY", "ffmpeg")
+
+
+def ffmpeg_escape(text):
+    return (text or "").replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+
+
+def ffmpeg_font_file():
+    candidates = [
+        getattr(settings, "FFMPEG_FONT_FILE", ""),
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "C:/Windows/Fonts/arialbd.ttf",
+        "C:/Windows/Fonts/arial.ttf",
+    ]
+    for candidate in candidates:
+        if candidate and Path(candidate).exists():
+            return str(candidate).replace("\\", "/").replace(":", "\\:")
+    return ""
+
+
+def render_social_video_file(job):
+    if not shutil.which(ffmpeg_binary()):
+        raise RuntimeError("FFmpeg is not installed on server.")
+
+    output_dir = Path(settings.MEDIA_ROOT) / "social-render" / "rendered"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"live-tv-render-{job.pk}-{uuid4().hex[:8]}.mp4"
+    font = ffmpeg_font_file()
+    font_arg = f":fontfile='{font}'" if font else ""
+
+    headline = ffmpeg_escape(job.headline or job.title)
+    title = ffmpeg_escape(job.title)
+    label = ffmpeg_escape(job.lower_third_label or "BREAKING NEWS")
+    ticker = ffmpeg_escape(job.ticker_text or "The Up Media")
+
+    filter_complex = (
+        "[0:v]scale=1080:607:force_original_aspect_ratio=increase,crop=1080:607,setsar=1[main];"
+        "color=c=#08111f:s=1080x1920:d=999[bg];"
+        "[bg][main]overlay=0:0[v0];"
+        "[v0]drawbox=x=0:y=607:w=1080:h=72:color=white@0.94:t=fill,"
+        "drawbox=x=0:y=607:w=220:h=72:color=#d71920@1:t=fill,"
+        f"drawtext=text='{label}'{font_arg}:x=28:y=632:fontsize=32:fontcolor=white,"
+        f"drawtext=text='{headline}'{font_arg}:x=248:y=628:fontsize=34:fontcolor=#111827,"
+        "drawbox=x=0:y=679:w=1080:h=54:color=#f8d24c@1:t=fill,"
+        f"drawtext=text='{ticker}'{font_arg}:x=28:y=694:fontsize=26:fontcolor=#111827,"
+        "drawbox=x=0:y=733:w=1080:h=360:color=#08111f@1:t=fill,"
+        f"drawtext=text='{title}'{font_arg}:x=38:y=780:fontsize=46:fontcolor=white:box=1:boxcolor=#08111f@0.4,"
+        "drawbox=x=38:y=930:w=1004:h=128:color=#13223a@1:t=fill,"
+        "drawbox=x=38:y=930:w=1004:h=128:color=#28415f@1:t=2,"
+        "drawtext=text='THE UP MEDIA LIVE TV FRAME':x=64:y=968:fontsize=34:fontcolor=#f8d24c,"
+        "drawtext=text='Ready for social media sharing':x=64:y=1010:fontsize=26:fontcolor=white,"
+        "format=yuv420p[vout]"
+    )
+
+    command = [
+        ffmpeg_binary(),
+        "-y",
+        "-i",
+        job.original_video.path,
+        "-filter_complex",
+        filter_complex,
+        "-map",
+        "[vout]",
+        "-map",
+        "0:a?",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-c:a",
+        "aac",
+        "-shortest",
+        "-movflags",
+        "+faststart",
+        str(output_path),
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=900)
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or "FFmpeg render failed.")[-1200:])
+
+    with output_path.open("rb") as rendered_file:
+        job.rendered_video.save(output_path.name, File(rendered_file), save=False)
+    job.status = SocialRenderedVideo.Status.DONE
+    job.error_message = ""
+    job.save(update_fields=["rendered_video", "status", "error_message", "updated_at"])
+    return job
 
 
 def superuser_required(view_func):
@@ -321,6 +449,52 @@ def mobile_admin_channel_delete_api(request, pk):
     channel = get_object_or_404(LiveTVChannel, pk=pk)
     channel.delete()
     return JsonResponse({"ok": True})
+
+
+@csrf_exempt
+@require_POST
+def mobile_admin_render_social_video_api(request):
+    user, error = mobile_admin_required(request)
+    if error:
+        return error
+
+    video = request.FILES.get("video")
+    if not video:
+        return JsonResponse({"detail": "Video file is required."}, status=400)
+
+    active_channel = LiveTVChannel.objects.filter(is_active=True, is_live=True).first() or LiveTVChannel.objects.filter(is_active=True).first()
+    title = request.POST.get("title", "").strip() or (active_channel.title if active_channel else Path(video.name).stem)
+    headline = request.POST.get("headline", "").strip() or (active_channel.headline if active_channel else title)
+    ticker_text = request.POST.get("ticker_text", "").strip() or (active_channel.ticker_text if active_channel else "The Up Media")
+    lower_third_label = request.POST.get("lower_third_label", "").strip() or (active_channel.lower_third_label if active_channel else "BREAKING NEWS")
+
+    job = SocialRenderedVideo.objects.create(
+        title=title[:180],
+        headline=headline[:180],
+        ticker_text=ticker_text[:260],
+        lower_third_label=lower_third_label[:60],
+        original_video=video,
+        created_by=user,
+    )
+
+    try:
+        render_social_video_file(job)
+    except Exception as exc:
+        job.status = SocialRenderedVideo.Status.FAILED
+        job.error_message = str(exc)
+        job.save(update_fields=["status", "error_message", "updated_at"])
+        return JsonResponse({"detail": "Video render failed.", "error": job.error_message}, status=500)
+
+    return JsonResponse(
+        {
+            "id": job.pk,
+            "status": job.status,
+            "title": job.title,
+            "rendered_video_url": request.build_absolute_uri(job.rendered_video.url),
+            "original_video_url": request.build_absolute_uri(job.original_video.url),
+        },
+        status=201,
+    )
 
 
 @superuser_required

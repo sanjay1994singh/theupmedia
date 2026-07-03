@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import LiveTVChannel, MobileAdminToken, MobileVideoUpload
+from .models import LiveTVChannel, MobileAdminToken, MobileVideoUpload, SocialRenderedVideo
 
 
 @admin.register(LiveTVChannel)
@@ -37,3 +37,11 @@ class MobileAdminTokenAdmin(admin.ModelAdmin):
     list_filter = ("created_at", "last_used_at")
     search_fields = ("user__username", "user__email", "device_name")
     readonly_fields = ("key", "created_at", "last_used_at")
+
+
+@admin.register(SocialRenderedVideo)
+class SocialRenderedVideoAdmin(admin.ModelAdmin):
+    list_display = ("title", "status", "created_by", "created_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("title", "headline", "ticker_text")
+    readonly_fields = ("created_at", "updated_at", "error_message")

@@ -210,3 +210,28 @@ class MobileAdminToken(models.Model):
             key=secrets.token_urlsafe(40),
             device_name=device_name[:160],
         )
+
+
+class SocialRenderedVideo(models.Model):
+    class Status(models.TextChoices):
+        PROCESSING = "processing", "Processing"
+        DONE = "done", "Done"
+        FAILED = "failed", "Failed"
+
+    title = models.CharField(max_length=180)
+    headline = models.CharField(max_length=180, blank=True)
+    ticker_text = models.CharField(max_length=260, blank=True)
+    lower_third_label = models.CharField(max_length=60, default="BREAKING NEWS")
+    original_video = models.FileField(upload_to="social-render/original/%Y/%m/")
+    rendered_video = models.FileField(upload_to="social-render/rendered/%Y/%m/", blank=True, null=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PROCESSING)
+    error_message = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, blank=True, null=True, related_name="social_rendered_videos")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.title

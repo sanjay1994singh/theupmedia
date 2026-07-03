@@ -12,6 +12,7 @@ urlpatterns = [
     path("api/live-tv/admin/dashboard/", views.mobile_admin_dashboard_api, name="api_admin_dashboard"),
     path("api/live-tv/admin/channels/save/", views.mobile_admin_channel_save_api, name="api_admin_channel_save"),
     path("api/live-tv/admin/channels/<int:pk>/delete/", views.mobile_admin_channel_delete_api, name="api_admin_channel_delete"),
+    path("api/live-tv/admin/render-social-video/", views.mobile_admin_render_social_video_api, name="api_admin_render_social_video"),
     path("live-tv/dashboard/", views.dashboard, name="dashboard"),
     path("live-tv/dashboard/<int:pk>/delete/", views.delete_channel, name="delete_channel"),
     path("live-tv/", views.live_tv_home, name="home"),
