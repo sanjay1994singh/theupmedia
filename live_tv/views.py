@@ -98,6 +98,8 @@ def mobile_admin_user(request):
     auth_header = request.headers.get("Authorization", "")
     key = auth_header.removeprefix("Token ").removeprefix("Bearer ").strip()
     if not key:
+        key = request.headers.get("X-Mobile-Admin-Token", "").strip()
+    if not key:
         return None
     token = MobileAdminToken.objects.select_related("user").filter(key=key).first()
     if not token or not token.user.is_active or not token.user.is_superuser:
