@@ -238,6 +238,7 @@ CKEDITOR_5_CONFIGS = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@theupmedia.com")
+MOBILE_UPLOAD_API_KEY = os.getenv("MOBILE_UPLOAD_API_KEY", "")
 
 SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = "DENY"

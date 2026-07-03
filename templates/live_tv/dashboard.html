@@ -183,6 +183,38 @@
         {% endfor %}
       </div>
     </section>
+
+    <section class="tv-management">
+      <div class="section-heading compact">
+        <h2>Mobile Uploads</h2>
+      </div>
+      <div class="tv-table">
+        <div class="tv-table-row tv-table-head">
+          <span>#</span>
+          <span>Title</span>
+          <span>Status</span>
+          <span>Uploader</span>
+          <span>Video</span>
+        </div>
+        {% for upload in mobile_uploads %}
+          <div class="tv-table-row">
+            <span>{{ forloop.counter }}</span>
+            <span>
+              <strong>{{ upload.title }}</strong>
+              <small>{{ upload.created_at|date:"M d, Y H:i" }}</small>
+            </span>
+            <span><em class="status-on">{{ upload.get_status_display }}</em></span>
+            <span>{{ upload.uploaded_by_name|default:"Mobile App" }}</span>
+            <span class="tv-row-actions">
+              <a href="{{ upload.video.url }}" target="_blank" rel="noopener">Open</a>
+              <a href="{% url 'admin:live_tv_mobilevideoupload_change' upload.pk %}">Review</a>
+            </span>
+          </div>
+        {% empty %}
+          <p>No mobile uploads yet.</p>
+        {% endfor %}
+      </div>
+    </section>
   </div>
 </section>
 {% endblock %}

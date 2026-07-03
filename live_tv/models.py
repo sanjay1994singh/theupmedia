@@ -1,4 +1,5 @@
 from pathlib import Path
+import secrets
 from urllib.parse import parse_qs, urlencode, urlparse
 
 from django.conf import settings
@@ -160,3 +161,52 @@ class LiveTVChannel(models.Model):
         if self.autoplay:
             params.update({"autoplay": "1", "mute": "1"})
         return f"https://www.youtube-nocookie.com/embed/{video_id}?{urlencode(params)}"
+
+
+class MobileVideoUpload(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        REVIEWED = "reviewed", "Reviewed"
+        PUBLISHED = "published", "Published"
+        REJECTED = "rejected", "Rejected"
+
+    title = models.CharField(max_length=180)
+    description = models.TextField(blank=True)
+    video = models.FileField(upload_to="mobile-video-uploads/%Y/%m/")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    uploaded_by_name = models.CharField(max_length=120, blank=True)
+    uploaded_by_phone = models.CharField(max_length=30, blank=True)
+    device_info = models.CharField(max_length=220, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "-created_at"], name="mobile_video_status_idx"),
+        ]
+
+    def __str__(self):
+        return self.title
+
+
+class MobileAdminToken(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="live_tv_mobile_tokens")
+    key = models.CharField(max_length=64, unique=True, db_index=True)
+    device_name = models.CharField(max_length=160, blank=True)
+    last_used_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user} mobile admin token"
+
+    @classmethod
+    def create_for_user(cls, user, device_name=""):
+        return cls.objects.create(
+            user=user,
+            key=secrets.token_urlsafe(40),
+            device_name=device_name[:160],
+        )

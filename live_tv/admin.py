@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import LiveTVChannel
+from .models import LiveTVChannel, MobileAdminToken, MobileVideoUpload
 
 
 @admin.register(LiveTVChannel)
@@ -16,3 +16,24 @@ class LiveTVChannelAdmin(admin.ModelAdmin):
         ("Graphics Overlay", {"fields": ("channel_logo", "show_channel_logo", "show_lower_third", "lower_third_label", "headline", "show_ticker", "ticker_label", "ticker_text")}),
         ("SEO", {"fields": ("meta_title", "meta_description")}),
     )
+
+
+@admin.register(MobileVideoUpload)
+class MobileVideoUploadAdmin(admin.ModelAdmin):
+    list_display = ("title", "status", "uploaded_by_name", "uploaded_by_phone", "created_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("title", "description", "uploaded_by_name", "uploaded_by_phone")
+    readonly_fields = ("created_at", "updated_at")
+    fieldsets = (
+        ("Video", {"fields": ("title", "description", "video", "status")}),
+        ("Uploader", {"fields": ("uploaded_by_name", "uploaded_by_phone", "device_info")}),
+        ("Dates", {"fields": ("created_at", "updated_at")}),
+    )
+
+
+@admin.register(MobileAdminToken)
+class MobileAdminTokenAdmin(admin.ModelAdmin):
+    list_display = ("user", "device_name", "created_at", "last_used_at")
+    list_filter = ("created_at", "last_used_at")
+    search_fields = ("user__username", "user__email", "device_name")
+    readonly_fields = ("key", "created_at", "last_used_at")
