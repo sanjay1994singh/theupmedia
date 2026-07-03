@@ -280,7 +280,8 @@ def render_social_video_file(job):
     text_files = []
     label_file = ffmpeg_text_file(job.lower_third_label or "BREAKING NEWS", "label")
     headline_file = ffmpeg_text_file(job.headline or job.title, "headline")
-    ticker_file = ffmpeg_text_file(job.ticker_text or "The Up Media", "ticker")
+    ticker_text = job.ticker_text or "The Up Media"
+    ticker_file = ffmpeg_text_file("    |    ".join([ticker_text] * 3), "ticker")
     title_file = ffmpeg_text_file(job.title, "title")
     text_files.extend([label_file, headline_file, ticker_file, title_file])
 
@@ -295,7 +296,7 @@ def render_social_video_file(job):
                 f"drawtext=textfile='{ffmpeg_path(label_file)}'{font_arg}:x=28:y=632:fontsize=32:fontcolor=white,"
                 f"drawtext=textfile='{ffmpeg_path(headline_file)}'{font_arg}:x=248:y=628:fontsize=34:fontcolor=#111827,"
                 "drawbox=x=0:y=679:w=1080:h=54:color=#f8d24c@1:t=fill,"
-                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{font_arg}:x=28:y=694:fontsize=26:fontcolor=#111827,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{font_arg}:x=w-mod(t*135\\,w+tw):y=694:fontsize=26:fontcolor=#111827,"
                 "drawbox=x=0:y=733:w=1080:h=360:color=#08111f@1:t=fill,"
                 f"drawtext=textfile='{ffmpeg_path(title_file)}'{font_arg}:x=38:y=780:fontsize=46:fontcolor=white:box=1:boxcolor=#08111f@0.4,"
                 "drawbox=x=38:y=930:w=1004:h=128:color=#13223a@1:t=fill,"
@@ -312,7 +313,7 @@ def render_social_video_file(job):
                 f"drawtext=textfile='{ffmpeg_path(label_file)}'{font_arg}:x=34:y=872:fontsize=42:fontcolor=white,"
                 f"drawtext=textfile='{ffmpeg_path(headline_file)}'{font_arg}:x=390:y=866:fontsize=46:fontcolor=#111827,"
                 "drawbox=x=0:y=928:w=1920:h=58:color=#f8d24c@1:t=fill,"
-                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{font_arg}:x=34:y=944:fontsize=30:fontcolor=#111827,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{font_arg}:x=w-mod(t*220\\,w+tw):y=944:fontsize=30:fontcolor=#111827,"
                 "drawbox=x=0:y=986:w=1920:h=94:color=#08111f@0.96:t=fill,"
                 f"drawtext=textfile='{ffmpeg_path(title_file)}'{font_arg}:x=42:y=1014:fontsize=44:fontcolor=white,"
                 "drawbox=x=1510:y=38:w=230:h=116:color=white@0.96:t=fill,"
