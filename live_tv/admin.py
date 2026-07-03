@@ -41,7 +41,7 @@ class MobileAdminTokenAdmin(admin.ModelAdmin):
 
 @admin.register(SocialRenderedVideo)
 class SocialRenderedVideoAdmin(admin.ModelAdmin):
-    list_display = ("title", "status", "created_by", "created_at")
+    list_display = ("title", "status", "progress_percent", "created_by", "created_at")
     list_filter = ("status", "created_at")
     search_fields = ("title", "headline", "ticker_text")
-    readonly_fields = ("created_at", "updated_at", "error_message")
+    readonly_fields = ("progress_percent", "created_at", "updated_at", "error_message")

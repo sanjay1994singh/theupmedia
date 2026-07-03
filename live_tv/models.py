@@ -225,6 +225,7 @@ class SocialRenderedVideo(models.Model):
     original_video = models.FileField(upload_to="social-render/original/%Y/%m/")
     rendered_video = models.FileField(upload_to="social-render/rendered/%Y/%m/", blank=True, null=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PROCESSING)
+    progress_percent = models.PositiveSmallIntegerField(default=0)
     error_message = models.TextField(blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, blank=True, null=True, related_name="social_rendered_videos")
     created_at = models.DateTimeField(auto_now_add=True)

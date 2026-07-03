@@ -1,6 +1,8 @@
 import os
+import re
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 from uuid import uuid4
 
@@ -8,6 +10,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate
 from django.core.files import File
+from django.db import close_old_connections
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -183,7 +186,20 @@ def ffmpeg_binary():
 
 
 def ffmpeg_escape(text):
-    return (text or "").replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+    safe_text = " ".join((text or "").split())
+    replacements = {
+        "\\": "\\\\",
+        "'": "\\'",
+        ":": "\\:",
+        ",": "\\,",
+        ";": "\\;",
+        "[": "\\[",
+        "]": "\\]",
+        "%": "\\%",
+    }
+    for raw, escaped in replacements.items():
+        safe_text = safe_text.replace(raw, escaped)
+    return safe_text
 
 
 def ffmpeg_font_file():
@@ -198,6 +214,37 @@ def ffmpeg_font_file():
         if candidate and Path(candidate).exists():
             return str(candidate).replace("\\", "/").replace(":", "\\:")
     return ""
+
+
+def video_duration_seconds(video_path):
+    command = [
+        ffmpeg_binary().replace("ffmpeg", "ffprobe"),
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        video_path,
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+    try:
+        return max(float(result.stdout.strip()), 1.0)
+    except (TypeError, ValueError):
+        return 1.0
+
+
+def parse_ffmpeg_time(line):
+    match = re.search(r"time=(\d+):(\d+):(\d+(?:\.\d+)?)", line)
+    if not match:
+        return None
+    hours, minutes, seconds = match.groups()
+    return (int(hours) * 3600) + (int(minutes) * 60) + float(seconds)
+
+
+def update_render_progress(job_id, percent):
+    percent = max(0, min(99, int(percent)))
+    SocialRenderedVideo.objects.filter(pk=job_id).update(progress_percent=percent)
 
 
 def render_social_video_file(job):
@@ -258,16 +305,55 @@ def render_social_video_file(job):
         "+faststart",
         str(output_path),
     ]
-    result = subprocess.run(command, capture_output=True, text=True, timeout=900)
-    if result.returncode != 0:
-        raise RuntimeError((result.stderr or "FFmpeg render failed.")[-1200:])
+    duration = video_duration_seconds(job.original_video.path)
+    process = subprocess.Popen(command, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    stderr_tail = []
+    for line in process.stderr:
+        stderr_tail.append(line)
+        stderr_tail = stderr_tail[-30:]
+        current_time = parse_ffmpeg_time(line)
+        if current_time is not None:
+            update_render_progress(job.pk, min(99, (current_time / duration) * 100))
+
+    process.wait(timeout=900)
+    if process.returncode != 0:
+        raise RuntimeError(("".join(stderr_tail) or "FFmpeg render failed.")[-1200:])
 
     with output_path.open("rb") as rendered_file:
         job.rendered_video.save(output_path.name, File(rendered_file), save=False)
     job.status = SocialRenderedVideo.Status.DONE
+    job.progress_percent = 100
     job.error_message = ""
-    job.save(update_fields=["rendered_video", "status", "error_message", "updated_at"])
+    job.save(update_fields=["rendered_video", "status", "progress_percent", "error_message", "updated_at"])
     return job
+
+
+def run_social_render_job(job_id):
+    close_old_connections()
+    job = SocialRenderedVideo.objects.get(pk=job_id)
+    try:
+        update_render_progress(job.pk, 1)
+        render_social_video_file(job)
+    except Exception as exc:
+        SocialRenderedVideo.objects.filter(pk=job_id).update(
+            status=SocialRenderedVideo.Status.FAILED,
+            error_message=str(exc),
+            progress_percent=0,
+        )
+    finally:
+        close_old_connections()
+
+
+def serialize_render_job(request, job):
+    rendered_url = request.build_absolute_uri(job.rendered_video.url) if job.rendered_video else ""
+    return {
+        "id": job.pk,
+        "status": job.status,
+        "progress_percent": job.progress_percent,
+        "title": job.title,
+        "rendered_video_url": rendered_url,
+        "error": job.error_message,
+    }
 
 
 def superuser_required(view_func):
@@ -477,24 +563,28 @@ def mobile_admin_render_social_video_api(request):
         created_by=user,
     )
 
-    try:
-        render_social_video_file(job)
-    except Exception as exc:
-        job.status = SocialRenderedVideo.Status.FAILED
-        job.error_message = str(exc)
-        job.save(update_fields=["status", "error_message", "updated_at"])
-        return JsonResponse({"detail": "Video render failed.", "error": job.error_message}, status=500)
+    threading.Thread(target=run_social_render_job, args=(job.pk,), daemon=True).start()
 
     return JsonResponse(
         {
             "id": job.pk,
             "status": job.status,
+            "progress_percent": job.progress_percent,
             "title": job.title,
-            "rendered_video_url": request.build_absolute_uri(job.rendered_video.url),
             "original_video_url": request.build_absolute_uri(job.original_video.url),
         },
-        status=201,
+        status=202,
     )
+
+
+@require_GET
+def mobile_admin_render_social_video_status_api(request, pk):
+    _user, error = mobile_admin_required(request)
+    if error:
+        return error
+
+    job = get_object_or_404(SocialRenderedVideo, pk=pk)
+    return JsonResponse(serialize_render_job(request, job))
 
 
 @superuser_required
