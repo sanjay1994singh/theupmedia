@@ -3,6 +3,7 @@ import re
 import shutil
 import subprocess
 import threading
+import tempfile
 from pathlib import Path
 from uuid import uuid4
 
@@ -202,6 +203,19 @@ def ffmpeg_escape(text):
     return safe_text
 
 
+def ffmpeg_text_file(text, prefix):
+    safe_text = " ".join((text or "").split())
+    text_dir = Path(tempfile.gettempdir()) / "theupmedia-render-text"
+    text_dir.mkdir(parents=True, exist_ok=True)
+    text_path = text_dir / f"{prefix}-{uuid4().hex}.txt"
+    text_path.write_text(safe_text, encoding="utf-8")
+    return text_path
+
+
+def ffmpeg_path(path):
+    return str(path).replace("\\", "/").replace(":", "\\:")
+
+
 def ffmpeg_font_file():
     candidates = [
         getattr(settings, "FFMPEG_FONT_FILE", ""),
@@ -257,75 +271,81 @@ def render_social_video_file(job):
     font = ffmpeg_font_file()
     font_arg = f":fontfile='{font}'" if font else ""
 
-    headline = ffmpeg_escape(job.headline or job.title)
-    title = ffmpeg_escape(job.title)
-    label = ffmpeg_escape(job.lower_third_label or "BREAKING NEWS")
-    ticker = ffmpeg_escape(job.ticker_text or "The Up Media")
+    text_files = []
+    label_file = ffmpeg_text_file(job.lower_third_label or "BREAKING NEWS", "label")
+    headline_file = ffmpeg_text_file(job.headline or job.title, "headline")
+    ticker_file = ffmpeg_text_file(job.ticker_text or "The Up Media", "ticker")
+    title_file = ffmpeg_text_file(job.title, "title")
+    text_files.extend([label_file, headline_file, ticker_file, title_file])
 
-    filter_complex = (
-        "[0:v]scale=1080:607:force_original_aspect_ratio=increase,crop=1080:607,setsar=1[main];"
-        "color=c=#08111f:s=1080x1920:d=999[bg];"
-        "[bg][main]overlay=0:0[v0];"
-        "[v0]drawbox=x=0:y=607:w=1080:h=72:color=white@0.94:t=fill,"
-        "drawbox=x=0:y=607:w=220:h=72:color=#d71920@1:t=fill,"
-        f"drawtext=text='{label}'{font_arg}:x=28:y=632:fontsize=32:fontcolor=white,"
-        f"drawtext=text='{headline}'{font_arg}:x=248:y=628:fontsize=34:fontcolor=#111827,"
-        "drawbox=x=0:y=679:w=1080:h=54:color=#f8d24c@1:t=fill,"
-        f"drawtext=text='{ticker}'{font_arg}:x=28:y=694:fontsize=26:fontcolor=#111827,"
-        "drawbox=x=0:y=733:w=1080:h=360:color=#08111f@1:t=fill,"
-        f"drawtext=text='{title}'{font_arg}:x=38:y=780:fontsize=46:fontcolor=white:box=1:boxcolor=#08111f@0.4,"
-        "drawbox=x=38:y=930:w=1004:h=128:color=#13223a@1:t=fill,"
-        "drawbox=x=38:y=930:w=1004:h=128:color=#28415f@1:t=2,"
-        "drawtext=text='THE UP MEDIA LIVE TV FRAME':x=64:y=968:fontsize=34:fontcolor=#f8d24c,"
-        "drawtext=text='Ready for social media sharing':x=64:y=1010:fontsize=26:fontcolor=white,"
-        "format=yuv420p[vout]"
-    )
+    try:
+        filter_complex = (
+            "[0:v]scale=1080:607:force_original_aspect_ratio=increase,crop=1080:607,setsar=1[main];"
+            "color=c=#08111f:s=1080x1920:d=999[bg];"
+            "[bg][main]overlay=0:0[v0];"
+            "[v0]drawbox=x=0:y=607:w=1080:h=72:color=white@0.94:t=fill,"
+            "drawbox=x=0:y=607:w=220:h=72:color=#d71920@1:t=fill,"
+            f"drawtext=textfile='{ffmpeg_path(label_file)}'{font_arg}:x=28:y=632:fontsize=32:fontcolor=white,"
+            f"drawtext=textfile='{ffmpeg_path(headline_file)}'{font_arg}:x=248:y=628:fontsize=34:fontcolor=#111827,"
+            "drawbox=x=0:y=679:w=1080:h=54:color=#f8d24c@1:t=fill,"
+            f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{font_arg}:x=28:y=694:fontsize=26:fontcolor=#111827,"
+            "drawbox=x=0:y=733:w=1080:h=360:color=#08111f@1:t=fill,"
+            f"drawtext=textfile='{ffmpeg_path(title_file)}'{font_arg}:x=38:y=780:fontsize=46:fontcolor=white:box=1:boxcolor=#08111f@0.4,"
+            "drawbox=x=38:y=930:w=1004:h=128:color=#13223a@1:t=fill,"
+            "drawbox=x=38:y=930:w=1004:h=128:color=#28415f@1:t=2,"
+            "drawtext=text='THE UP MEDIA LIVE TV FRAME':x=64:y=968:fontsize=34:fontcolor=#f8d24c,"
+            "drawtext=text='Ready for social media sharing':x=64:y=1010:fontsize=26:fontcolor=white,"
+            "format=yuv420p[vout]"
+        )
 
-    command = [
-        ffmpeg_binary(),
-        "-y",
-        "-i",
-        job.original_video.path,
-        "-filter_complex",
-        filter_complex,
-        "-map",
-        "[vout]",
-        "-map",
-        "0:a?",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        "23",
-        "-c:a",
-        "aac",
-        "-shortest",
-        "-movflags",
-        "+faststart",
-        str(output_path),
-    ]
-    duration = video_duration_seconds(job.original_video.path)
-    process = subprocess.Popen(command, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
-    stderr_tail = []
-    for line in process.stderr:
-        stderr_tail.append(line)
-        stderr_tail = stderr_tail[-30:]
-        current_time = parse_ffmpeg_time(line)
-        if current_time is not None:
-            update_render_progress(job.pk, min(99, (current_time / duration) * 100))
+        command = [
+            ffmpeg_binary(),
+            "-y",
+            "-i",
+            job.original_video.path,
+            "-filter_complex",
+            filter_complex,
+            "-map",
+            "[vout]",
+            "-map",
+            "0:a?",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-c:a",
+            "aac",
+            "-shortest",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
+        duration = video_duration_seconds(job.original_video.path)
+        process = subprocess.Popen(command, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        stderr_tail = []
+        for line in process.stderr:
+            stderr_tail.append(line)
+            stderr_tail = stderr_tail[-30:]
+            current_time = parse_ffmpeg_time(line)
+            if current_time is not None:
+                update_render_progress(job.pk, min(99, (current_time / duration) * 100))
 
-    process.wait(timeout=900)
-    if process.returncode != 0:
-        raise RuntimeError(("".join(stderr_tail) or "FFmpeg render failed.")[-1200:])
+        process.wait(timeout=900)
+        if process.returncode != 0:
+            raise RuntimeError(("".join(stderr_tail) or "FFmpeg render failed.")[-1200:])
 
-    with output_path.open("rb") as rendered_file:
-        job.rendered_video.save(output_path.name, File(rendered_file), save=False)
-    job.status = SocialRenderedVideo.Status.DONE
-    job.progress_percent = 100
-    job.error_message = ""
-    job.save(update_fields=["rendered_video", "status", "progress_percent", "error_message", "updated_at"])
-    return job
+        with output_path.open("rb") as rendered_file:
+            job.rendered_video.save(output_path.name, File(rendered_file), save=False)
+        job.status = SocialRenderedVideo.Status.DONE
+        job.progress_percent = 100
+        job.error_message = ""
+        job.save(update_fields=["rendered_video", "status", "progress_percent", "error_message", "updated_at"])
+        return job
+    finally:
+        for text_file in text_files:
+            text_file.unlink(missing_ok=True)
 
 
 def run_social_render_job(job_id):
