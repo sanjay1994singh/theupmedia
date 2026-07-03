@@ -219,6 +219,12 @@ def ffmpeg_path(path):
 def ffmpeg_font_file():
     candidates = [
         getattr(settings, "FFMPEG_FONT_FILE", ""),
+        "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansDevanagari-Bold.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansDevanagari-Regular.ttf",
+        "/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf",
+        "/usr/share/fonts/truetype/deva/lohit_hi.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "C:/Windows/Fonts/arialbd.ttf",
@@ -279,24 +285,44 @@ def render_social_video_file(job):
     text_files.extend([label_file, headline_file, ticker_file, title_file])
 
     try:
-        filter_complex = (
-            "[0:v]scale=1080:607:force_original_aspect_ratio=increase,crop=1080:607,setsar=1[main];"
-            "color=c=#08111f:s=1080x1920:d=999[bg];"
-            "[bg][main]overlay=0:0[v0];"
-            "[v0]drawbox=x=0:y=607:w=1080:h=72:color=white@0.94:t=fill,"
-            "drawbox=x=0:y=607:w=220:h=72:color=#d71920@1:t=fill,"
-            f"drawtext=textfile='{ffmpeg_path(label_file)}'{font_arg}:x=28:y=632:fontsize=32:fontcolor=white,"
-            f"drawtext=textfile='{ffmpeg_path(headline_file)}'{font_arg}:x=248:y=628:fontsize=34:fontcolor=#111827,"
-            "drawbox=x=0:y=679:w=1080:h=54:color=#f8d24c@1:t=fill,"
-            f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{font_arg}:x=28:y=694:fontsize=26:fontcolor=#111827,"
-            "drawbox=x=0:y=733:w=1080:h=360:color=#08111f@1:t=fill,"
-            f"drawtext=textfile='{ffmpeg_path(title_file)}'{font_arg}:x=38:y=780:fontsize=46:fontcolor=white:box=1:boxcolor=#08111f@0.4,"
-            "drawbox=x=38:y=930:w=1004:h=128:color=#13223a@1:t=fill,"
-            "drawbox=x=38:y=930:w=1004:h=128:color=#28415f@1:t=2,"
-            "drawtext=text='THE UP MEDIA LIVE TV FRAME':x=64:y=968:fontsize=34:fontcolor=#f8d24c,"
-            "drawtext=text='Ready for social media sharing':x=64:y=1010:fontsize=26:fontcolor=white,"
-            "format=yuv420p[vout]"
-        )
+        if job.render_format == "9:16":
+            filter_complex = (
+                "[0:v]scale=1080:607:force_original_aspect_ratio=increase,crop=1080:607,setsar=1[main];"
+                "color=c=#08111f:s=1080x1920:d=999[bg];"
+                "[bg][main]overlay=0:0[v0];"
+                "[v0]drawbox=x=0:y=607:w=1080:h=72:color=white@0.94:t=fill,"
+                "drawbox=x=0:y=607:w=220:h=72:color=#d71920@1:t=fill,"
+                f"drawtext=textfile='{ffmpeg_path(label_file)}'{font_arg}:x=28:y=632:fontsize=32:fontcolor=white,"
+                f"drawtext=textfile='{ffmpeg_path(headline_file)}'{font_arg}:x=248:y=628:fontsize=34:fontcolor=#111827,"
+                "drawbox=x=0:y=679:w=1080:h=54:color=#f8d24c@1:t=fill,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{font_arg}:x=28:y=694:fontsize=26:fontcolor=#111827,"
+                "drawbox=x=0:y=733:w=1080:h=360:color=#08111f@1:t=fill,"
+                f"drawtext=textfile='{ffmpeg_path(title_file)}'{font_arg}:x=38:y=780:fontsize=46:fontcolor=white:box=1:boxcolor=#08111f@0.4,"
+                "drawbox=x=38:y=930:w=1004:h=128:color=#13223a@1:t=fill,"
+                "drawbox=x=38:y=930:w=1004:h=128:color=#28415f@1:t=2,"
+                "drawtext=text='THE UP MEDIA LIVE TV FRAME':x=64:y=968:fontsize=34:fontcolor=#f8d24c,"
+                "drawtext=text='Ready for social media sharing':x=64:y=1010:fontsize=26:fontcolor=white,"
+                "format=yuv420p[vout]"
+            )
+        else:
+            filter_complex = (
+                "[0:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1[main];"
+                "[main]drawbox=x=0:y=842:w=1920:h=86:color=white@0.94:t=fill,"
+                "drawbox=x=0:y=842:w=360:h=86:color=#d71920@1:t=fill,"
+                f"drawtext=textfile='{ffmpeg_path(label_file)}'{font_arg}:x=34:y=872:fontsize=42:fontcolor=white,"
+                f"drawtext=textfile='{ffmpeg_path(headline_file)}'{font_arg}:x=390:y=866:fontsize=46:fontcolor=#111827,"
+                "drawbox=x=0:y=928:w=1920:h=58:color=#f8d24c@1:t=fill,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{font_arg}:x=34:y=944:fontsize=30:fontcolor=#111827,"
+                "drawbox=x=0:y=986:w=1920:h=94:color=#08111f@0.96:t=fill,"
+                f"drawtext=textfile='{ffmpeg_path(title_file)}'{font_arg}:x=42:y=1014:fontsize=44:fontcolor=white,"
+                "drawbox=x=1510:y=38:w=230:h=116:color=white@0.96:t=fill,"
+                "drawtext=text='THE UP':x=1540:y=60:fontsize=36:fontcolor=#d71920,"
+                "drawbox=x=1510:y=96:w=230:h=58:color=#08111f@1:t=fill,"
+                "drawtext=text='MEDIA':x=1558:y=108:fontsize=34:fontcolor=white,"
+                "drawbox=x=38:y=38:w=150:h=60:color=#d71920@1:t=fill,"
+                "drawtext=text='LIVE':x=76:y=52:fontsize=34:fontcolor=white,"
+                "format=yuv420p[vout]"
+            )
 
         command = [
             ffmpeg_binary(),
@@ -573,12 +599,16 @@ def mobile_admin_render_social_video_api(request):
     headline = request.POST.get("headline", "").strip() or (active_channel.headline if active_channel else title)
     ticker_text = request.POST.get("ticker_text", "").strip() or (active_channel.ticker_text if active_channel else "The Up Media")
     lower_third_label = request.POST.get("lower_third_label", "").strip() or (active_channel.lower_third_label if active_channel else "BREAKING NEWS")
+    render_format = request.POST.get("render_format", "16:9").strip()
+    if render_format not in {"16:9", "9:16"}:
+        render_format = "16:9"
 
     job = SocialRenderedVideo.objects.create(
         title=title[:180],
         headline=headline[:180],
         ticker_text=ticker_text[:260],
         lower_third_label=lower_third_label[:60],
+        render_format=render_format,
         original_video=video,
         created_by=user,
     )
