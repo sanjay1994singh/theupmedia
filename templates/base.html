@@ -43,6 +43,7 @@
             <div class="nav-dropdown-menu">
               <a href="{% url 'live_tv:home' %}">Watch Live</a>
               <a href="{% url 'live_tv:dashboard' %}">Dashboard</a>
+              <a href="{% url 'live_tv:media_downloads' %}">Downloads</a>
             </div>
           </details>
         {% else %}
@@ -50,6 +51,7 @@
         {% endif %}
         <a href="{% url 'blog:post_list' %}">Blog</a>
         <a href="{% url 'services:service_list' %}">Services</a>
+        {% if user.is_superuser %}<a href="{% url 'live_tv:media_downloads' %}">Downloads</a>{% endif %}
         {% for category in NAV_CATEGORIES %}
           <a href="{{ category.get_absolute_url }}">{{ category.name }}</a>
         {% endfor %}
@@ -87,6 +89,7 @@
       <a href="{% url 'live_tv:home' %}">Live TV</a>
       <a href="{% url 'blog:post_list' %}">Blog</a>
       <a href="{% url 'services:service_list' %}">Services</a>
+        {% if user.is_superuser %}<a href="{% url 'live_tv:media_downloads' %}">Downloads</a>{% endif %}
       <a href="{% url 'core:privacy_policy' %}">Privacy Policy</a>
       <a href="{% url 'core:terms' %}">Terms</a>
       <a href="{% url 'core:disclaimer' %}">Disclaimer</a>

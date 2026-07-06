@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Media Downloads - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}Admin media downloader for authorized direct video and audio file URLs.{% endblock %}
+
+{% block extra_head %}
+<style>
+  .download-page { background: #07111f; color: #fff; min-height: 70vh; padding: 32px 16px; }
+  .download-shell { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .download-hero { display: flex; align-items: center; justify-content: space-between; gap: 16px; background: #0d1b31; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 22px; }
+  .download-hero h1 { margin: 0 0 6px; font-size: clamp(26px, 4vw, 42px); }
+  .download-hero p, .download-note, .download-meta { color: #aebbd0; margin: 0; }
+  .download-form, .download-list { background: #0d1b31; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 20px; }
+  .download-form-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  .download-form label { color: #dce6f7; font-weight: 700; display: grid; gap: 8px; }
+  .download-form input { width: 100%; border: 1px solid #223554; border-radius: 8px; background: #07111f; color: #fff; padding: 13px 14px; font: inherit; box-sizing: border-box; }
+  .download-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+  .download-btn { border: 0; background: #d71920; color: #fff; border-radius: 8px; padding: 12px 18px; font-weight: 800; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+  .download-btn.secondary { background: #152944; }
+  .download-btn.danger { background: #7a1015; }
+  .download-jobs { display: grid; gap: 12px; }
+  .download-job { display: grid; gap: 10px; background: #07111f; border: 1px solid #1b2e4a; border-radius: 8px; padding: 14px; }
+  .download-job-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .download-job h2 { margin: 0; font-size: 18px; }
+  .download-status { border-radius: 999px; padding: 5px 10px; background: #152944; color: #f8d24c; font-weight: 800; font-size: 12px; text-transform: uppercase; }
+  .download-status.done { background: #123823; color: #62e083; }
+  .download-status.failed { background: #4a1116; color: #ff8a8f; }
+  .download-progress { height: 9px; background: #14243d; border-radius: 999px; overflow: hidden; }
+  .download-progress span { display: block; height: 100%; background: #d71920; }
+  .download-url { color: #8ea0bb; word-break: break-all; font-size: 13px; }
+  .download-error { color: #ff969b; margin: 0; }
+  @media (max-width: 700px) { .download-hero, .download-job-head { flex-direction: column; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="download-page">
+  <div class="download-shell">
+    <div class="download-hero">
+      <div>
+        <p class="eyebrow">Admin Tool</p>
+        <h1>Media Link Downloader</h1>
+        <p>Authorized direct video/audio file URL paste kare, backend file download karega.</p>
+      </div>
+      <a class="download-btn secondary" href="{% url 'live_tv:dashboard' %}">Live TV Dashboard</a>
+    </div>
+
+    <form class="download-form" method="post">
+      {% csrf_token %}
+      <div class="download-form-grid">
+        <label>
+          Title
+          <input name="title" type="text" maxlength="180" placeholder="Optional title">
+        </label>
+        <label>
+          Direct Video/Audio URL
+          <input name="url" type="url" required placeholder="https://example.com/video.mp4">
+        </label>
+      </div>
+      <div class="download-actions">
+        <button class="download-btn" type="submit">Start Download</button>
+        <p class="download-note">YouTube, Instagram, Facebook, X page links supported nahi hain. Direct file URL use kare.</p>
+      </div>
+    </form>
+
+    <div class="download-list">
+      <div class="download-job-head">
+        <div>
+          <p class="eyebrow">Recent Jobs</p>
+          <h2>Downloads</h2>
+        </div>
+        <a class="download-btn secondary" href="{% url 'live_tv:media_downloads' %}">Refresh</a>
+      </div>
+
+      <div class="download-jobs">
+        {% for job in jobs %}
+          <div class="download-job">
+            <div class="download-job-head">
+              <div>
+                <h2>{{ job.title }}</h2>
+                <p class="download-meta">{{ job.created_at|date:"M d, Y H:i" }} | {{ job.media_type|default:"unknown" }}</p>
+              </div>
+              <span class="download-status {{ job.status }}">{{ job.status }} {{ job.progress_percent }}%</span>
+            </div>
+            <div class="download-progress"><span style="width: {{ job.progress_percent }}%"></span></div>
+            <div class="download-url">{{ job.source_url }}</div>
+            {% if job.error_message %}<p class="download-error">{{ job.error_message }}</p>{% endif %}
+            <div class="download-actions">
+              {% if job.downloaded_file %}
+                <a class="download-btn" href="{{ job.downloaded_file.url }}" download>Download File</a>
+                <a class="download-btn secondary" href="{{ job.downloaded_file.url }}" target="_blank" rel="noopener">Open</a>
+              {% endif %}
+              <form method="post" action="{% url 'live_tv:delete_media_download' job.pk %}">
+                {% csrf_token %}
+                <button class="download-btn danger" type="submit">Delete</button>
+              </form>
+            </div>
+          </div>
+        {% empty %}
+          <p class="download-note">Abhi koi download job nahi hai.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+{% if jobs %}
+<script id="download-auto-refresh">
+  if (document.querySelector(".download-status.processing")) {
+    setTimeout(function () { window.location.reload(); }, 5000);
+  }
+</script>
+{% endif %}
+{% endblock %}

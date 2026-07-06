@@ -1113,6 +1113,38 @@ def mobile_admin_render_social_video_status_api(request, pk):
     return JsonResponse(serialize_render_job(request, job))
 
 
+
+@superuser_required
+def media_download_page(request):
+    if request.method == "POST":
+        source_url = request.POST.get("url", "").strip()
+        title = request.POST.get("title", "").strip()
+        if not source_url:
+            messages.error(request, "Download URL required.")
+            return redirect("live_tv:media_downloads")
+        if is_restricted_download_url(source_url):
+            messages.error(request, "Direct video/audio file URL required. YouTube, Instagram, Facebook, X page extraction supported nahi hai.")
+            return redirect("live_tv:media_downloads")
+        if not title:
+            title = Path(urlparse(source_url).path).stem[:180] or "Media download"
+        job = MediaDownload.objects.create(title=title[:180], source_url=source_url, created_by=request.user)
+        queue_backend = enqueue_media_download_job(job.pk)
+        messages.success(request, f"Download job start ho gaya ({queue_backend}). Status neeche dekhe.")
+        return redirect("live_tv:media_downloads")
+
+    jobs = manageable_media_downloads_for(request.user)[:50]
+    return render(request, "live_tv/media_downloads.html", {"jobs": jobs})
+
+
+@superuser_required
+@require_POST
+def delete_media_download(request, pk):
+    job = get_object_or_404(manageable_media_downloads_for(request.user), pk=pk)
+    delete_file_field(job.downloaded_file)
+    job.delete()
+    messages.success(request, "Download job delete ho gaya.")
+    return redirect("live_tv:media_downloads")
+
 @superuser_required
 def dashboard(request):
     channels = LiveTVChannel.objects.all()
