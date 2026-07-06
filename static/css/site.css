@@ -2631,3 +2631,22 @@ time {
     gap: 10px;
   }
 }
+
+/* Desktop header compact fix */
+@media (min-width: 841px) {
+  .topbar {
+    max-width: 1420px;
+  }
+
+  .main-nav,
+  .account-links {
+    gap: 12px;
+  }
+
+  .main-nav a,
+  .nav-dropdown summary,
+  .account-links a,
+  .logout-form button {
+    font-size: 13px;
+  }
+}

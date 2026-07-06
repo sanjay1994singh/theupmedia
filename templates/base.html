@@ -51,7 +51,6 @@
         {% endif %}
         <a href="{% url 'blog:post_list' %}">Blog</a>
         <a href="{% url 'services:service_list' %}">Services</a>
-        {% if user.is_superuser %}<a href="{% url 'live_tv:media_downloads' %}">Downloads</a>{% endif %}
         {% for category in NAV_CATEGORIES %}
           <a href="{{ category.get_absolute_url }}">{{ category.name }}</a>
         {% endfor %}
