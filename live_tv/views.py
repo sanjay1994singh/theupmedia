@@ -11,6 +11,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate
 from django.core.files import File
 from django.db import close_old_connections
+from django.db.models import Q
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -516,6 +517,14 @@ def delete_file_field(file_field):
         file_field.delete(save=False)
 
 
+def manageable_uploads_for(user):
+    return MobileVideoUpload.objects.filter(Q(uploaded_by=user) | Q(uploaded_by__isnull=True))
+
+
+def manageable_render_jobs_for(user):
+    return SocialRenderedVideo.objects.filter(Q(created_by=user) | Q(created_by__isnull=True))
+
+
 def superuser_required(view_func):
     return login_required(user_passes_test(lambda user: user.is_superuser)(view_func))
 
@@ -626,8 +635,8 @@ def mobile_admin_dashboard_api(request):
         return error
 
     channels = LiveTVChannel.objects.all()
-    uploads = MobileVideoUpload.objects.filter(uploaded_by=user)[:50]
-    rendered_videos = SocialRenderedVideo.objects.filter(created_by=user)[:50]
+    uploads = manageable_uploads_for(user)[:50]
+    rendered_videos = manageable_render_jobs_for(user)[:50]
     return JsonResponse(
         {
             "user": {"id": user.pk, "username": user.get_username(), "name": user.get_full_name() or user.get_username()},
@@ -695,7 +704,7 @@ def mobile_admin_upload_update_api(request, pk):
     if error:
         return error
 
-    upload = get_object_or_404(MobileVideoUpload, pk=pk, uploaded_by=user)
+    upload = get_object_or_404(manageable_uploads_for(user), pk=pk)
     title = request.POST.get("title", "").strip()
     description = request.POST.get("description", "").strip()
     if title:
@@ -712,7 +721,7 @@ def mobile_admin_upload_delete_api(request, pk):
     if error:
         return error
 
-    upload = get_object_or_404(MobileVideoUpload, pk=pk, uploaded_by=user)
+    upload = get_object_or_404(manageable_uploads_for(user), pk=pk)
     delete_file_field(upload.video)
     upload.delete()
     return JsonResponse({"ok": True})
@@ -725,7 +734,7 @@ def mobile_admin_rendered_video_update_api(request, pk):
     if error:
         return error
 
-    job = get_object_or_404(SocialRenderedVideo, pk=pk, created_by=user)
+    job = get_object_or_404(manageable_render_jobs_for(user), pk=pk)
     title = request.POST.get("title", "").strip()
     headline = request.POST.get("headline", "").strip()
     ticker_text = request.POST.get("ticker_text", "").strip()
@@ -747,7 +756,7 @@ def mobile_admin_rendered_video_delete_api(request, pk):
     if error:
         return error
 
-    job = get_object_or_404(SocialRenderedVideo, pk=pk, created_by=user)
+    job = get_object_or_404(manageable_render_jobs_for(user), pk=pk)
     delete_file_field(job.original_video)
     delete_file_field(job.rendered_video)
     job.delete()
