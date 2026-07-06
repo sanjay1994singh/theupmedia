@@ -37,7 +37,7 @@ sudo systemctl enable theupmedia-celery
 sudo systemctl restart redis-server
 sudo systemctl restart gunicorn
 sudo systemctl restart theupmedia-celery
-sudo systemctl restart nginx
+sudo systemctl restart apache2
 ```
 
 Check status/logs:
@@ -45,4 +45,25 @@ Check status/logs:
 ```bash
 sudo systemctl status theupmedia-celery
 sudo journalctl -u theupmedia-celery -f
+```
+
+For Apache2, make sure media files are served directly:
+
+```apache
+Alias /media/ /var/www/theupmedia/media/
+<Directory /var/www/theupmedia/media/>
+    Require all granted
+</Directory>
+
+Alias /static/ /var/www/theupmedia/staticfiles/
+<Directory /var/www/theupmedia/staticfiles/>
+    Require all granted
+</Directory>
+```
+
+Reload Apache after vhost changes:
+
+```bash
+sudo apache2ctl configtest
+sudo systemctl reload apache2
 ```
