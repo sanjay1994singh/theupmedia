@@ -666,16 +666,12 @@ def mobile_admin_channel_save_api(request):
     data.setdefault("ticker_label", "TODAY'S NEWS")
     data.setdefault("ticker_text", "")
     data.setdefault("display_order", "0")
-
-    for boolean_field in [
-        "is_active",
-        "is_live",
-        "autoplay",
-        "show_lower_third",
-        "show_ticker",
-        "show_channel_logo",
-    ]:
-        data[boolean_field] = "on" if data.get(boolean_field) in {"1", "true", "True", "on", "yes"} else ""
+    data["is_active"] = "on"
+    data["is_live"] = "on"
+    data["autoplay"] = ""
+    data["show_lower_third"] = "on"
+    data["show_ticker"] = "on"
+    data["show_channel_logo"] = "on"
 
     form = LiveTVChannelForm(data, request.FILES, instance=instance)
     if not form.is_valid():
