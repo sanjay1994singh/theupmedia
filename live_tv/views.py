@@ -339,6 +339,25 @@ def render_social_video_file(job):
                 "drawtext=text='Ready for social media sharing':x=64:y=1010:fontsize=26:fontcolor=white,"
                 "format=yuv420p[vout]"
             )
+        elif job.render_format == "fast_720p":
+            filter_complex = (
+                "[0:v]scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,setsar=1[main];"
+                "[main]drawbox=x=0:y=561:w=1280:h=57:color=white@0.94:t=fill,"
+                "drawbox=x=0:y=561:w=240:h=57:color=#d71920@1:t=fill,"
+                f"drawtext=textfile='{ffmpeg_path(label_file)}'{label_font_arg}:x=23:y=581:fontsize=28:fontcolor=white,"
+                f"drawtext=textfile='{ffmpeg_path(headline_file)}'{headline_font_arg}:x=260:y=577:fontsize=31:fontcolor=#111827,"
+                "drawbox=x=0:y=619:w=1280:h=39:color=#f8d24c@1:t=fill,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x=w-mod(t*170\\,w+tw):y=630:fontsize=20:fontcolor=#111827,"
+                "drawbox=x=0:y=657:w=1280:h=63:color=#08111f@0.96:t=fill,"
+                f"drawtext=textfile='{ffmpeg_path(title_file)}'{title_font_arg}:x=28:y=676:fontsize=29:fontcolor=white,"
+                "drawbox=x=1007:y=25:w=153:h=77:color=white@0.96:t=fill,"
+                "drawtext=text='THE UP':x=1027:y=40:fontsize=24:fontcolor=#d71920,"
+                "drawbox=x=1007:y=64:w=153:h=38:color=#08111f@1:t=fill,"
+                "drawtext=text='MEDIA':x=1039:y=72:fontsize=23:fontcolor=white,"
+                "drawbox=x=25:y=25:w=100:h=40:color=#d71920@1:t=fill,"
+                "drawtext=text='LIVE':x=50:y=34:fontsize=23:fontcolor=white,"
+                "format=yuv420p[vout]"
+            )
         else:
             filter_complex = (
                 "[0:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1[main];"
@@ -359,6 +378,9 @@ def render_social_video_file(job):
                 "format=yuv420p[vout]"
             )
 
+        video_preset = "ultrafast" if job.render_format == "fast_720p" else "veryfast"
+        video_crf = "28" if job.render_format == "fast_720p" else "23"
+
         command = [
             ffmpeg_binary(),
             "-y",
@@ -373,9 +395,9 @@ def render_social_video_file(job):
             "-c:v",
             "libx264",
             "-preset",
-            "veryfast",
+            video_preset,
             "-crf",
-            "23",
+            video_crf,
             "-c:a",
             "aac",
             "-shortest",
@@ -635,7 +657,7 @@ def mobile_admin_render_social_video_api(request):
     ticker_text = request.POST.get("ticker_text", "").strip() or (active_channel.ticker_text if active_channel else "The Up Media")
     lower_third_label = request.POST.get("lower_third_label", "").strip() or (active_channel.lower_third_label if active_channel else "BREAKING NEWS")
     render_format = request.POST.get("render_format", "16:9").strip()
-    if render_format not in {"16:9", "9:16"}:
+    if render_format not in {"fast_720p", "16:9", "9:16"}:
         render_format = "16:9"
 
     job = SocialRenderedVideo.objects.create(
