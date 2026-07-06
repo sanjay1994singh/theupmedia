@@ -480,14 +480,40 @@ def run_social_render_job(job_id):
 
 def serialize_render_job(request, job):
     rendered_url = request.build_absolute_uri(job.rendered_video.url) if job.rendered_video else ""
+    original_url = request.build_absolute_uri(job.original_video.url) if job.original_video else ""
     return {
         "id": job.pk,
         "status": job.status,
         "progress_percent": job.progress_percent,
         "title": job.title,
+        "headline": job.headline,
+        "ticker_text": job.ticker_text,
+        "lower_third_label": job.lower_third_label,
+        "render_format": job.render_format,
+        "original_video_url": original_url,
         "rendered_video_url": rendered_url,
         "error": job.error_message,
+        "created_at": job.created_at.isoformat(),
     }
+
+
+def serialize_mobile_upload(request, upload):
+    return {
+        "id": upload.pk,
+        "title": upload.title,
+        "description": upload.description,
+        "status": upload.status,
+        "status_label": upload.get_status_display(),
+        "uploaded_by_name": upload.uploaded_by_name,
+        "uploaded_by_phone": upload.uploaded_by_phone,
+        "video_url": request.build_absolute_uri(upload.video.url),
+        "created_at": upload.created_at.isoformat(),
+    }
+
+
+def delete_file_field(file_field):
+    if file_field:
+        file_field.delete(save=False)
 
 
 def superuser_required(view_func):
@@ -520,7 +546,8 @@ def current_live_tv_api(request):
 @csrf_exempt
 @require_POST
 def mobile_video_upload_api(request):
-    is_admin = bool(mobile_admin_user(request))
+    admin_user = mobile_admin_user(request)
+    is_admin = bool(admin_user)
     if not is_admin and not getattr(settings, "MOBILE_UPLOAD_API_KEY", ""):
         return JsonResponse({"detail": "Mobile upload API token is not configured."}, status=503)
     if not is_admin and not mobile_api_authorized(request):
@@ -538,6 +565,7 @@ def mobile_video_upload_api(request):
         title=title,
         description=request.POST.get("description", "").strip(),
         video=video,
+        uploaded_by=admin_user if is_admin else None,
         uploaded_by_name=request.POST.get("uploaded_by_name", "").strip(),
         uploaded_by_phone=request.POST.get("uploaded_by_phone", "").strip(),
         device_info=request.POST.get("device_info", "").strip()[:220],
@@ -598,25 +626,14 @@ def mobile_admin_dashboard_api(request):
         return error
 
     channels = LiveTVChannel.objects.all()
-    uploads = MobileVideoUpload.objects.all()[:20]
+    uploads = MobileVideoUpload.objects.filter(uploaded_by=user)[:50]
+    rendered_videos = SocialRenderedVideo.objects.filter(created_by=user)[:50]
     return JsonResponse(
         {
             "user": {"id": user.pk, "username": user.get_username(), "name": user.get_full_name() or user.get_username()},
             "channels": [serialize_channel_for_admin(request, channel) for channel in channels],
-            "mobile_uploads": [
-                {
-                    "id": upload.pk,
-                    "title": upload.title,
-                    "description": upload.description,
-                    "status": upload.status,
-                    "status_label": upload.get_status_display(),
-                    "uploaded_by_name": upload.uploaded_by_name,
-                    "uploaded_by_phone": upload.uploaded_by_phone,
-                    "video_url": request.build_absolute_uri(upload.video.url),
-                    "created_at": upload.created_at.isoformat(),
-                }
-                for upload in uploads
-            ],
+            "mobile_uploads": [serialize_mobile_upload(request, upload) for upload in uploads],
+            "rendered_videos": [serialize_render_job(request, job) for job in rendered_videos],
             "source_types": list(LiveTVChannel.SourceType.values),
         }
     )
@@ -668,6 +685,72 @@ def mobile_admin_channel_delete_api(request, pk):
 
     channel = get_object_or_404(LiveTVChannel, pk=pk)
     channel.delete()
+    return JsonResponse({"ok": True})
+
+
+@csrf_exempt
+@require_POST
+def mobile_admin_upload_update_api(request, pk):
+    user, error = mobile_admin_required(request)
+    if error:
+        return error
+
+    upload = get_object_or_404(MobileVideoUpload, pk=pk, uploaded_by=user)
+    title = request.POST.get("title", "").strip()
+    description = request.POST.get("description", "").strip()
+    if title:
+        upload.title = title[:180]
+    upload.description = description
+    upload.save(update_fields=["title", "description", "updated_at"])
+    return JsonResponse({"upload": serialize_mobile_upload(request, upload)})
+
+
+@csrf_exempt
+@require_POST
+def mobile_admin_upload_delete_api(request, pk):
+    user, error = mobile_admin_required(request)
+    if error:
+        return error
+
+    upload = get_object_or_404(MobileVideoUpload, pk=pk, uploaded_by=user)
+    delete_file_field(upload.video)
+    upload.delete()
+    return JsonResponse({"ok": True})
+
+
+@csrf_exempt
+@require_POST
+def mobile_admin_rendered_video_update_api(request, pk):
+    user, error = mobile_admin_required(request)
+    if error:
+        return error
+
+    job = get_object_or_404(SocialRenderedVideo, pk=pk, created_by=user)
+    title = request.POST.get("title", "").strip()
+    headline = request.POST.get("headline", "").strip()
+    ticker_text = request.POST.get("ticker_text", "").strip()
+    lower_third_label = request.POST.get("lower_third_label", "").strip()
+    if title:
+        job.title = title[:180]
+    job.headline = headline[:180]
+    job.ticker_text = ticker_text[:260]
+    if lower_third_label:
+        job.lower_third_label = lower_third_label[:60]
+    job.save(update_fields=["title", "headline", "ticker_text", "lower_third_label", "updated_at"])
+    return JsonResponse({"rendered_video": serialize_render_job(request, job)})
+
+
+@csrf_exempt
+@require_POST
+def mobile_admin_rendered_video_delete_api(request, pk):
+    user, error = mobile_admin_required(request)
+    if error:
+        return error
+
+    job = get_object_or_404(SocialRenderedVideo, pk=pk, created_by=user)
+    delete_file_field(job.original_video)
+    delete_file_field(job.rendered_video)
+    job.delete()
     return JsonResponse({"ok": True})
 
 

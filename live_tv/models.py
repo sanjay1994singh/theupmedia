@@ -174,6 +174,7 @@ class MobileVideoUpload(models.Model):
     description = models.TextField(blank=True)
     video = models.FileField(upload_to="mobile-video-uploads/%Y/%m/")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, blank=True, null=True, related_name="mobile_video_uploads")
     uploaded_by_name = models.CharField(max_length=120, blank=True)
     uploaded_by_phone = models.CharField(max_length=30, blank=True)
     device_info = models.CharField(max_length=220, blank=True)
