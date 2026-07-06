@@ -163,6 +163,37 @@ class LiveTVChannel(models.Model):
         return f"https://www.youtube-nocookie.com/embed/{video_id}?{urlencode(params)}"
 
 
+class LiveTVSetting(models.Model):
+    name = models.CharField(max_length=120, default="The Up Media Live TV")
+    live_label = models.CharField(max_length=40, default="LIVE")
+    channel_logo = models.ImageField(upload_to="live-tv/settings/", blank=True, null=True)
+    show_live_badge = models.BooleanField(default=True)
+    show_channel_logo = models.BooleanField(default=True)
+    show_lower_third = models.BooleanField(default=True)
+    show_ticker = models.BooleanField(default=True)
+    autoplay = models.BooleanField(default=False)
+    default_lower_third_label = models.CharField(max_length=60, default="BREAKING NEWS")
+    default_headline = models.CharField(max_length=180, default="The Up Media Live TV")
+    default_ticker_label = models.CharField(max_length=60, default="TODAY'S NEWS")
+    default_ticker_text = models.CharField(max_length=260, default="Latest updates from The Up Media")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Live TV Setting"
+        verbose_name_plural = "Live TV Settings"
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def get_solo(cls):
+        setting, _created = cls.objects.get_or_create(pk=1, defaults={"name": "The Up Media Live TV"})
+        return setting
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
 class MobileVideoUpload(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
@@ -213,6 +244,35 @@ class MobileAdminToken(models.Model):
         )
 
 
+class MediaDownload(models.Model):
+    class Status(models.TextChoices):
+        PROCESSING = "processing", "Processing"
+        DONE = "done", "Done"
+        FAILED = "failed", "Failed"
+
+    class MediaType(models.TextChoices):
+        VIDEO = "video", "Video"
+        AUDIO = "audio", "Audio"
+        UNKNOWN = "unknown", "Unknown"
+
+    title = models.CharField(max_length=180)
+    source_url = models.URLField(max_length=1200)
+    media_type = models.CharField(max_length=20, choices=MediaType.choices, default=MediaType.UNKNOWN)
+    downloaded_file = models.FileField(upload_to="media-downloads/%Y/%m/", blank=True, null=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PROCESSING)
+    progress_percent = models.PositiveSmallIntegerField(default=0)
+    error_message = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, blank=True, null=True, related_name="live_tv_media_downloads")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.title
+
+
 class SocialRenderedVideo(models.Model):
     class Status(models.TextChoices):
         PROCESSING = "processing", "Processing"
@@ -238,3 +298,4 @@ class SocialRenderedVideo(models.Model):
 
     def __str__(self):
         return self.title
+

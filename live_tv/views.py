@@ -1,15 +1,20 @@
+import ipaddress
 import os
+import socket
 import re
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate
 from django.core.files import File
+from django.core.files.base import ContentFile
 from django.db import close_old_connections
 from django.db.models import Q
 from django.contrib.auth.decorators import login_required, user_passes_test
@@ -21,9 +26,49 @@ from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_POST
 
 from .forms import LiveTVChannelForm
-from .models import LiveTVChannel, MobileAdminToken, MobileVideoUpload, SocialRenderedVideo
+from .models import LiveTVChannel, LiveTVSetting, MediaDownload, MobileAdminToken, MobileVideoUpload, SocialRenderedVideo
 from news.models import Article
 
+RESTRICTED_DOWNLOAD_HOSTS = {
+    "youtube.com",
+    "youtu.be",
+    "facebook.com",
+    "fb.watch",
+    "instagram.com",
+    "x.com",
+    "twitter.com",
+}
+ALLOWED_DOWNLOAD_EXTENSIONS = {
+    ".mp4",
+    ".mov",
+    ".m4v",
+    ".webm",
+    ".mkv",
+    ".mp3",
+    ".m4a",
+    ".aac",
+    ".wav",
+    ".ogg",
+}
+
+
+
+def enqueue_media_download_job(job_id):
+    if getattr(settings, "LIVE_TV_RENDER_USE_CELERY", True):
+        try:
+            from .tasks import download_media_task
+
+            download_media_task.delay(job_id)
+            return "celery"
+        except Exception as exc:
+            MediaDownload.objects.filter(pk=job_id).update(
+                error_message=f"Celery enqueue failed, fallback thread started: {exc}",
+            )
+
+    import threading
+
+    threading.Thread(target=run_media_download_job, args=(job_id,), daemon=True).start()
+    return "thread"
 
 def enqueue_social_render_job(job_id):
     if getattr(settings, "LIVE_TV_RENDER_USE_CELERY", True):
@@ -73,6 +118,29 @@ def absolute_media_url(request, file_obj):
     return request.build_absolute_uri(file_obj.url)
 
 
+
+def live_tv_setting():
+    return LiveTVSetting.get_solo()
+
+
+def serialize_live_tv_setting(request, setting):
+    return {
+        "id": setting.pk,
+        "name": setting.name,
+        "live_label": setting.live_label,
+        "channel_logo": absolute_media_url(request, setting.channel_logo),
+        "show_live_badge": setting.show_live_badge,
+        "show_channel_logo": setting.show_channel_logo,
+        "show_lower_third": setting.show_lower_third,
+        "show_ticker": setting.show_ticker,
+        "autoplay": setting.autoplay,
+        "default_lower_third_label": setting.default_lower_third_label,
+        "default_headline": setting.default_headline,
+        "default_ticker_label": setting.default_ticker_label,
+        "default_ticker_text": setting.default_ticker_text,
+        "updated_at": setting.updated_at.isoformat(),
+    }
+
 def ticker_items(channel):
     if not channel or not channel.ticker_text:
         return []
@@ -81,6 +149,7 @@ def ticker_items(channel):
 
 
 def serialize_channel_for_mobile(request, channel):
+    setting = live_tv_setting()
     player_type = channel.player_source_type
     stream_url = ""
     youtube_embed_url = ""
@@ -92,22 +161,32 @@ def serialize_channel_for_mobile(request, channel):
     elif player_type == LiveTVChannel.SourceType.YOUTUBE:
         youtube_embed_url = channel.youtube_embed_url
 
+    ticker = ticker_items(channel)
+    if not ticker:
+        ticker = ticker_items(type("DefaultTicker", (), {"ticker_text": setting.default_ticker_text})())
+
     return {
         "id": channel.pk,
         "title": channel.title,
         "description": channel.description,
-        "headline": channel.headline,
-        "lower_third_label": channel.lower_third_label,
-        "ticker_label": channel.ticker_label,
-        "ticker": ticker_items(channel),
+        "headline": channel.headline or setting.default_headline,
+        "lower_third_label": channel.lower_third_label or setting.default_lower_third_label,
+        "ticker_label": channel.ticker_label or setting.default_ticker_label,
+        "ticker": ticker,
         "player_type": player_type,
         "stream_url": stream_url,
         "youtube_url": channel.youtube_url,
         "youtube_embed_url": youtube_embed_url,
         "poster_image": absolute_media_url(request, channel.poster_image),
-        "channel_logo": absolute_media_url(request, channel.channel_logo),
+        "channel_logo": absolute_media_url(request, setting.channel_logo) or absolute_media_url(request, channel.channel_logo),
         "is_live": channel.is_live,
-        "autoplay": channel.autoplay,
+        "autoplay": setting.autoplay,
+        "live_label": setting.live_label,
+        "show_live_badge": setting.show_live_badge,
+        "show_channel_logo": setting.show_channel_logo,
+        "show_lower_third": setting.show_lower_third,
+        "show_ticker": setting.show_ticker,
+        "settings": serialize_live_tv_setting(request, setting),
         "web_url": request.build_absolute_uri(channel.get_absolute_url()),
         "ads": mobile_live_tv_ads(),
     }
@@ -194,6 +273,7 @@ def serialize_channel_for_admin(request, channel):
             "video_file_url": channel_file_url(request, channel, "video_file"),
             "poster_image_url": channel_file_url(request, channel, "poster_image"),
             "channel_logo_url": channel_file_url(request, channel, "channel_logo"),
+            "global_channel_logo_url": absolute_media_url(request, live_tv_setting().channel_logo),
             "updated_at": channel.updated_at.isoformat(),
         }
     )
@@ -280,6 +360,112 @@ def ffmpeg_font_arg_for_text(text, devanagari_font, latin_font):
     font = devanagari_font if has_devanagari(text) and not has_latin(text) else latin_font
     return f":fontfile='{font}'" if font else ""
 
+
+
+def is_restricted_download_url(url):
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return True
+    host = (parsed.hostname or "").lower().removeprefix("www.")
+    if parsed.scheme not in {"http", "https"} or not host:
+        return True
+    return any(host == domain or host.endswith(f".{domain}") for domain in RESTRICTED_DOWNLOAD_HOSTS)
+
+
+def is_private_download_host(url):
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+    try:
+        addresses = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        return True
+    for address in addresses:
+        ip = ipaddress.ip_address(address[4][0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            return True
+    return False
+
+
+def infer_download_media_type(content_type, filename):
+    content_type = (content_type or "").split(";", 1)[0].strip().lower()
+    suffix = Path(filename or "").suffix.lower()
+    if content_type.startswith("video/") or suffix in {".mp4", ".mov", ".m4v", ".webm", ".mkv"}:
+        return MediaDownload.MediaType.VIDEO
+    if content_type.startswith("audio/") or suffix in {".mp3", ".m4a", ".aac", ".wav", ".ogg"}:
+        return MediaDownload.MediaType.AUDIO
+    return MediaDownload.MediaType.UNKNOWN
+
+
+def filename_from_download_url(url, content_type=""):
+    parsed = urlparse(url)
+    raw_name = Path(parsed.path).name[:120]
+    if raw_name and Path(raw_name).suffix.lower() in ALLOWED_DOWNLOAD_EXTENSIONS:
+        return re.sub(r"[^A-Za-z0-9._() -]", "_", raw_name)
+    extension = ".mp4"
+    if (content_type or "").startswith("audio/"):
+        extension = ".mp3"
+    return f"theupmedia-download-{uuid4().hex[:12]}{extension}"
+
+
+def validate_download_response(response, filename):
+    content_type = response.headers.get("Content-Type", "")
+    content_length = int(response.headers.get("Content-Length") or 0)
+    media_type = infer_download_media_type(content_type, filename)
+    if media_type == MediaDownload.MediaType.UNKNOWN:
+        raise RuntimeError("Direct video/audio file URL required. Social page links or HTML pages are not supported.")
+    max_mb = int(getattr(settings, "LIVE_TV_MEDIA_DOWNLOAD_MAX_MB", 700))
+    if content_length and content_length > max_mb * 1024 * 1024:
+        raise RuntimeError(f"File too large. Max allowed size is {max_mb} MB.")
+    return media_type, content_length
+
+
+def run_media_download_job(job_id):
+    close_old_connections()
+    job = MediaDownload.objects.get(pk=job_id)
+    try:
+        url = job.source_url.strip()
+        if is_restricted_download_url(url):
+            raise RuntimeError("YouTube, Instagram, Facebook, X page extraction supported nahi hai. Direct authorized media URL use kare.")
+        if is_private_download_host(url):
+            raise RuntimeError("Private/local server URL download allowed nahi hai.")
+
+        request = Request(url, headers={"User-Agent": "TheUPMediaMobile/1.0"})
+        with urlopen(request, timeout=30) as response:
+            filename = filename_from_download_url(response.geturl(), response.headers.get("Content-Type", ""))
+            media_type, total_size = validate_download_response(response, filename)
+            temp_dir = Path(tempfile.gettempdir()) / "theupmedia-media-downloads"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            temp_path = temp_dir / f"{uuid4().hex}-{filename}"
+            downloaded = 0
+            with temp_path.open("wb") as output:
+                while True:
+                    chunk = response.read(1024 * 512)
+                    if not chunk:
+                        break
+                    output.write(chunk)
+                    downloaded += len(chunk)
+                    if total_size:
+                        MediaDownload.objects.filter(pk=job.pk).update(progress_percent=max(1, min(99, int(downloaded * 100 / total_size))))
+
+            if not total_size:
+                MediaDownload.objects.filter(pk=job.pk).update(progress_percent=90)
+            with temp_path.open("rb") as downloaded_file:
+                job.downloaded_file.save(filename, File(downloaded_file), save=False)
+            job.media_type = media_type
+            job.status = MediaDownload.Status.DONE
+            job.progress_percent = 100
+            job.error_message = ""
+            job.save(update_fields=["downloaded_file", "media_type", "status", "progress_percent", "error_message", "updated_at"])
+            temp_path.unlink(missing_ok=True)
+    except Exception as exc:
+        MediaDownload.objects.filter(pk=job_id).update(
+            status=MediaDownload.Status.FAILED,
+            error_message=str(exc),
+            progress_percent=0,
+        )
+    finally:
+        close_old_connections()
 
 def video_duration_seconds(video_path):
     command = [
@@ -479,6 +665,21 @@ def run_social_render_job(job_id):
         close_old_connections()
 
 
+
+def serialize_media_download(request, job):
+    file_url = request.build_absolute_uri(job.downloaded_file.url) if job.downloaded_file else ""
+    return {
+        "id": job.pk,
+        "title": job.title,
+        "source_url": job.source_url,
+        "media_type": job.media_type,
+        "status": job.status,
+        "progress_percent": job.progress_percent,
+        "file_url": file_url,
+        "error": job.error_message,
+        "created_at": job.created_at.isoformat(),
+    }
+
 def serialize_render_job(request, job):
     rendered_url = request.build_absolute_uri(job.rendered_video.url) if job.rendered_video else ""
     original_url = request.build_absolute_uri(job.original_video.url) if job.original_video else ""
@@ -523,6 +724,10 @@ def manageable_uploads_for(user):
 
 def manageable_render_jobs_for(user):
     return SocialRenderedVideo.objects.filter(Q(created_by=user) | Q(created_by__isnull=True))
+
+
+def manageable_media_downloads_for(user):
+    return MediaDownload.objects.filter(Q(created_by=user) | Q(created_by__isnull=True))
 
 
 def superuser_required(view_func):
@@ -637,16 +842,44 @@ def mobile_admin_dashboard_api(request):
     channels = LiveTVChannel.objects.all()
     uploads = manageable_uploads_for(user)[:50]
     rendered_videos = manageable_render_jobs_for(user)[:50]
+    media_downloads = manageable_media_downloads_for(user)[:50]
+    settings_obj = live_tv_setting()
     return JsonResponse(
         {
             "user": {"id": user.pk, "username": user.get_username(), "name": user.get_full_name() or user.get_username()},
+            "settings": serialize_live_tv_setting(request, settings_obj),
             "channels": [serialize_channel_for_admin(request, channel) for channel in channels],
             "mobile_uploads": [serialize_mobile_upload(request, upload) for upload in uploads],
             "rendered_videos": [serialize_render_job(request, job) for job in rendered_videos],
+            "media_downloads": [serialize_media_download(request, job) for job in media_downloads],
             "source_types": list(LiveTVChannel.SourceType.values),
         }
     )
 
+
+
+@csrf_exempt
+@require_POST
+def mobile_admin_settings_save_api(request):
+    _user, error = mobile_admin_required(request)
+    if error:
+        return error
+
+    setting = live_tv_setting()
+    setting.name = request.POST.get("name", setting.name).strip()[:120] or setting.name
+    setting.live_label = request.POST.get("live_label", setting.live_label).strip()[:40] or setting.live_label
+    setting.default_lower_third_label = request.POST.get("default_lower_third_label", setting.default_lower_third_label).strip()[:60] or setting.default_lower_third_label
+    setting.default_headline = request.POST.get("default_headline", setting.default_headline).strip()[:180] or setting.default_headline
+    setting.default_ticker_label = request.POST.get("default_ticker_label", setting.default_ticker_label).strip()[:60] or setting.default_ticker_label
+    setting.default_ticker_text = request.POST.get("default_ticker_text", setting.default_ticker_text).strip()[:260] or setting.default_ticker_text
+    for field in ["show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker", "autoplay"]:
+        if field in request.POST:
+            setattr(setting, field, request.POST.get(field) in {"1", "true", "on", "yes"})
+    if request.FILES.get("channel_logo"):
+        delete_file_field(setting.channel_logo)
+        setting.channel_logo = request.FILES["channel_logo"]
+    setting.save()
+    return JsonResponse({"settings": serialize_live_tv_setting(request, setting)})
 
 @csrf_exempt
 @require_POST
@@ -661,14 +894,15 @@ def mobile_admin_channel_save_api(request):
     data = request.POST.copy()
     data.setdefault("title", "The Up Media Live TV")
     data.setdefault("source_type", LiveTVChannel.SourceType.YOUTUBE)
-    data.setdefault("lower_third_label", "BREAKING NEWS")
-    data.setdefault("headline", data.get("title", "The Up Media Live TV"))
-    data.setdefault("ticker_label", "TODAY'S NEWS")
+    settings_obj = live_tv_setting()
+    data.setdefault("lower_third_label", settings_obj.default_lower_third_label)
+    data.setdefault("headline", data.get("title", settings_obj.default_headline))
+    data.setdefault("ticker_label", settings_obj.default_ticker_label)
     data.setdefault("ticker_text", "")
     data.setdefault("display_order", "0")
     data["is_active"] = "on"
     data["is_live"] = "on"
-    data["autoplay"] = ""
+    data["autoplay"] = "on" if settings_obj.autoplay else ""
     data["show_lower_third"] = "on"
     data["show_ticker"] = "on"
     data["show_channel_logo"] = "on"
@@ -758,6 +992,71 @@ def mobile_admin_rendered_video_delete_api(request, pk):
     job.delete()
     return JsonResponse({"ok": True})
 
+
+
+@csrf_exempt
+@require_POST
+def mobile_admin_media_download_start_api(request):
+    user, error = mobile_admin_required(request)
+    if error:
+        return error
+
+    source_url = request.POST.get("url", "").strip()
+    title = request.POST.get("title", "").strip()
+    if not source_url:
+        return JsonResponse({"detail": "URL is required."}, status=400)
+    if is_restricted_download_url(source_url):
+        return JsonResponse({"detail": "Direct video/audio file URL required. YouTube, Instagram, Facebook, X page extraction supported nahi hai."}, status=400)
+    if not title:
+        title = Path(urlparse(source_url).path).stem[:180] or "Media download"
+
+    job = MediaDownload.objects.create(
+        title=title[:180],
+        source_url=source_url,
+        created_by=user,
+    )
+    queue_backend = enqueue_media_download_job(job.pk)
+    data = serialize_media_download(request, job)
+    data["queue_backend"] = queue_backend
+    return JsonResponse(data, status=202)
+
+
+@require_GET
+def mobile_admin_media_download_status_api(request, pk):
+    user, error = mobile_admin_required(request)
+    if error:
+        return error
+
+    job = get_object_or_404(manageable_media_downloads_for(user), pk=pk)
+    return JsonResponse(serialize_media_download(request, job))
+
+
+@csrf_exempt
+@require_POST
+def mobile_admin_media_download_update_api(request, pk):
+    user, error = mobile_admin_required(request)
+    if error:
+        return error
+
+    job = get_object_or_404(manageable_media_downloads_for(user), pk=pk)
+    title = request.POST.get("title", "").strip()
+    if title:
+        job.title = title[:180]
+        job.save(update_fields=["title", "updated_at"])
+    return JsonResponse({"media_download": serialize_media_download(request, job)})
+
+
+@csrf_exempt
+@require_POST
+def mobile_admin_media_download_delete_api(request, pk):
+    user, error = mobile_admin_required(request)
+    if error:
+        return error
+
+    job = get_object_or_404(manageable_media_downloads_for(user), pk=pk)
+    delete_file_field(job.downloaded_file)
+    job.delete()
+    return JsonResponse({"ok": True})
 
 @csrf_exempt
 @require_POST
@@ -851,3 +1150,4 @@ def delete_channel(request, pk):
     channel.delete()
     messages.success(request, "Live TV channel deleted.")
     return redirect("live_tv:dashboard")
+
