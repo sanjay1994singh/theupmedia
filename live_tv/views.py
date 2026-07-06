@@ -2,7 +2,6 @@ import os
 import re
 import shutil
 import subprocess
-import threading
 import tempfile
 from pathlib import Path
 from uuid import uuid4
@@ -23,6 +22,24 @@ from django.views.decorators.http import require_POST
 from .forms import LiveTVChannelForm
 from .models import LiveTVChannel, MobileAdminToken, MobileVideoUpload, SocialRenderedVideo
 from news.models import Article
+
+
+def enqueue_social_render_job(job_id):
+    if getattr(settings, "LIVE_TV_RENDER_USE_CELERY", True):
+        try:
+            from .tasks import render_social_video_task
+
+            render_social_video_task.delay(job_id)
+            return "celery"
+        except Exception as exc:
+            SocialRenderedVideo.objects.filter(pk=job_id).update(
+                error_message=f"Celery enqueue failed, fallback thread started: {exc}",
+            )
+
+    import threading
+
+    threading.Thread(target=run_social_render_job, args=(job_id,), daemon=True).start()
+    return "thread"
 
 
 def next_live_tv_channel(active_channel, channels):
@@ -378,8 +395,27 @@ def render_social_video_file(job):
                 "format=yuv420p[vout]"
             )
 
-        video_preset = "ultrafast" if job.render_format == "fast_720p" else "veryfast"
-        video_crf = "28" if job.render_format == "fast_720p" else "23"
+        use_nvenc = getattr(settings, "LIVE_TV_RENDER_ENCODER", "cpu").lower() == "nvenc"
+        if use_nvenc:
+            encoder_args = [
+                "-c:v",
+                "h264_nvenc",
+                "-preset",
+                getattr(settings, "LIVE_TV_RENDER_NVENC_PRESET", "p1"),
+                "-cq",
+                str(getattr(settings, "LIVE_TV_RENDER_NVENC_CQ", "28")),
+            ]
+        else:
+            video_preset = "ultrafast" if job.render_format == "fast_720p" else "veryfast"
+            video_crf = "28" if job.render_format == "fast_720p" else "23"
+            encoder_args = [
+                "-c:v",
+                "libx264",
+                "-preset",
+                video_preset,
+                "-crf",
+                video_crf,
+            ]
 
         command = [
             ffmpeg_binary(),
@@ -392,12 +428,7 @@ def render_social_video_file(job):
             "[vout]",
             "-map",
             "0:a?",
-            "-c:v",
-            "libx264",
-            "-preset",
-            video_preset,
-            "-crf",
-            video_crf,
+            *encoder_args,
             "-c:a",
             "aac",
             "-shortest",
@@ -670,7 +701,7 @@ def mobile_admin_render_social_video_api(request):
         created_by=user,
     )
 
-    threading.Thread(target=run_social_render_job, args=(job.pk,), daemon=True).start()
+    queue_backend = enqueue_social_render_job(job.pk)
 
     return JsonResponse(
         {
@@ -679,6 +710,7 @@ def mobile_admin_render_social_video_api(request):
             "progress_percent": job.progress_percent,
             "title": job.title,
             "original_video_url": request.build_absolute_uri(job.original_video.url),
+            "queue_backend": queue_backend,
         },
         status=202,
     )
