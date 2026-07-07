@@ -133,6 +133,20 @@ def mask_secret(value):
     return f"{value[:4]}...{value[-4:]}"
 
 
+
+
+def tail_file(path, max_chars=2500):
+    if not path:
+        return ""
+    try:
+        file_path = Path(path)
+        if not file_path.exists():
+            return ""
+        text = file_path.read_text(encoding="utf-8", errors="replace")
+        return text[-max_chars:].strip()
+    except OSError:
+        return ""
+
 def process_is_running(pid):
     if not pid:
         return False
@@ -162,6 +176,7 @@ def serialize_facebook_live_setting(setting):
         "status": status,
         "process_id": setting.process_id if process_is_running(setting.process_id) else None,
         "last_error": setting.last_error,
+        "log_tail": tail_file(setting.log_file),
         "started_at": setting.started_at.isoformat() if setting.started_at else "",
         "stopped_at": setting.stopped_at.isoformat() if setting.stopped_at else "",
         "updated_at": setting.updated_at.isoformat() if setting.updated_at else "",
@@ -269,18 +284,34 @@ def start_facebook_live_process(setting):
         "flv",
         facebook_stream_target(setting),
     ])
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=(os.name != "nt"),
-    )
+    log_dir = Path(settings.MEDIA_ROOT) / "facebook-live-logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"facebook-live-{uuid4().hex}.log"
+    with log_path.open("w", encoding="utf-8", errors="replace") as log_file:
+        process = subprocess.Popen(
+            command,
+            stdout=log_file,
+            stderr=log_file,
+            text=True,
+            start_new_session=(os.name != "nt"),
+        )
+    time.sleep(3)
+    if process.poll() is not None:
+        error_text = tail_file(log_path) or "FFmpeg exited before Facebook accepted the stream."
+        setting.status = FacebookLiveSetting.Status.FAILED
+        setting.process_id = None
+        setting.last_error = error_text
+        setting.log_file = str(log_path)
+        setting.stopped_at = timezone.now()
+        setting.save(update_fields=["status", "process_id", "last_error", "log_file", "stopped_at", "updated_at"])
+        raise RuntimeError(error_text)
     setting.status = FacebookLiveSetting.Status.LIVE
     setting.process_id = process.pid
     setting.last_error = ""
+    setting.log_file = str(log_path)
     setting.started_at = timezone.now()
     setting.stopped_at = None
-    setting.save(update_fields=["status", "process_id", "last_error", "started_at", "stopped_at", "updated_at"])
+    setting.save(update_fields=["status", "process_id", "last_error", "log_file", "started_at", "stopped_at", "updated_at"])
     return setting
 
 

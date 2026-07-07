@@ -254,6 +254,7 @@ class FacebookLiveSetting(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.STOPPED)
     process_id = models.PositiveIntegerField(blank=True, null=True)
     last_error = models.TextField(blank=True)
+    log_file = models.CharField(max_length=500, blank=True)
     started_at = models.DateTimeField(blank=True, null=True)
     stopped_at = models.DateTimeField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)

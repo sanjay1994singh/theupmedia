@@ -41,11 +41,11 @@ class LiveTVSettingAdmin(admin.ModelAdmin):
 @admin.register(FacebookLiveSetting)
 class FacebookLiveSettingAdmin(admin.ModelAdmin):
     list_display = ("name", "is_enabled", "status", "process_id", "started_at", "stopped_at", "updated_at")
-    readonly_fields = ("control_buttons", "status", "process_id", "last_error", "started_at", "stopped_at", "updated_at")
+    readonly_fields = ("control_buttons", "status", "process_id", "last_error", "ffmpeg_log_tail", "started_at", "stopped_at", "updated_at")
     fieldsets = (
         ("Facebook RTMPS", {"fields": ("name", "is_enabled", "server_url", "stream_key")}),
         ("Controls", {"fields": ("control_buttons",)}),
-        ("Status", {"fields": ("status", "process_id", "last_error", "started_at", "stopped_at", "updated_at")}),
+        ("Status", {"fields": ("status", "process_id", "last_error", "ffmpeg_log_tail", "started_at", "stopped_at", "updated_at")}),
     )
 
     def control_buttons(self, obj):
@@ -69,6 +69,15 @@ class FacebookLiveSettingAdmin(admin.ModelAdmin):
             label,
         )
     control_buttons.short_description = "Facebook Live Control"
+
+    def ffmpeg_log_tail(self, obj):
+        if not obj or not obj.log_file:
+            return "-"
+        from .views import tail_file
+
+        return tail_file(obj.log_file, max_chars=4000) or "-"
+    ffmpeg_log_tail.short_description = "Recent FFmpeg/Facebook Log"
+
 
     def get_urls(self):
         urls = super().get_urls()
