@@ -246,7 +246,7 @@ def start_facebook_live_process(setting):
         return setting
     channel = active_live_tv_channel()
     input_source, should_loop = facebook_live_input_for_channel(channel)
-    command = [ffmpeg_binary(), "-hide_banner", "-nostdin"]
+    command = [ffmpeg_binary(), "-hide_banner", "-loglevel", "info", "-stats", "-stats_period", "2", "-nostdin"]
     if should_loop:
         command.extend(["-stream_loop", "-1"])
     command.extend([
@@ -281,6 +281,8 @@ def start_facebook_live_process(setting):
         "44100",
         "-ac",
         "2",
+        "-flvflags",
+        "no_duration_filesize",
         "-f",
         "flv",
         facebook_stream_target(setting),
@@ -296,7 +298,7 @@ def start_facebook_live_process(setting):
             text=True,
             start_new_session=(os.name != "nt"),
         )
-    time.sleep(3)
+    time.sleep(5)
     if process.poll() is not None:
         error_text = tail_file(log_path) or "FFmpeg exited before Facebook accepted the stream."
         setting.status = FacebookLiveSetting.Status.FAILED
