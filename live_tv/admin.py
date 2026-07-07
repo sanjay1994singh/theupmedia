@@ -1,4 +1,8 @@
 from django.contrib import admin
+from django.contrib import messages
+from django.shortcuts import redirect
+from django.urls import path, reverse
+from django.utils.html import format_html
 
 from .models import FacebookLiveSetting, LiveTVChannel, LiveTVSetting, MediaDownload, MobileAdminToken, MobileVideoUpload, SocialRenderedVideo
 
@@ -37,11 +41,63 @@ class LiveTVSettingAdmin(admin.ModelAdmin):
 @admin.register(FacebookLiveSetting)
 class FacebookLiveSettingAdmin(admin.ModelAdmin):
     list_display = ("name", "is_enabled", "status", "process_id", "started_at", "stopped_at", "updated_at")
-    readonly_fields = ("status", "process_id", "last_error", "started_at", "stopped_at", "updated_at")
+    readonly_fields = ("control_buttons", "status", "process_id", "last_error", "started_at", "stopped_at", "updated_at")
     fieldsets = (
         ("Facebook RTMPS", {"fields": ("name", "is_enabled", "server_url", "stream_key")}),
+        ("Controls", {"fields": ("control_buttons",)}),
         ("Status", {"fields": ("status", "process_id", "last_error", "started_at", "stopped_at", "updated_at")}),
     )
+
+    def control_buttons(self, obj):
+        if not obj or not obj.pk:
+            return "Save first, then start Facebook Live."
+        start_url = reverse("admin:live_tv_facebooklivesetting_start", args=[obj.pk])
+        stop_url = reverse("admin:live_tv_facebooklivesetting_stop", args=[obj.pk])
+        return format_html(
+            '<a class="button" style="background:#159447;color:#fff;padding:8px 14px;margin-right:8px;border-radius:4px" href="{}">Start Facebook Live</a>'
+            '<a class="button" style="background:#b91c1c;color:#fff;padding:8px 14px;border-radius:4px" href="{}">Stop Facebook Live</a>'
+            '<p style="margin-top:10px;color:#555">Save RTMPS settings first. Direct video/HLS source required; YouTube embed cannot be restreamed.</p>',
+            start_url,
+            stop_url,
+        )
+    control_buttons.short_description = "Facebook Live Control"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path("<int:object_id>/start-facebook-live/", self.admin_site.admin_view(self.start_facebook_live), name="live_tv_facebooklivesetting_start"),
+            path("<int:object_id>/stop-facebook-live/", self.admin_site.admin_view(self.stop_facebook_live), name="live_tv_facebooklivesetting_stop"),
+        ]
+        return custom_urls + urls
+
+    def start_facebook_live(self, request, object_id):
+        setting = self.get_object(request, object_id)
+        if not setting:
+            self.message_user(request, "Facebook Live setting not found.", level=messages.ERROR)
+            return redirect("admin:live_tv_facebooklivesetting_changelist")
+        try:
+            from .views import start_facebook_live_process
+
+            start_facebook_live_process(setting)
+            self.message_user(request, "Facebook Live start ho gaya.", level=messages.SUCCESS)
+        except Exception as exc:
+            setting.status = FacebookLiveSetting.Status.FAILED
+            setting.last_error = str(exc)
+            setting.process_id = None
+            setting.save(update_fields=["status", "last_error", "process_id", "updated_at"])
+            self.message_user(request, f"Facebook Live start failed: {exc}", level=messages.ERROR)
+        return redirect(reverse("admin:live_tv_facebooklivesetting_change", args=[object_id]))
+
+    def stop_facebook_live(self, request, object_id):
+        setting = self.get_object(request, object_id)
+        if not setting:
+            self.message_user(request, "Facebook Live setting not found.", level=messages.ERROR)
+            return redirect("admin:live_tv_facebooklivesetting_changelist")
+        from .views import stop_facebook_live_process
+
+        stop_facebook_live_process(setting)
+        self.message_user(request, "Facebook Live stop ho gaya.", level=messages.SUCCESS)
+        return redirect(reverse("admin:live_tv_facebooklivesetting_change", args=[object_id]))
 
     def has_add_permission(self, request):
         return not FacebookLiveSetting.objects.exists()
