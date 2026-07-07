@@ -18,8 +18,6 @@
               <div class="live-channel-logo">
                 {% if home_live_settings.channel_logo %}
                   <img src="{{ home_live_settings.channel_logo.url }}" alt="{{ SITE_NAME }} logo" loading="eager" decoding="async">
-                {% elif home_live_tv.channel_logo %}
-                  <img src="{{ home_live_tv.channel_logo.url }}" alt="{{ home_live_tv.title }} logo" loading="eager" decoding="async">
                 {% else %}
                   <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="{{ SITE_NAME }} logo" loading="eager" decoding="async">
                 {% endif %}

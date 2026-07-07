@@ -179,7 +179,7 @@ def serialize_channel_for_mobile(request, channel):
         "youtube_url": channel.youtube_url,
         "youtube_embed_url": youtube_embed_url,
         "poster_image": absolute_media_url(request, channel.poster_image),
-        "channel_logo": absolute_media_url(request, setting.channel_logo) or absolute_media_url(request, channel.channel_logo),
+        "channel_logo": absolute_media_url(request, setting.channel_logo),
         "is_live": channel.is_live,
         "autoplay": setting.autoplay,
         "live_label": setting.live_label,
@@ -266,14 +266,10 @@ def serialize_channel_for_admin(request, channel):
             "source_type": channel.source_type,
             "youtube_url": channel.youtube_url,
             "display_order": channel.display_order,
-            "show_lower_third": channel.show_lower_third,
-            "show_ticker": channel.show_ticker,
-            "show_channel_logo": channel.show_channel_logo,
             "meta_title": channel.meta_title,
             "meta_description": channel.meta_description,
             "video_file_url": channel_file_url(request, channel, "video_file"),
             "poster_image_url": channel_file_url(request, channel, "poster_image"),
-            "channel_logo_url": channel_file_url(request, channel, "channel_logo"),
             "global_channel_logo_url": absolute_media_url(request, live_tv_setting().channel_logo),
             "updated_at": channel.updated_at.isoformat(),
         }
@@ -903,10 +899,6 @@ def mobile_admin_channel_save_api(request):
     data.setdefault("display_order", "0")
     data["is_active"] = "on"
     data["is_live"] = "on"
-    data["autoplay"] = "on" if settings_obj.autoplay else ""
-    data["show_lower_third"] = "on"
-    data["show_ticker"] = "on"
-    data["show_channel_logo"] = "on"
 
     form = LiveTVChannelForm(data, request.FILES, instance=instance)
     if not form.is_valid():

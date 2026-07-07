@@ -22,18 +22,12 @@ class LiveTVChannel(models.Model):
     stream_url = models.URLField(blank=True, help_text="For HLS/M3U8 or external MP4/WebM URLs.")
     video_file = models.FileField(upload_to="live-tv/videos/%Y/%m/", blank=True, null=True)
     poster_image = models.ImageField(upload_to="live-tv/posters/%Y/%m/", blank=True, null=True)
-    channel_logo = models.ImageField(upload_to="live-tv/logos/", blank=True, null=True)
     is_active = models.BooleanField(default=True)
     is_live = models.BooleanField(default=True)
-    autoplay = models.BooleanField(default=False)
-
-    show_lower_third = models.BooleanField(default=True)
     lower_third_label = models.CharField(max_length=60, default="BREAKING NEWS")
     headline = models.CharField(max_length=180, default="The Up Media Live TV")
-    show_ticker = models.BooleanField(default=True)
     ticker_label = models.CharField(max_length=60, default="TODAY'S NEWS")
-    ticker_text = models.CharField(max_length=260, default="Latest updates from The Up Media")
-    show_channel_logo = models.BooleanField(default=True)
+    ticker_text = models.TextField(default="Latest updates from The Up Media")
 
     meta_title = models.CharField(max_length=160, blank=True)
     meta_description = models.CharField(max_length=220, blank=True)
@@ -59,7 +53,6 @@ class LiveTVChannel(models.Model):
                 old_files = {
                     "video_file": old_channel.video_file,
                     "poster_image": old_channel.poster_image,
-                    "channel_logo": old_channel.channel_logo,
                 }
 
         if not self.slug:
@@ -84,7 +77,6 @@ class LiveTVChannel(models.Model):
         files = {
             "video_file": self.video_file,
             "poster_image": self.poster_image,
-            "channel_logo": self.channel_logo,
         }
         result = super().delete(*args, **kwargs)
         for field_name, file_obj in files.items():
@@ -158,8 +150,6 @@ class LiveTVChannel(models.Model):
             "enablejsapi": "1",
             "origin": settings.SITE_DOMAIN,
         }
-        if self.autoplay:
-            params.update({"autoplay": "1", "mute": "1"})
         return f"https://www.youtube-nocookie.com/embed/{video_id}?{urlencode(params)}"
 
 
@@ -167,11 +157,11 @@ class LiveTVSetting(models.Model):
     name = models.CharField(max_length=120, default="The Up Media Live TV")
     live_label = models.CharField(max_length=40, default="LIVE")
     channel_logo = models.ImageField(upload_to="live-tv/settings/", blank=True, null=True)
-    show_live_badge = models.BooleanField(default=True)
     show_channel_logo = models.BooleanField(default=True)
     show_lower_third = models.BooleanField(default=True)
     show_ticker = models.BooleanField(default=True)
     autoplay = models.BooleanField(default=False)
+    show_live_badge = models.BooleanField(default=True)
     default_lower_third_label = models.CharField(max_length=60, default="BREAKING NEWS")
     default_headline = models.CharField(max_length=180, default="The Up Media Live TV")
     default_ticker_label = models.CharField(max_length=60, default="TODAY'S NEWS")
