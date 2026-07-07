@@ -1719,7 +1719,7 @@ time {
 }
 
 .ticker-track p {
-  animation: ticker-scroll 22s linear infinite;
+  animation: ticker-scroll var(--ticker-speed, 22s) linear infinite;
   color: #fff;
   flex: 0 0 auto;
   font-size: 14px;

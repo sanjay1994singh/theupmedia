@@ -64,7 +64,7 @@
             {% if home_live_settings.show_ticker %}
               <div class="news-ticker">
                 <span>{{ home_live_tv.ticker_label|default:home_live_settings.default_ticker_label }}</span>
-                <div class="ticker-track" aria-label="{{ home_live_tv.ticker_text|default:home_live_settings.default_ticker_text }}">
+                <div class="ticker-track" style="--ticker-speed: {{ home_live_settings.ticker_speed_seconds }}s" aria-label="{{ home_live_tv.ticker_text|default:home_live_settings.default_ticker_text }}">
                   <p>{{ home_live_tv.ticker_text|default:home_live_settings.default_ticker_text }}</p>
                   <p aria-hidden="true">{{ home_live_tv.ticker_text|default:home_live_settings.default_ticker_text }}</p>
                 </div>

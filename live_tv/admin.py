@@ -21,11 +21,11 @@ class LiveTVChannelAdmin(admin.ModelAdmin):
 
 @admin.register(LiveTVSetting)
 class LiveTVSettingAdmin(admin.ModelAdmin):
-    list_display = ("name", "live_label", "show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker", "updated_at")
+    list_display = ("name", "live_label", "ticker_speed_seconds", "show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker", "updated_at")
     fieldsets = (
         ("Branding", {"fields": ("name", "live_label", "channel_logo", "autoplay")}),
         ("Frame Visibility", {"fields": ("show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker")}),
-        ("Default Video Text", {"fields": ("default_lower_third_label", "default_headline", "default_ticker_label", "default_ticker_text")}),
+        ("Default Video Text", {"fields": ("default_lower_third_label", "default_headline", "default_ticker_label", "default_ticker_text", "ticker_speed_seconds")}),
     )
 
     def has_add_permission(self, request):
@@ -67,4 +67,3 @@ class SocialRenderedVideoAdmin(admin.ModelAdmin):
     list_filter = ("status", "created_at")
     search_fields = ("title", "headline", "ticker_text")
     readonly_fields = ("progress_percent", "created_at", "updated_at", "error_message")
-

@@ -166,6 +166,7 @@ class LiveTVSetting(models.Model):
     default_headline = models.CharField(max_length=180, default="The Up Media Live TV")
     default_ticker_label = models.CharField(max_length=60, default="TODAY'S NEWS")
     default_ticker_text = models.CharField(max_length=260, default="Latest updates from The Up Media")
+    ticker_speed_seconds = models.PositiveSmallIntegerField(default=22)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -288,4 +289,3 @@ class SocialRenderedVideo(models.Model):
 
     def __str__(self):
         return self.title
-

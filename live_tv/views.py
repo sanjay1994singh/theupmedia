@@ -139,6 +139,7 @@ def serialize_live_tv_setting(request, setting):
         "default_headline": setting.default_headline,
         "default_ticker_label": setting.default_ticker_label,
         "default_ticker_text": setting.default_ticker_text,
+        "ticker_speed_seconds": setting.ticker_speed_seconds,
         "updated_at": setting.updated_at.isoformat(),
     }
 
@@ -187,6 +188,7 @@ def serialize_channel_for_mobile(request, channel):
         "show_channel_logo": setting.show_channel_logo,
         "show_lower_third": setting.show_lower_third,
         "show_ticker": setting.show_ticker,
+        "ticker_speed_seconds": setting.ticker_speed_seconds,
         "settings": serialize_live_tv_setting(request, setting),
         "web_url": request.build_absolute_uri(channel.get_absolute_url()),
         "ads": mobile_live_tv_ads(),
@@ -869,6 +871,11 @@ def mobile_admin_settings_save_api(request):
     setting.default_headline = request.POST.get("default_headline", setting.default_headline).strip()[:180] or setting.default_headline
     setting.default_ticker_label = request.POST.get("default_ticker_label", setting.default_ticker_label).strip()[:60] or setting.default_ticker_label
     setting.default_ticker_text = request.POST.get("default_ticker_text", setting.default_ticker_text).strip()[:260] or setting.default_ticker_text
+    if "ticker_speed_seconds" in request.POST:
+        try:
+            setting.ticker_speed_seconds = max(6, min(120, int(request.POST.get("ticker_speed_seconds") or setting.ticker_speed_seconds)))
+        except (TypeError, ValueError):
+            pass
     for field in ["show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker", "autoplay"]:
         if field in request.POST:
             setattr(setting, field, request.POST.get(field) in {"1", "true", "on", "yes"})
@@ -1175,4 +1182,3 @@ def delete_channel(request, pk):
     channel.delete()
     messages.success(request, "Live TV channel deleted.")
     return redirect("live_tv:dashboard")
-

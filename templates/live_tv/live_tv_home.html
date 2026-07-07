@@ -66,7 +66,7 @@
             {% if live_settings.show_ticker %}
               <div class="news-ticker">
                 <span>{{ active_channel.ticker_label|default:live_settings.default_ticker_label }}</span>
-                <div class="ticker-track" aria-label="{{ active_channel.ticker_text|default:live_settings.default_ticker_text }}">
+                <div class="ticker-track" style="--ticker-speed: {{ live_settings.ticker_speed_seconds }}s" aria-label="{{ active_channel.ticker_text|default:live_settings.default_ticker_text }}">
                   <p>{{ active_channel.ticker_text|default:live_settings.default_ticker_text }}</p>
                   <p aria-hidden="true">{{ active_channel.ticker_text|default:live_settings.default_ticker_text }}</p>
                 </div>

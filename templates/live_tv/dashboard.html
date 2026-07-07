@@ -116,7 +116,7 @@
               {% if live_settings.show_ticker %}
                 <div class="news-ticker">
                   <span>{{ preview_channel.ticker_label }}</span>
-                  <div class="ticker-track" aria-label="{{ preview_channel.ticker_text }}">
+                  <div class="ticker-track" style="--ticker-speed: {{ live_settings.ticker_speed_seconds }}s" aria-label="{{ preview_channel.ticker_text }}">
                     <p>{{ preview_channel.ticker_text }}</p>
                     <p aria-hidden="true">{{ preview_channel.ticker_text }}</p>
                   </div>
