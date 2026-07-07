@@ -239,6 +239,41 @@ class MobileAdminToken(models.Model):
         return token
 
 
+
+class FacebookLiveSetting(models.Model):
+    class Status(models.TextChoices):
+        STOPPED = "stopped", "Stopped"
+        STARTING = "starting", "Starting"
+        LIVE = "live", "Live"
+        FAILED = "failed", "Failed"
+
+    name = models.CharField(max_length=120, default="Facebook Live")
+    server_url = models.URLField(max_length=500, default="rtmps://live-api-s.facebook.com:443/rtmp/")
+    stream_key = models.CharField(max_length=500, blank=True)
+    is_enabled = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.STOPPED)
+    process_id = models.PositiveIntegerField(blank=True, null=True)
+    last_error = models.TextField(blank=True)
+    started_at = models.DateTimeField(blank=True, null=True)
+    stopped_at = models.DateTimeField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Facebook Live Setting"
+        verbose_name_plural = "Facebook Live Settings"
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def get_solo(cls):
+        setting, _created = cls.objects.get_or_create(pk=1, defaults={"name": "Facebook Live"})
+        return setting
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
 class MediaDownload(models.Model):
     class Status(models.TextChoices):
         PROCESSING = "processing", "Processing"

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import LiveTVChannel, LiveTVSetting, MediaDownload, MobileAdminToken, MobileVideoUpload, SocialRenderedVideo
+from .models import FacebookLiveSetting, LiveTVChannel, LiveTVSetting, MediaDownload, MobileAdminToken, MobileVideoUpload, SocialRenderedVideo
 
 
 @admin.register(LiveTVChannel)
@@ -33,6 +33,22 @@ class LiveTVSettingAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+@admin.register(FacebookLiveSetting)
+class FacebookLiveSettingAdmin(admin.ModelAdmin):
+    list_display = ("name", "is_enabled", "status", "process_id", "started_at", "stopped_at", "updated_at")
+    readonly_fields = ("status", "process_id", "last_error", "started_at", "stopped_at", "updated_at")
+    fieldsets = (
+        ("Facebook RTMPS", {"fields": ("name", "is_enabled", "server_url", "stream_key")}),
+        ("Status", {"fields": ("status", "process_id", "last_error", "started_at", "stopped_at", "updated_at")}),
+    )
+
+    def has_add_permission(self, request):
+        return not FacebookLiveSetting.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
 @admin.register(MobileVideoUpload)
 class MobileVideoUploadAdmin(admin.ModelAdmin):
     list_display = ("title", "status", "uploaded_by_name", "uploaded_by_phone", "created_at")

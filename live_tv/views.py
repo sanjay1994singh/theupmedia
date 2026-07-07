@@ -26,7 +26,7 @@ from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_POST
 
 from .forms import LiveTVChannelForm
-from .models import LiveTVChannel, LiveTVSetting, MediaDownload, MobileAdminToken, MobileVideoUpload, SocialRenderedVideo
+from .models import FacebookLiveSetting, LiveTVChannel, LiveTVSetting, MediaDownload, MobileAdminToken, MobileVideoUpload, SocialRenderedVideo
 from news.models import Article
 
 RESTRICTED_DOWNLOAD_HOSTS = {
@@ -119,6 +119,186 @@ def absolute_media_url(request, file_obj):
     return request.build_absolute_uri(file_obj.url)
 
 
+
+
+def facebook_live_setting():
+    return FacebookLiveSetting.get_solo()
+
+
+def mask_secret(value):
+    if not value:
+        return ""
+    if len(value) <= 8:
+        return "********"
+    return f"{value[:4]}...{value[-4:]}"
+
+
+def process_is_running(pid):
+    if not pid:
+        return False
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def serialize_facebook_live_setting(setting):
+    is_running = process_is_running(setting.process_id)
+    status = FacebookLiveSetting.Status.LIVE if is_running and setting.status in {FacebookLiveSetting.Status.STARTING, FacebookLiveSetting.Status.LIVE} else setting.status
+    if setting.process_id and not is_running and setting.status in {FacebookLiveSetting.Status.STARTING, FacebookLiveSetting.Status.LIVE}:
+        setting.status = FacebookLiveSetting.Status.STOPPED
+        setting.process_id = None
+        setting.stopped_at = timezone.now()
+        setting.save(update_fields=["status", "process_id", "stopped_at", "updated_at"])
+        status = setting.status
+    return {
+        "id": setting.pk,
+        "name": setting.name,
+        "server_url": setting.server_url,
+        "stream_key_set": bool(setting.stream_key),
+        "stream_key_masked": mask_secret(setting.stream_key),
+        "is_enabled": setting.is_enabled,
+        "status": status,
+        "process_id": setting.process_id if process_is_running(setting.process_id) else None,
+        "last_error": setting.last_error,
+        "started_at": setting.started_at.isoformat() if setting.started_at else "",
+        "stopped_at": setting.stopped_at.isoformat() if setting.stopped_at else "",
+        "updated_at": setting.updated_at.isoformat() if setting.updated_at else "",
+    }
+
+
+def active_live_tv_channel():
+    channels = LiveTVChannel.objects.filter(is_active=True)
+    return channels.filter(is_live=True).first() or channels.first()
+
+
+def facebook_stream_target(setting):
+    server_url = (setting.server_url or "").strip()
+    stream_key = (setting.stream_key or "").strip()
+    if not server_url or not stream_key:
+        raise ValueError("Facebook server URL and stream key required.")
+    if not server_url.endswith("/"):
+        server_url = f"{server_url}/"
+    return f"{server_url}{stream_key}"
+
+
+def facebook_live_input_for_channel(channel):
+    if not channel:
+        raise ValueError("No active Live TV channel found.")
+    if channel.player_source_type == LiveTVChannel.SourceType.DIRECT and channel.video_file:
+        return str(Path(channel.video_file.path)), True
+    if channel.player_source_type == LiveTVChannel.SourceType.HLS and channel.stream_url:
+        return channel.stream_url, False
+    raise ValueError("Facebook Live supports uploaded/direct video or HLS stream only. YouTube embed cannot be restreamed.")
+
+
+def facebook_live_filter(channel):
+    setting = live_tv_setting()
+    label_text = channel.lower_third_label or setting.default_lower_third_label
+    headline_text = channel.headline or setting.default_headline
+    ticker_text = channel.ticker_text or setting.default_ticker_text
+    title_text = channel.title or setting.name
+    label_file = ffmpeg_text_file(label_text, "fb-label")
+    headline_file = ffmpeg_text_file(headline_text, "fb-headline")
+    ticker_file = ffmpeg_text_file("    |    ".join([ticker_text] * 4), "fb-ticker")
+    title_file = ffmpeg_text_file(title_text, "fb-title")
+    devanagari_font = ffmpeg_font_file()
+    latin_font = ffmpeg_latin_font_file()
+    label_font_arg = ffmpeg_font_arg_for_text(label_text, devanagari_font, latin_font)
+    headline_font_arg = ffmpeg_font_arg_for_text(headline_text, devanagari_font, latin_font)
+    ticker_font_arg = ffmpeg_font_arg_for_text(ticker_text, devanagari_font, latin_font)
+    title_font_arg = ffmpeg_font_arg_for_text(title_text, devanagari_font, latin_font)
+    return ",".join([
+        "scale=1280:720:force_original_aspect_ratio=decrease",
+        "pad=1280:720:(ow-iw)/2:(oh-ih)/2:black",
+        "drawbox=x=22:y=24:w=98:h=44:color=#d71920@0.95:t=fill",
+        f"drawtext=text='LIVE'{label_font_arg}:x=42:y=34:fontsize=24:fontcolor=white",
+        "drawbox=x=0:y=560:w=1280:h=58:color=white@0.94:t=fill",
+        "drawbox=x=0:y=560:w=200:h=58:color=#d71920@0.98:t=fill",
+        f"drawtext=textfile='{ffmpeg_path(label_file)}'{label_font_arg}:x=24:y=576:fontsize=28:fontcolor=white",
+        f"drawtext=textfile='{ffmpeg_path(headline_file)}'{headline_font_arg}:x=220:y=573:fontsize=30:fontcolor=#111827",
+        "drawbox=x=0:y=618:w=1280:h=40:color=#f8d24c@0.98:t=fill",
+        f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x=w-mod(t*160\\,w+tw):y=628:fontsize=22:fontcolor=#111827",
+        "drawbox=x=0:y=658:w=1280:h=62:color=#08111f@0.96:t=fill",
+        f"drawtext=textfile='{ffmpeg_path(title_file)}'{title_font_arg}:x=26:y=674:fontsize=28:fontcolor=white",
+    ])
+
+
+def start_facebook_live_process(setting):
+    if process_is_running(setting.process_id):
+        return setting
+    channel = active_live_tv_channel()
+    input_source, should_loop = facebook_live_input_for_channel(channel)
+    command = [ffmpeg_binary(), "-hide_banner", "-nostdin"]
+    if should_loop:
+        command.extend(["-stream_loop", "-1"])
+    command.extend([
+        "-re",
+        "-i",
+        input_source,
+        "-vf",
+        facebook_live_filter(channel),
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-tune",
+        "zerolatency",
+        "-pix_fmt",
+        "yuv420p",
+        "-r",
+        "30",
+        "-g",
+        "60",
+        "-b:v",
+        "2500k",
+        "-maxrate",
+        "2500k",
+        "-bufsize",
+        "5000k",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-ar",
+        "44100",
+        "-ac",
+        "2",
+        "-f",
+        "flv",
+        facebook_stream_target(setting),
+    ])
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=(os.name != "nt"),
+    )
+    setting.status = FacebookLiveSetting.Status.LIVE
+    setting.process_id = process.pid
+    setting.last_error = ""
+    setting.started_at = timezone.now()
+    setting.stopped_at = None
+    setting.save(update_fields=["status", "process_id", "last_error", "started_at", "stopped_at", "updated_at"])
+    return setting
+
+
+def stop_facebook_live_process(setting):
+    pid = setting.process_id
+    if pid and process_is_running(pid):
+        try:
+            if os.name != "nt":
+                os.killpg(os.getpgid(int(pid)), signal.SIGTERM)
+            else:
+                os.kill(int(pid), signal.SIGTERM)
+        except OSError as exc:
+            setting.last_error = str(exc)
+    setting.status = FacebookLiveSetting.Status.STOPPED
+    setting.process_id = None
+    setting.stopped_at = timezone.now()
+    setting.save(update_fields=["status", "process_id", "last_error", "stopped_at", "updated_at"])
+    return setting
 
 def live_tv_setting():
     return LiveTVSetting.get_solo()
@@ -849,6 +1029,7 @@ def mobile_admin_dashboard_api(request):
         {
             "user": {"id": user.pk, "username": user.get_username(), "name": user.get_full_name() or user.get_username()},
             "settings": serialize_live_tv_setting(request, settings_obj),
+            "facebook_live": serialize_facebook_live_setting(facebook_live_setting()),
             "channels": [serialize_channel_for_admin(request, channel) for channel in channels],
             "mobile_uploads": [serialize_mobile_upload(request, upload) for upload in uploads],
             "rendered_videos": [serialize_render_job(request, job) for job in rendered_videos],
@@ -1189,3 +1370,62 @@ def delete_channel(request, pk):
     channel.delete()
     messages.success(request, "Live TV channel deleted.")
     return redirect("live_tv:dashboard")
+@csrf_exempt
+@require_POST
+def mobile_admin_facebook_live_save_api(request):
+    _user, error = mobile_admin_required(request)
+    if error:
+        return error
+
+    setting = facebook_live_setting()
+    setting.name = request.POST.get("name", setting.name).strip()[:120] or setting.name
+    setting.server_url = request.POST.get("server_url", setting.server_url).strip()[:500] or setting.server_url
+    stream_key = request.POST.get("stream_key", "").strip()
+    if stream_key:
+        setting.stream_key = stream_key[:500]
+    if "is_enabled" in request.POST:
+        setting.is_enabled = request.POST.get("is_enabled") in {"1", "true", "on", "yes"}
+    setting.save()
+    return JsonResponse({"facebook_live": serialize_facebook_live_setting(setting)})
+
+
+@csrf_exempt
+@require_POST
+def mobile_admin_facebook_live_start_api(request):
+    _user, error = mobile_admin_required(request)
+    if error:
+        return error
+
+    setting = facebook_live_setting()
+    if not setting.is_enabled:
+        return JsonResponse({"detail": "Facebook Live is disabled. Enable it first."}, status=400)
+    try:
+        setting = start_facebook_live_process(setting)
+    except Exception as exc:
+        setting.status = FacebookLiveSetting.Status.FAILED
+        setting.last_error = str(exc)
+        setting.process_id = None
+        setting.stopped_at = timezone.now()
+        setting.save(update_fields=["status", "last_error", "process_id", "stopped_at", "updated_at"])
+        return JsonResponse({"detail": "Facebook Live start failed.", "error": str(exc), "facebook_live": serialize_facebook_live_setting(setting)}, status=400)
+    return JsonResponse({"facebook_live": serialize_facebook_live_setting(setting)})
+
+
+@csrf_exempt
+@require_POST
+def mobile_admin_facebook_live_stop_api(request):
+    _user, error = mobile_admin_required(request)
+    if error:
+        return error
+
+    setting = stop_facebook_live_process(facebook_live_setting())
+    return JsonResponse({"facebook_live": serialize_facebook_live_setting(setting)})
+
+
+@require_GET
+def mobile_admin_facebook_live_status_api(request):
+    _user, error = mobile_admin_required(request)
+    if error:
+        return error
+
+    return JsonResponse({"facebook_live": serialize_facebook_live_setting(facebook_live_setting())})
