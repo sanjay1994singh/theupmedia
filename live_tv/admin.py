@@ -51,52 +51,53 @@ class FacebookLiveSettingAdmin(admin.ModelAdmin):
     def control_buttons(self, obj):
         if not obj or not obj.pk:
             return "Save first, then start Facebook Live."
-        start_url = reverse("admin:live_tv_facebooklivesetting_start", args=[obj.pk])
-        stop_url = reverse("admin:live_tv_facebooklivesetting_stop", args=[obj.pk])
+        from .views import process_is_running
+
+        is_live = process_is_running(obj.process_id) or obj.status in {FacebookLiveSetting.Status.STARTING, FacebookLiveSetting.Status.LIVE}
+        action_url = reverse("admin:live_tv_facebooklivesetting_toggle", args=[obj.pk])
+        if is_live:
+            label = "Stop Facebook Live"
+            color = "#b91c1c"
+        else:
+            label = "Start Facebook Live"
+            color = "#159447"
         return format_html(
-            '<a class="button" style="background:#159447;color:#fff;padding:8px 14px;margin-right:8px;border-radius:4px" href="{}">Start Facebook Live</a>'
-            '<a class="button" style="background:#b91c1c;color:#fff;padding:8px 14px;border-radius:4px" href="{}">Stop Facebook Live</a>'
+            '<a class="button" style="background:{};color:#fff;padding:8px 16px;border-radius:4px" href="{}">{}</a>'
             '<p style="margin-top:10px;color:#555">Save RTMPS settings first. Direct video/HLS source required; YouTube embed cannot be restreamed.</p>',
-            start_url,
-            stop_url,
+            color,
+            action_url,
+            label,
         )
     control_buttons.short_description = "Facebook Live Control"
 
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
-            path("<int:object_id>/start-facebook-live/", self.admin_site.admin_view(self.start_facebook_live), name="live_tv_facebooklivesetting_start"),
-            path("<int:object_id>/stop-facebook-live/", self.admin_site.admin_view(self.stop_facebook_live), name="live_tv_facebooklivesetting_stop"),
+            path("<int:object_id>/toggle-facebook-live/", self.admin_site.admin_view(self.toggle_facebook_live), name="live_tv_facebooklivesetting_toggle"),
         ]
         return custom_urls + urls
 
-    def start_facebook_live(self, request, object_id):
+    def toggle_facebook_live(self, request, object_id):
         setting = self.get_object(request, object_id)
         if not setting:
             self.message_user(request, "Facebook Live setting not found.", level=messages.ERROR)
             return redirect("admin:live_tv_facebooklivesetting_changelist")
-        try:
-            from .views import start_facebook_live_process
+        from .views import process_is_running, start_facebook_live_process, stop_facebook_live_process
 
-            start_facebook_live_process(setting)
-            self.message_user(request, "Facebook Live start ho gaya.", level=messages.SUCCESS)
-        except Exception as exc:
-            setting.status = FacebookLiveSetting.Status.FAILED
-            setting.last_error = str(exc)
-            setting.process_id = None
-            setting.save(update_fields=["status", "last_error", "process_id", "updated_at"])
-            self.message_user(request, f"Facebook Live start failed: {exc}", level=messages.ERROR)
-        return redirect(reverse("admin:live_tv_facebooklivesetting_change", args=[object_id]))
-
-    def stop_facebook_live(self, request, object_id):
-        setting = self.get_object(request, object_id)
-        if not setting:
-            self.message_user(request, "Facebook Live setting not found.", level=messages.ERROR)
-            return redirect("admin:live_tv_facebooklivesetting_changelist")
-        from .views import stop_facebook_live_process
-
-        stop_facebook_live_process(setting)
-        self.message_user(request, "Facebook Live stop ho gaya.", level=messages.SUCCESS)
+        is_live = process_is_running(setting.process_id) or setting.status in {FacebookLiveSetting.Status.STARTING, FacebookLiveSetting.Status.LIVE}
+        if is_live:
+            stop_facebook_live_process(setting)
+            self.message_user(request, "Facebook Live stop ho gaya.", level=messages.SUCCESS)
+        else:
+            try:
+                start_facebook_live_process(setting)
+                self.message_user(request, "Facebook Live start ho gaya.", level=messages.SUCCESS)
+            except Exception as exc:
+                setting.status = FacebookLiveSetting.Status.FAILED
+                setting.last_error = str(exc)
+                setting.process_id = None
+                setting.save(update_fields=["status", "last_error", "process_id", "updated_at"])
+                self.message_user(request, f"Facebook Live start failed: {exc}", level=messages.ERROR)
         return redirect(reverse("admin:live_tv_facebooklivesetting_change", args=[object_id]))
 
     def has_add_permission(self, request):
