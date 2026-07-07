@@ -229,11 +229,14 @@ class MobileAdminToken(models.Model):
 
     @classmethod
     def create_for_user(cls, user, device_name=""):
-        return cls.objects.create(
+        clean_device_name = device_name[:160]
+        token = cls.objects.create(
             user=user,
             key=secrets.token_urlsafe(40),
-            device_name=device_name[:160],
+            device_name=clean_device_name,
         )
+        cls.objects.filter(user=user).exclude(pk=token.pk).delete()
+        return token
 
 
 class MediaDownload(models.Model):
