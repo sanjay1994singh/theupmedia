@@ -140,6 +140,7 @@ def serialize_live_tv_setting(request, setting):
         "default_ticker_label": setting.default_ticker_label,
         "default_ticker_text": setting.default_ticker_text,
         "ticker_speed_seconds": setting.ticker_speed_seconds,
+        "mobile_ticker_speed_seconds": setting.mobile_ticker_speed_seconds,
         "updated_at": setting.updated_at.isoformat(),
     }
 
@@ -189,6 +190,7 @@ def serialize_channel_for_mobile(request, channel):
         "show_lower_third": setting.show_lower_third,
         "show_ticker": setting.show_ticker,
         "ticker_speed_seconds": setting.ticker_speed_seconds,
+        "mobile_ticker_speed_seconds": setting.mobile_ticker_speed_seconds,
         "settings": serialize_live_tv_setting(request, setting),
         "web_url": request.build_absolute_uri(channel.get_absolute_url()),
         "ads": mobile_live_tv_ads(),
@@ -874,6 +876,11 @@ def mobile_admin_settings_save_api(request):
     if "ticker_speed_seconds" in request.POST:
         try:
             setting.ticker_speed_seconds = max(6, min(120, int(request.POST.get("ticker_speed_seconds") or setting.ticker_speed_seconds)))
+        except (TypeError, ValueError):
+            pass
+    if "mobile_ticker_speed_seconds" in request.POST:
+        try:
+            setting.mobile_ticker_speed_seconds = max(6, min(120, int(request.POST.get("mobile_ticker_speed_seconds") or setting.mobile_ticker_speed_seconds)))
         except (TypeError, ValueError):
             pass
     for field in ["show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker", "autoplay"]:
