@@ -248,7 +248,7 @@ class FacebookLiveSetting(models.Model):
         FAILED = "failed", "Failed"
 
     name = models.CharField(max_length=120, default="Facebook Live")
-    server_url = models.URLField(max_length=500, default="rtmps://live-api-s.facebook.com:443/rtmp/")
+    server_url = models.CharField(max_length=500, default="rtmps://live-api-s.facebook.com:443/rtmp/")
     stream_key = models.CharField(max_length=500, blank=True)
     is_enabled = models.BooleanField(default=False)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.STOPPED)
