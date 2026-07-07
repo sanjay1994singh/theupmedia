@@ -109,6 +109,7 @@ def live_tv_context(active_channel, channels, force_autoplay=False):
         "loop_same_channel": bool(active_channel and next_channel and active_channel.pk == next_channel.pk),
         "force_autoplay": force_autoplay,
         "latest_news": latest_news,
+        "live_settings": live_tv_setting(),
     }
 
 

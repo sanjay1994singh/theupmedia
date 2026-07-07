@@ -10,18 +10,20 @@
       {% if home_live_tv %}
         <div class="live-player-card">
           <div class="live-player-frame {% if home_live_tv.player_source_type == 'direct' or home_live_tv.player_source_type == 'hls' %}live-player-frame--native-controls{% endif %}" data-next-url="{% if home_live_tv_next %}{{ home_live_tv_next.get_absolute_url }}{% endif %}" data-loop-same="{% if home_live_tv_loop_same %}true{% else %}false{% endif %}">
-            {% if home_live_tv.is_live %}
-              <span class="live-badge"><span></span>Live</span>
+            {% if home_live_tv.is_live and home_live_settings.show_live_badge %}
+              <span class="live-badge"><span></span>{{ home_live_settings.live_label }}</span>
             {% endif %}
 
-            {% if home_live_tv.show_channel_logo %}
+            {% if home_live_settings.show_channel_logo %}
               <div class="live-channel-logo">
-                {% if home_live_tv.channel_logo %}
+                {% if home_live_settings.channel_logo %}
+                  <img src="{{ home_live_settings.channel_logo.url }}" alt="{{ SITE_NAME }} logo" loading="eager" decoding="async">
+                {% elif home_live_tv.channel_logo %}
                   <img src="{{ home_live_tv.channel_logo.url }}" alt="{{ home_live_tv.title }} logo" loading="eager" decoding="async">
                 {% else %}
                   <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="{{ SITE_NAME }} logo" loading="eager" decoding="async">
                 {% endif %}
-                <strong>Live</strong>
+                <strong>{{ home_live_settings.live_label }}</strong>
               </div>
             {% endif %}
 
@@ -35,12 +37,12 @@
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowfullscreen></iframe>
             {% elif home_live_tv.player_source_type == "direct" %}
-              <video controls preload="none" {% if home_live_tv.autoplay %}autoplay muted{% endif %} playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
+              <video controls preload="none" {% if home_live_settings.autoplay %}autoplay muted{% endif %} playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
                 <source src="{{ home_live_tv.video_file.url }}" type="{{ home_live_tv.video_mime_type }}">
                 Your browser does not support video playback.
               </video>
             {% elif home_live_tv.player_source_type == "hls" %}
-              <video controls preload="none" {% if home_live_tv.autoplay %}autoplay muted{% endif %} playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
+              <video controls preload="none" {% if home_live_settings.autoplay %}autoplay muted{% endif %} playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
                 <source src="{{ home_live_tv.stream_url }}" type="application/x-mpegURL">
                 Your browser does not support this live stream.
               </video>
@@ -53,20 +55,20 @@
               </div>
             {% endif %}
 
-            {% if home_live_tv.show_lower_third %}
+            {% if home_live_settings.show_lower_third %}
               <div class="lower-third">
-                <span>{{ home_live_tv.lower_third_label }}</span>
-                <strong>{{ home_live_tv.headline }}</strong>
+                <span>{{ home_live_tv.lower_third_label|default:home_live_settings.default_lower_third_label }}</span>
+                <strong>{{ home_live_tv.headline|default:home_live_settings.default_headline }}</strong>
                 <em>News</em>
               </div>
             {% endif %}
 
-            {% if home_live_tv.show_ticker %}
+            {% if home_live_settings.show_ticker %}
               <div class="news-ticker">
-                <span>{{ home_live_tv.ticker_label }}</span>
-                <div class="ticker-track" aria-label="{{ home_live_tv.ticker_text }}">
-                  <p>{{ home_live_tv.ticker_text }}</p>
-                  <p aria-hidden="true">{{ home_live_tv.ticker_text }}</p>
+                <span>{{ home_live_tv.ticker_label|default:home_live_settings.default_ticker_label }}</span>
+                <div class="ticker-track" aria-label="{{ home_live_tv.ticker_text|default:home_live_settings.default_ticker_text }}">
+                  <p>{{ home_live_tv.ticker_text|default:home_live_settings.default_ticker_text }}</p>
+                  <p aria-hidden="true">{{ home_live_tv.ticker_text|default:home_live_settings.default_ticker_text }}</p>
                 </div>
               </div>
             {% endif %}

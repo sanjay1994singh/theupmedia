@@ -12,18 +12,20 @@
       <div class="live-tv-main">
         <div class="live-player-card">
           <div class="live-player-frame {% if active_channel.player_source_type == 'direct' or active_channel.player_source_type == 'hls' %}live-player-frame--native-controls{% endif %}" data-next-url="{% if next_channel %}{{ next_channel.get_absolute_url }}{% endif %}" data-loop-same="{% if loop_same_channel %}true{% else %}false{% endif %}" data-force-autoplay="{% if force_autoplay %}true{% else %}false{% endif %}">
-            {% if active_channel.is_live %}
-              <span class="live-badge"><span></span>Live</span>
+            {% if active_channel.is_live and live_settings.show_live_badge %}
+              <span class="live-badge"><span></span>{{ live_settings.live_label }}</span>
             {% endif %}
 
-            {% if active_channel.show_channel_logo %}
+            {% if live_settings.show_channel_logo %}
               <div class="live-channel-logo">
-                {% if active_channel.channel_logo %}
+                {% if live_settings.channel_logo %}
+                  <img src="{{ live_settings.channel_logo.url }}" alt="{{ SITE_NAME }} logo" loading="eager" decoding="async">
+                {% elif active_channel.channel_logo %}
                   <img src="{{ active_channel.channel_logo.url }}" alt="{{ active_channel.title }} logo" loading="eager" decoding="async">
                 {% else %}
                   <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="{{ SITE_NAME }} logo" loading="eager" decoding="async">
                 {% endif %}
-                <strong>Live</strong>
+                <strong>{{ live_settings.live_label }}</strong>
               </div>
             {% endif %}
 
@@ -37,12 +39,12 @@
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowfullscreen></iframe>
             {% elif active_channel.player_source_type == "direct" %}
-              <video controls preload="none" {% if active_channel.autoplay or force_autoplay %}autoplay muted{% endif %} playsinline {% if active_channel.poster_image %}poster="{{ active_channel.poster_image.url }}"{% endif %}>
+              <video controls preload="none" {% if live_settings.autoplay or force_autoplay %}autoplay muted{% endif %} playsinline {% if active_channel.poster_image %}poster="{{ active_channel.poster_image.url }}"{% endif %}>
                 <source src="{{ active_channel.video_file.url }}" type="{{ active_channel.video_mime_type }}">
                 Your browser does not support video playback.
               </video>
             {% elif active_channel.player_source_type == "hls" %}
-              <video controls preload="none" {% if active_channel.autoplay or force_autoplay %}autoplay muted{% endif %} playsinline {% if active_channel.poster_image %}poster="{{ active_channel.poster_image.url }}"{% endif %}>
+              <video controls preload="none" {% if live_settings.autoplay or force_autoplay %}autoplay muted{% endif %} playsinline {% if active_channel.poster_image %}poster="{{ active_channel.poster_image.url }}"{% endif %}>
                 <source src="{{ active_channel.stream_url }}" type="application/x-mpegURL">
                 Your browser does not support this live stream.
               </video>
@@ -55,20 +57,20 @@
               </div>
             {% endif %}
 
-            {% if active_channel.show_lower_third %}
+            {% if live_settings.show_lower_third %}
               <div class="lower-third">
-                <span>{{ active_channel.lower_third_label }}</span>
-                <strong>{{ active_channel.headline }}</strong>
+                <span>{{ active_channel.lower_third_label|default:live_settings.default_lower_third_label }}</span>
+                <strong>{{ active_channel.headline|default:live_settings.default_headline }}</strong>
                 <em>News</em>
               </div>
             {% endif %}
 
-            {% if active_channel.show_ticker %}
+            {% if live_settings.show_ticker %}
               <div class="news-ticker">
-                <span>{{ active_channel.ticker_label }}</span>
-                <div class="ticker-track" aria-label="{{ active_channel.ticker_text }}">
-                  <p>{{ active_channel.ticker_text }}</p>
-                  <p aria-hidden="true">{{ active_channel.ticker_text }}</p>
+                <span>{{ active_channel.ticker_label|default:live_settings.default_ticker_label }}</span>
+                <div class="ticker-track" aria-label="{{ active_channel.ticker_text|default:live_settings.default_ticker_text }}">
+                  <p>{{ active_channel.ticker_text|default:live_settings.default_ticker_text }}</p>
+                  <p aria-hidden="true">{{ active_channel.ticker_text|default:live_settings.default_ticker_text }}</p>
                 </div>
               </div>
             {% endif %}
