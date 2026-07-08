@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Software Services - {{ SITE_NAME }}{% endblock %}
 {% block meta_description %}Professional Django, Python, SEO, automation, and Gen AI web development services by {{ SITE_NAME }}.{% endblock %}
@@ -25,6 +26,11 @@
   <div class="service-grid">
     {% for service in services %}
       <article class="service-card">
+        {% if service.image_path %}
+          <a class="service-card-media" href="{{ service.get_absolute_url }}">
+            <img src="{% static service.image_path %}" alt="{% if service.name_hi %}{{ service.name_hi }}{% else %}{{ service.name }}{% endif %}" loading="lazy">
+          </a>
+        {% endif %}
         {% if service.icon_label %}<span class="service-icon">{{ service.icon_label }}</span>{% endif %}
         <h3>
           <a href="{{ service.get_absolute_url }}">

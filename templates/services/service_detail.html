@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}{{ service.meta_title }} - {{ SITE_NAME }}{% endblock %}
 {% block meta_description %}{{ service.meta_description }}{% endblock %}
@@ -11,6 +12,11 @@
   <p class="eyebrow">Service</p>
   <h1>{% if service.name_hi %}{{ service.name_hi }}{% else %}{{ service.name }}{% endif %}</h1>
   {% if service.name_hi %}<p class="service-english-title">{{ service.name }}</p>{% endif %}
+  {% if service.image_path %}
+    <figure class="service-hero-image">
+      <img src="{% static service.image_path %}" alt="{% if service.name_hi %}{{ service.name_hi }}{% else %}{{ service.name }}{% endif %}" loading="eager">
+    </figure>
+  {% endif %}
   {% if service.short_description_hi %}<p>{{ service.short_description_hi }}</p>{% endif %}
   <p>{{ service.short_description }}</p>
   <div class="info-list">
@@ -36,6 +42,11 @@
   <div class="service-grid">
     {% for item in related_services %}
       <article class="service-card">
+        {% if item.image_path %}
+          <a class="service-card-media" href="{{ item.get_absolute_url }}">
+            <img src="{% static item.image_path %}" alt="{% if item.name_hi %}{{ item.name_hi }}{% else %}{{ item.name }}{% endif %}" loading="lazy">
+          </a>
+        {% endif %}
         {% if item.icon_label %}<span class="service-icon">{{ item.icon_label }}</span>{% endif %}
         <h3>
           <a href="{{ item.get_absolute_url }}">

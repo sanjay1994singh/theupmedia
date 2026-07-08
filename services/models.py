@@ -15,6 +15,7 @@ class Service(models.Model):
     short_description_hi = models.TextField("Hindi short description", blank=True)
     description = models.TextField()
     description_hi = models.TextField("Hindi description", blank=True)
+    image_path = models.CharField(max_length=220, blank=True, help_text="Static image path, example: img/services/seo/service.svg")
     icon_label = models.CharField(max_length=40, blank=True, help_text="Short visual label, example: SEO, AI, Web")
     starting_price = models.CharField(max_length=80, blank=True)
     delivery_time = models.CharField(max_length=80, blank=True)

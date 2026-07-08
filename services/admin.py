@@ -11,7 +11,7 @@ class ServiceAdmin(admin.ModelAdmin):
     search_fields = ("name", "name_hi", "short_description", "short_description_hi", "description", "description_hi", "meta_keywords")
     prepopulated_fields = {"slug": ("name",)}
     fieldsets = (
-        ("English Service", {"fields": ("name", "slug", "short_description", "description", "icon_label")}),
+        ("English Service", {"fields": ("name", "slug", "short_description", "description", "image_path", "icon_label")}),
         ("Hindi Service", {"fields": ("name_hi", "short_description_hi", "description_hi")}),
         ("Business Details", {"fields": ("starting_price", "delivery_time", "is_featured", "is_active", "display_order")}),
         ("SEO", {"fields": ("meta_title", "meta_description", "meta_keywords")}),

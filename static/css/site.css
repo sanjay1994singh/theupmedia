@@ -641,6 +641,38 @@ h3 {
   padding: 20px;
 }
 
+.service-card-media {
+  background: #f5f1ea;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: block;
+  overflow: hidden;
+}
+
+.service-card-media img {
+  aspect-ratio: 16 / 9;
+  display: block;
+  height: auto;
+  object-fit: cover;
+  width: 100%;
+}
+
+.service-hero-image {
+  background: #f5f1ea;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 18px 0;
+  overflow: hidden;
+}
+
+.service-hero-image img {
+  aspect-ratio: 16 / 9;
+  display: block;
+  height: auto;
+  object-fit: cover;
+  width: 100%;
+}
+
 .service-card h3 {
   font-size: 24px;
 }
