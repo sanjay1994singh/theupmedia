@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Create Share Campaign - {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<section class="page-shell">
+  <p class="eyebrow">Distribution</p>
+  <h1>Create Share Campaign</h1>
+  <form class="editor-form" method="post">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}
+      <label>
+        <span>{{ field.label }}</span>
+        {{ field }}
+        {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+        {{ field.errors }}
+      </label>
+    {% endfor %}
+    <button class="whatsapp-cta" type="submit">Create Campaign</button>
+  </form>
+</section>
+{% endblock %}

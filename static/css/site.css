@@ -670,6 +670,69 @@ h3 {
   width: 22px;
 }
 
+.table-wrap {
+  overflow-x: auto;
+}
+
+.dashboard-table {
+  border-collapse: collapse;
+  min-width: 760px;
+  width: 100%;
+}
+
+.dashboard-table th,
+.dashboard-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.dashboard-table th {
+  color: var(--muted);
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.editor-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.editor-form label {
+  display: grid;
+  gap: 8px;
+  font-weight: 800;
+}
+
+.editor-form input,
+.editor-form select,
+.editor-form textarea {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  padding: 11px 12px;
+  width: 100%;
+}
+
+.editor-form ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.editor-form li label {
+  align-items: center;
+  display: flex;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.editor-form input[type="checkbox"] {
+  width: auto;
+}
+
 @keyframes service-loader-spin {
   to {
     transform: rotate(360deg);

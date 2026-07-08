@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}News Distribution Dashboard - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}Internal news distribution dashboard.{% endblock %}
+
+{% block content %}
+<section class="page-shell">
+  <p class="eyebrow">News Dashboard</p>
+  <h1>Distribution Panel</h1>
+  <p>Publish once, prepare share campaigns, and send to compliant channels with delivery history.</p>
+  <p><strong>WhatsApp Groups:</strong> automated group posting is not supported here. Use manual share links to protect your WhatsApp account.</p>
+  <div class="service-actions">
+    <a class="whatsapp-cta" href="{% url 'distribution:campaign_create' %}">Create Campaign</a>
+    <a class="text-link" href="{% url 'distribution:target_list' %}">Manage Targets</a>
+  </div>
+</section>
+
+<section class="content-band">
+  <div class="section-heading">
+    <h2>Recent Campaigns</h2>
+  </div>
+  <div class="table-wrap">
+    <table class="dashboard-table">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Status</th>
+          <th>Delay</th>
+          <th>Created</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for campaign in campaigns %}
+          <tr>
+            <td>{{ campaign.title }}</td>
+            <td>{{ campaign.get_status_display }}</td>
+            <td>{{ campaign.delay_seconds }} sec</td>
+            <td>{{ campaign.created_at|date:"M d, Y h:i A" }}</td>
+            <td><a class="text-link" href="{{ campaign.get_absolute_url }}">Open</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">No campaigns yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

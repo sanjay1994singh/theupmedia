@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Share Targets - {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<section class="page-shell">
+  <p class="eyebrow">Distribution</p>
+  <h1>Share Targets</h1>
+  <p>Add or edit targets from Django Admin: WhatsApp manual groups, Telegram channels, Facebook pages, and opt-in WhatsApp contacts.</p>
+  <p><a class="whatsapp-cta" href="/admin/distribution/sharetarget/add/">Add Target</a></p>
+</section>
+
+<section class="content-band">
+  <div class="table-wrap">
+    <table class="dashboard-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Category</th>
+          <th>Active</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for target in targets %}
+          <tr>
+            <td>{{ target.name }}</td>
+            <td>{{ target.get_target_type_display }}</td>
+            <td>{{ target.category|default:"-" }}</td>
+            <td>{{ target.is_active }}</td>
+            <td>{{ target.default_selected }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">No targets added.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

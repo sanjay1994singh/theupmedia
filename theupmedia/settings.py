@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "news",
     "blog",
     "services",
+    "distribution",
     "live_tv",
     "core",
 ]

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}{{ campaign.title }} - Distribution{% endblock %}
+
+{% block content %}
+<section class="page-shell">
+  <p class="eyebrow">Share Campaign</p>
+  <h1>{{ campaign.title }}</h1>
+  <p>{{ campaign.caption|linebreaksbr }}</p>
+  <p><strong>Link:</strong> <a class="text-link" href="{{ campaign.link }}" target="_blank" rel="noopener">{{ campaign.link }}</a></p>
+  <p><strong>Status:</strong> {{ campaign.get_status_display }} | <strong>Delay:</strong> {{ campaign.delay_seconds }} seconds</p>
+  <form method="post" action="{% url 'distribution:campaign_run' campaign.pk %}">
+    {% csrf_token %}
+    <button class="whatsapp-cta" type="submit">Run Campaign</button>
+  </form>
+</section>
+
+<section class="content-band">
+  <div class="section-heading">
+    <h2>Delivery History</h2>
+  </div>
+  <div class="table-wrap">
+    <table class="dashboard-table">
+      <thead>
+        <tr>
+          <th>Target</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Action / Response</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for delivery in deliveries %}
+          <tr>
+            <td>{{ delivery.target.name }}</td>
+            <td>{{ delivery.target.get_target_type_display }}</td>
+            <td>{{ delivery.get_status_display }}</td>
+            <td>
+              {% if delivery.manual_share_url %}
+                <a class="whatsapp-cta" href="{{ delivery.manual_share_url }}" target="_blank" rel="noopener">Open WhatsApp Share</a>
+              {% else %}
+                {{ delivery.response|default:"Pending" }}
+              {% endif %}
+            </td>
+            <td>{% if delivery.sent_at %}{{ delivery.sent_at|date:"M d, Y h:i A" }}{% else %}-{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">No delivery rows.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

@@ -39,6 +39,9 @@
       <a class="share-btn facebook" href="{{ facebook_share_url }}" target="_blank" rel="noopener">Facebook</a>
       <a class="share-btn twitter" href="{{ twitter_share_url }}" target="_blank" rel="noopener">X</a>
       <button class="share-btn copy-link" type="button" data-share-url="{{ share_url }}">Copy Link</button>
+      {% if user.is_staff %}
+        <a class="share-btn copy-link" href="{% url 'distribution:campaign_create' %}?article={{ article.pk }}">Distribution</a>
+      {% endif %}
     </div>
   </header>
   {% if article.featured_image %}
