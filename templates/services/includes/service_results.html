@@ -15,12 +15,7 @@
           <span>{{ service.name }}</span>
         </a>
       </h3>
-      {% if service.short_description_hi %}<p class="service-hi">{{ service.short_description_hi }}</p>{% endif %}
-      <p>{{ service.short_description }}</p>
-      <div class="service-meta">
-        {% if service.starting_price %}<span>{{ service.starting_price }}</span>{% endif %}
-        {% if service.delivery_time %}<span>{{ service.delivery_time }}</span>{% endif %}
-      </div>
+
       <div class="service-actions">
         <a class="text-link" href="{{ service.get_absolute_url }}">View details</a>
         <a class="whatsapp-cta" href="{{ service.whatsapp_url }}" target="_blank" rel="noopener">WhatsApp Chat</a>
