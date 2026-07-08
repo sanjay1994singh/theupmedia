@@ -5,13 +5,19 @@ from .models import BlogPost
 
 @admin.register(BlogPost)
 class BlogPostAdmin(admin.ModelAdmin):
-    list_display = ("title", "status", "is_featured", "author", "published_at", "updated_at")
-    list_filter = ("status", "is_featured", "published_at")
+    list_display = ("title", "status", "is_featured", "author")
+    list_filter = ("status", "is_featured")
     search_fields = ("title", "excerpt", "content", "focus_keyword", "meta_keywords")
     prepopulated_fields = {"slug": ("title",)}
-    date_hierarchy = "published_at"
+    ordering = ("-id",)
     fieldsets = (
         ("Blog", {"fields": ("title", "slug", "author", "excerpt", "content", "featured_image", "image_alt_text")}),
         ("Publishing", {"fields": ("status", "is_featured", "published_at")}),
         ("SEO", {"fields": ("focus_keyword", "meta_title", "meta_description", "meta_keywords", "canonical_url")}),
     )
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        if request.resolver_match and request.resolver_match.url_name == "blog_blogpost_changelist":
+            return queryset.defer("published_at", "updated_at", "created_at")
+        return queryset

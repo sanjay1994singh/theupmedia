@@ -8,7 +8,7 @@ from django_ckeditor_5.fields import CKEditor5Field
 
 class PublishedPostManager(models.Manager):
     def get_queryset(self):
-        return super().get_queryset().filter(status=BlogPost.Status.PUBLISHED, published_at__lte=timezone.now())
+        return super().get_queryset().filter(status=BlogPost.Status.PUBLISHED)
 
 
 class BlogPost(models.Model):
