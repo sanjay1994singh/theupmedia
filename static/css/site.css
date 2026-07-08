@@ -631,6 +631,51 @@ h3 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.service-results-shell {
+  position: relative;
+}
+
+.service-results-shell.is-loading [data-service-results-content] {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.service-loader {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(21, 21, 21, 0.12);
+  color: var(--accent-dark);
+  display: flex;
+  gap: 10px;
+  left: 50%;
+  padding: 14px 18px;
+  position: absolute;
+  top: 24px;
+  transform: translateX(-50%);
+  z-index: 5;
+}
+
+.service-loader[hidden] {
+  display: none;
+}
+
+.service-loader span {
+  animation: service-loader-spin 0.85s linear infinite;
+  border: 3px solid rgba(181, 31, 42, 0.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  height: 22px;
+  width: 22px;
+}
+
+@keyframes service-loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .service-card {
   background: var(--surface);
   border: 1px solid var(--line);

@@ -23,35 +23,52 @@
     </div>
     <a href="{% url 'core:contact' %}">Contact</a>
   </div>
-  <div class="service-grid">
-    {% for service in services %}
-      <article class="service-card">
-        {% if service.image_path %}
-          <a class="service-card-media" href="{{ service.get_absolute_url }}">
-            <img src="{% static service.image_path %}" alt="{% if service.name_hi %}{{ service.name_hi }}{% else %}{{ service.name }}{% endif %}" loading="lazy">
-          </a>
-        {% endif %}
-        {% if service.icon_label %}<span class="service-icon">{{ service.icon_label }}</span>{% endif %}
-        <h3>
-          <a href="{{ service.get_absolute_url }}">
-            {% if service.name_hi %}<span class="service-title-hi">{{ service.name_hi }}</span>{% endif %}
-            <span>{{ service.name }}</span>
-          </a>
-        </h3>
-        {% if service.short_description_hi %}<p class="service-hi">{{ service.short_description_hi }}</p>{% endif %}
-        <p>{{ service.short_description }}</p>
-        <div class="service-meta">
-          {% if service.starting_price %}<span>{{ service.starting_price }}</span>{% endif %}
-          {% if service.delivery_time %}<span>{{ service.delivery_time }}</span>{% endif %}
-        </div>
-        <div class="service-actions">
-          <a class="text-link" href="{{ service.get_absolute_url }}">View details</a>
-          <a class="whatsapp-cta" href="{{ service.whatsapp_url }}" target="_blank" rel="noopener">WhatsApp Chat</a>
-        </div>
-      </article>
-    {% empty %}
-      <p>No services published yet.</p>
-    {% endfor %}
+
+  <div class="service-results-shell" data-service-results>
+    <div class="service-loader" data-service-loader hidden>
+      <span></span>
+      <strong>Loading services...</strong>
+    </div>
+    <div data-service-results-content>
+      {% include "services/includes/service_results.html" %}
+    </div>
   </div>
 </section>
+
+<script>
+  (() => {
+    const shell = document.querySelector("[data-service-results]");
+    if (!shell) return;
+    const content = shell.querySelector("[data-service-results-content]");
+    const loader = shell.querySelector("[data-service-loader]");
+
+    const loadPage = async (url, pushState = true) => {
+      loader.hidden = false;
+      shell.classList.add("is-loading");
+      try {
+        const response = await fetch(url, {
+          headers: { "X-Requested-With": "XMLHttpRequest" },
+        });
+        if (!response.ok) throw new Error("Request failed");
+        content.innerHTML = await response.text();
+        if (pushState) window.history.pushState({}, "", url);
+        shell.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch (error) {
+        window.location.href = url;
+      } finally {
+        loader.hidden = true;
+        shell.classList.remove("is-loading");
+      }
+    };
+
+    document.addEventListener("click", (event) => {
+      const link = event.target.closest(".service-pagination a");
+      if (!link) return;
+      event.preventDefault();
+      loadPage(link.href);
+    });
+
+    window.addEventListener("popstate", () => loadPage(window.location.href, false));
+  })();
+</script>
 {% endblock %}

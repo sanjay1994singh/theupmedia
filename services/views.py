@@ -1,3 +1,4 @@
+from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, render
 
 from .models import Service
@@ -6,10 +7,13 @@ from .models import Service
 def service_list(request):
     services = Service.objects.filter(is_active=True)
     featured_services = services.filter(is_featured=True)[:6]
+    paginator = Paginator(services, 12)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    template_name = "services/includes/service_results.html" if request.headers.get("x-requested-with") == "XMLHttpRequest" else "services/service_list.html"
     return render(
         request,
-        "services/service_list.html",
-        {"services": services, "featured_services": featured_services},
+        template_name,
+        {"page_obj": page_obj, "featured_services": featured_services},
     )
 
 
