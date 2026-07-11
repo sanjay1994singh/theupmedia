@@ -173,9 +173,10 @@ WhatsApp: +91 6397712918"""
     def _write_svg(self, path, name, name_hi, category, icon, index):
         accent, bg, ink = PALETTES[(index - 1) % len(PALETTES)]
         safe_name = self._escape(name)
-        safe_hi = self._escape(name_hi)
         safe_category = self._escape(category)
         safe_icon = self._escape(icon)
+        name_tspans = self._tspans(self._wrap_text(name, max_chars=32, max_lines=2), 92, 0, 54)
+        hi_tspans = self._tspans(self._wrap_text("प्रोफेशनल डिजिटल सर्विस", max_chars=34, max_lines=2), 92, 0, 42)
         svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-label="{safe_name}">
   <rect width="1200" height="675" fill="{bg}"/>
   <rect x="52" y="52" width="1096" height="571" rx="28" fill="#ffffff" stroke="{accent}" stroke-width="5"/>
@@ -184,16 +185,53 @@ WhatsApp: +91 6397712918"""
   <circle cx="982" cy="180" r="92" fill="{accent}" opacity="0.12"/>
   <circle cx="982" cy="180" r="58" fill="{accent}"/>
   <text x="982" y="191" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="900" fill="#ffffff">{safe_icon}</text>
-  <text x="92" y="260" font-family="Georgia, serif" font-size="58" font-weight="900" fill="{ink}">{safe_name}</text>
-  <text x="92" y="328" font-family="Arial, sans-serif" font-size="40" font-weight="800" fill="{accent}">{safe_hi}</text>
-  <text x="92" y="414" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#374151">SEO-ready website, app and software solutions</text>
-  <text x="92" y="466" font-family="Arial, sans-serif" font-size="26" fill="#4b5563">Django • Automation • AI • Business Growth</text>
+  <text y="236" font-family="Georgia, serif" font-size="46" font-weight="900" fill="{ink}">
+{name_tspans}
+  </text>
+  <text y="346" font-family="Arial, sans-serif" font-size="32" font-weight="800" fill="{accent}">
+{hi_tspans}
+  </text>
+  <text x="92" y="442" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#374151">SEO-ready website, app and software solutions</text>
+  <text x="92" y="494" font-family="Arial, sans-serif" font-size="26" fill="#4b5563">Django | Automation | AI | Business Growth</text>
   <rect x="92" y="522" width="310" height="58" rx="12" fill="{accent}"/>
   <text x="247" y="560" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="800" fill="#ffffff">WhatsApp: 6397712918</text>
   <text x="812" y="560" font-family="Arial, sans-serif" font-size="30" font-weight="900" fill="{accent}">THE UP MEDIA</text>
 </svg>
 """
         path.write_text(svg, encoding="utf-8")
+
+    def _wrap_text(self, value, max_chars, max_lines):
+        words = str(value).split()
+        lines = []
+        current = ""
+        consumed = 0
+        for word in words:
+            candidate = f"{current} {word}".strip()
+            if len(candidate) <= max_chars:
+                current = candidate
+                consumed += 1
+                continue
+            if current:
+                lines.append(current)
+                current = word
+                consumed += 1
+            else:
+                lines.append(word[:max_chars])
+                current = word[max_chars:]
+                consumed += 1
+            if len(lines) == max_lines:
+                break
+        if current and len(lines) < max_lines:
+            lines.append(current)
+        if len(lines) == max_lines and consumed < len(words):
+            lines[-1] = lines[-1].rstrip(".,:;") + "..."
+        return lines or [str(value)[:max_chars]]
+
+    def _tspans(self, lines, x, first_dy, line_dy):
+        return "\n".join(
+            f'    <tspan x="{x}" dy="{first_dy if index == 0 else line_dy}">{self._escape(line)}</tspan>'
+            for index, line in enumerate(lines)
+        )
 
     def _escape(self, value):
         return (

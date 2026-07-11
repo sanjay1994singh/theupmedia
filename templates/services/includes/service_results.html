@@ -5,7 +5,7 @@
     <article class="service-card">
       {% if service.image_path %}
         <a class="service-card-media" href="{{ service.get_absolute_url }}">
-          <img src="{% static service.image_path %}" alt="{% if service.name_hi %}{{ service.name_hi }}{% else %}{{ service.name }}{% endif %}" loading="lazy">
+          <img src="{% static service.image_path %}?v=3" alt="{% if service.name_hi %}{{ service.name_hi }}{% else %}{{ service.name }}{% endif %}" loading="lazy">
         </a>
       {% endif %}
       {% if service.icon_label %}<span class="service-icon">{{ service.icon_label }}</span>{% endif %}
