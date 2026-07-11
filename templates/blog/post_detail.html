@@ -9,10 +9,10 @@
 {% block og_type %}article{% endblock %}
 {% block extra_head %}
   {% if post.featured_image %}
-    <meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{{ post.featured_image.url }}">
-    <meta property="og:image:url" content="{{ request.scheme }}://{{ request.get_host }}{{ post.featured_image.url }}">
-    <meta property="og:image:secure_url" content="{{ request.scheme }}://{{ request.get_host }}{{ post.featured_image.url }}">
-    <meta name="twitter:image" content="{{ request.scheme }}://{{ request.get_host }}{{ post.featured_image.url }}">
+    <meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{{ post.featured_image.url }}?v={{ post.updated_at|date:'U' }}">
+    <meta property="og:image:url" content="{{ request.scheme }}://{{ request.get_host }}{{ post.featured_image.url }}?v={{ post.updated_at|date:'U' }}">
+    <meta property="og:image:secure_url" content="{{ request.scheme }}://{{ request.get_host }}{{ post.featured_image.url }}?v={{ post.updated_at|date:'U' }}">
+    <meta name="twitter:image" content="{{ request.scheme }}://{{ request.get_host }}{{ post.featured_image.url }}?v={{ post.updated_at|date:'U' }}">
   {% endif %}
 {% endblock %}
 
@@ -35,7 +35,7 @@
   </header>
   {% if post.featured_image %}
     <figure class="article-figure">
-      <img class="article-image" src="{{ post.featured_image.url }}" alt="{{ post.image_alt_text|default:post.title }}">
+      <img class="article-image" src="{{ post.featured_image.url }}?v={{ post.updated_at|date:'U' }}" alt="{{ post.image_alt_text|default:post.title }}">
       {% if post.image_alt_text %}<figcaption>{{ post.image_alt_text }}</figcaption>{% endif %}
     </figure>
   {% endif %}

@@ -173,9 +173,9 @@ class Command(BaseCommand):
         accent, bg, ink = PALETTES[(index - 1) % len(PALETTES)]
         safe_title = self._escape(title)
         safe_keyword = self._escape(keyword)
-        title_lines = self._wrap_title(title, max_chars=42, max_lines=2)
+        title_lines = self._wrap_title(title, max_chars=32, max_lines=3)
         title_tspans = "\n".join(
-            f'    <tspan x="88" dy="{0 if line_index == 0 else 64}">{self._escape(line)}</tspan>'
+            f'    <tspan x="88" dy="{0 if line_index == 0 else 54}">{self._escape(line)}</tspan>'
             for line_index, line in enumerate(title_lines)
         )
         svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-label="{safe_title}">
@@ -183,12 +183,12 @@ class Command(BaseCommand):
   <rect x="54" y="54" width="1092" height="567" rx="30" fill="#ffffff" stroke="{accent}" stroke-width="5"/>
   <rect x="88" y="92" width="240" height="62" rx="31" fill="{accent}"/>
   <text x="208" y="132" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="900" fill="#ffffff">NEWS SEO</text>
-  <text y="242" font-family="Georgia, serif" font-size="50" font-weight="900" fill="{ink}">
+  <text y="224" font-family="Georgia, serif" font-size="44" font-weight="900" fill="{ink}">
 {title_tspans}
   </text>
-  <text x="88" y="382" font-family="Arial, sans-serif" font-size="36" font-weight="800" fill="{accent}">{safe_keyword}</text>
-  <text x="88" y="458" font-family="Arial, sans-serif" font-size="27" font-weight="700" fill="#374151">SEO-ready news website strategy</text>
-  <text x="88" y="508" font-family="Arial, sans-serif" font-size="25" fill="#4b5563">Django | Google-friendly structure | Media growth</text>
+  <text x="88" y="402" font-family="Arial, sans-serif" font-size="34" font-weight="800" fill="{accent}">{safe_keyword}</text>
+  <text x="88" y="468" font-family="Arial, sans-serif" font-size="27" font-weight="700" fill="#374151">SEO-ready news website strategy</text>
+  <text x="88" y="516" font-family="Arial, sans-serif" font-size="25" fill="#4b5563">Django | Google-friendly structure | Media growth</text>
   <circle cx="978" cy="180" r="92" fill="{accent}" opacity="0.13"/>
   <circle cx="978" cy="180" r="58" fill="{accent}"/>
   <text x="978" y="192" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="900" fill="#ffffff">BLOG</text>
