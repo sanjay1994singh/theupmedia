@@ -714,6 +714,18 @@ def update_render_progress(job_id, percent):
     SocialRenderedVideo.objects.filter(pk=job_id).update(progress_percent=percent)
 
 
+RENDER_TEMPLATE_ACCENTS = {
+    "breaking-red": "#d71920",
+    "live-report": "#e11d48",
+    "classic-studio": "#b91c1c",
+    "shorts-impact": "#ef4444",
+    "sports-live": "#16a34a",
+    "weather-alert": "#2563eb",
+    "market-news": "#ca8a04",
+    "festival-local": "#c2410c",
+}
+
+
 def render_social_video_file(job):
     if not shutil.which(ffmpeg_binary()):
         raise RuntimeError("FFmpeg is not installed on server.")
@@ -727,15 +739,19 @@ def render_social_video_file(job):
     text_files = []
     label_text = job.lower_third_label or "BREAKING NEWS"
     headline_text = job.headline or job.title
+    ticker_label_text = job.ticker_label or "BREAKING NEWS"
     ticker_text = job.ticker_text or "The Up Media"
     title_text = job.title
+    accent_color = RENDER_TEMPLATE_ACCENTS.get(job.frame_template, "#d71920")
     label_file = ffmpeg_text_file(label_text, "label")
     headline_file = ffmpeg_text_file(headline_text, "headline")
+    ticker_label_file = ffmpeg_text_file(ticker_label_text, "ticker-label")
     ticker_file = ffmpeg_text_file("    |    ".join([ticker_text] * 3), "ticker")
     title_file = ffmpeg_text_file(title_text, "title")
-    text_files.extend([label_file, headline_file, ticker_file, title_file])
+    text_files.extend([label_file, headline_file, ticker_label_file, ticker_file, title_file])
     label_font_arg = ffmpeg_font_arg_for_text(label_text, devanagari_font, latin_font)
     headline_font_arg = ffmpeg_font_arg_for_text(headline_text, devanagari_font, latin_font)
+    ticker_label_font_arg = ffmpeg_font_arg_for_text(ticker_label_text, devanagari_font, latin_font)
     ticker_font_arg = f":fontfile='{devanagari_font}'" if devanagari_font else ""
     title_font_arg = ffmpeg_font_arg_for_text(title_text, devanagari_font, latin_font)
 
@@ -746,11 +762,13 @@ def render_social_video_file(job):
                 "color=c=#08111f:s=1080x1920:d=999[bg];"
                 "[bg][main]overlay=0:0[v0];"
                 "[v0]drawbox=x=0:y=607:w=1080:h=72:color=white@0.94:t=fill,"
-                "drawbox=x=0:y=607:w=220:h=72:color=#d71920@1:t=fill,"
+                f"drawbox=x=0:y=607:w=220:h=72:color={accent_color}@1:t=fill,"
                 f"drawtext=textfile='{ffmpeg_path(label_file)}'{label_font_arg}:x=28:y=632:fontsize=32:fontcolor=white,"
                 f"drawtext=textfile='{ffmpeg_path(headline_file)}'{headline_font_arg}:x=248:y=628:fontsize=34:fontcolor=#111827,"
                 "drawbox=x=0:y=679:w=1080:h=54:color=#f8d24c@1:t=fill,"
-                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x=w-mod(t*135\\,w+tw):y=694:fontsize=26:fontcolor=#111827,"
+                f"drawbox=x=0:y=679:w=250:h=54:color={accent_color}@1:t=fill,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_label_file)}'{ticker_label_font_arg}:x=28:y=695:fontsize=24:fontcolor=white,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x=250+w-mod(t*135\\,w+tw):y=694:fontsize=26:fontcolor=#111827,"
                 "drawbox=x=0:y=733:w=1080:h=360:color=#08111f@1:t=fill,"
                 f"drawtext=textfile='{ffmpeg_path(title_file)}'{title_font_arg}:x=38:y=780:fontsize=46:fontcolor=white:box=1:boxcolor=#08111f@0.4,"
                 "drawbox=x=38:y=930:w=1004:h=128:color=#13223a@1:t=fill,"
@@ -763,18 +781,20 @@ def render_social_video_file(job):
             filter_complex = (
                 "[0:v]scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,setsar=1[main];"
                 "[main]drawbox=x=0:y=561:w=1280:h=57:color=white@0.94:t=fill,"
-                "drawbox=x=0:y=561:w=240:h=57:color=#d71920@1:t=fill,"
+                f"drawbox=x=0:y=561:w=240:h=57:color={accent_color}@1:t=fill,"
                 f"drawtext=textfile='{ffmpeg_path(label_file)}'{label_font_arg}:x=23:y=581:fontsize=28:fontcolor=white,"
                 f"drawtext=textfile='{ffmpeg_path(headline_file)}'{headline_font_arg}:x=260:y=577:fontsize=31:fontcolor=#111827,"
                 "drawbox=x=0:y=619:w=1280:h=39:color=#f8d24c@1:t=fill,"
-                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x=w-mod(t*170\\,w+tw):y=630:fontsize=20:fontcolor=#111827,"
+                f"drawbox=x=0:y=619:w=210:h=39:color={accent_color}@1:t=fill,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_label_file)}'{ticker_label_font_arg}:x=18:y=630:fontsize=18:fontcolor=white,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x=210+w-mod(t*170\\,w+tw):y=630:fontsize=20:fontcolor=#111827,"
                 "drawbox=x=0:y=657:w=1280:h=63:color=#08111f@0.96:t=fill,"
                 f"drawtext=textfile='{ffmpeg_path(title_file)}'{title_font_arg}:x=28:y=676:fontsize=29:fontcolor=white,"
                 "drawbox=x=1007:y=25:w=153:h=77:color=white@0.96:t=fill,"
                 "drawtext=text='THE UP':x=1027:y=40:fontsize=24:fontcolor=#d71920,"
                 "drawbox=x=1007:y=64:w=153:h=38:color=#08111f@1:t=fill,"
                 "drawtext=text='MEDIA':x=1039:y=72:fontsize=23:fontcolor=white,"
-                "drawbox=x=25:y=25:w=100:h=40:color=#d71920@1:t=fill,"
+                f"drawbox=x=25:y=25:w=100:h=40:color={accent_color}@1:t=fill,"
                 "drawtext=text='LIVE':x=50:y=34:fontsize=23:fontcolor=white,"
                 "format=yuv420p[vout]"
             )
@@ -782,18 +802,20 @@ def render_social_video_file(job):
             filter_complex = (
                 "[0:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1[main];"
                 "[main]drawbox=x=0:y=842:w=1920:h=86:color=white@0.94:t=fill,"
-                "drawbox=x=0:y=842:w=360:h=86:color=#d71920@1:t=fill,"
+                f"drawbox=x=0:y=842:w=360:h=86:color={accent_color}@1:t=fill,"
                 f"drawtext=textfile='{ffmpeg_path(label_file)}'{label_font_arg}:x=34:y=872:fontsize=42:fontcolor=white,"
                 f"drawtext=textfile='{ffmpeg_path(headline_file)}'{headline_font_arg}:x=390:y=866:fontsize=46:fontcolor=#111827,"
                 "drawbox=x=0:y=928:w=1920:h=58:color=#f8d24c@1:t=fill,"
-                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x=w-mod(t*220\\,w+tw):y=944:fontsize=30:fontcolor=#111827,"
+                f"drawbox=x=0:y=928:w=300:h=58:color={accent_color}@1:t=fill,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_label_file)}'{ticker_label_font_arg}:x=28:y=945:fontsize=27:fontcolor=white,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x=300+w-mod(t*220\\,w+tw):y=944:fontsize=30:fontcolor=#111827,"
                 "drawbox=x=0:y=986:w=1920:h=94:color=#08111f@0.96:t=fill,"
                 f"drawtext=textfile='{ffmpeg_path(title_file)}'{title_font_arg}:x=42:y=1014:fontsize=44:fontcolor=white,"
                 "drawbox=x=1510:y=38:w=230:h=116:color=white@0.96:t=fill,"
                 "drawtext=text='THE UP':x=1540:y=60:fontsize=36:fontcolor=#d71920,"
                 "drawbox=x=1510:y=96:w=230:h=58:color=#08111f@1:t=fill,"
                 "drawtext=text='MEDIA':x=1558:y=108:fontsize=34:fontcolor=white,"
-                "drawbox=x=38:y=38:w=150:h=60:color=#d71920@1:t=fill,"
+                f"drawbox=x=38:y=38:w=150:h=60:color={accent_color}@1:t=fill,"
                 "drawtext=text='LIVE':x=76:y=52:fontsize=34:fontcolor=white,"
                 "format=yuv420p[vout]"
             )
@@ -905,9 +927,12 @@ def serialize_render_job(request, job):
         "progress_percent": job.progress_percent,
         "title": job.title,
         "headline": job.headline,
+        "ticker_label": job.ticker_label,
         "ticker_text": job.ticker_text,
         "lower_third_label": job.lower_third_label,
         "render_format": job.render_format,
+        "frame_category": job.frame_category,
+        "frame_template": job.frame_template,
         "original_video_url": original_url,
         "rendered_video_url": rendered_url,
         "error": job.error_message,
@@ -1190,15 +1215,18 @@ def mobile_admin_rendered_video_update_api(request, pk):
     job = get_object_or_404(manageable_render_jobs_for(user), pk=pk)
     title = request.POST.get("title", "").strip()
     headline = request.POST.get("headline", "").strip()
+    ticker_label = request.POST.get("ticker_label", "").strip()
     ticker_text = request.POST.get("ticker_text", "").strip()
     lower_third_label = request.POST.get("lower_third_label", "").strip()
     if title:
         job.title = title[:180]
     job.headline = headline[:180]
+    if ticker_label:
+        job.ticker_label = ticker_label[:60]
     job.ticker_text = ticker_text[:260]
     if lower_third_label:
         job.lower_third_label = lower_third_label[:60]
-    job.save(update_fields=["title", "headline", "ticker_text", "lower_third_label", "updated_at"])
+    job.save(update_fields=["title", "headline", "ticker_label", "ticker_text", "lower_third_label", "updated_at"])
     return JsonResponse({"rendered_video": serialize_render_job(request, job)})
 
 
@@ -1295,18 +1323,24 @@ def mobile_admin_render_social_video_api(request):
     active_channel = LiveTVChannel.objects.filter(is_active=True, is_live=True).first() or LiveTVChannel.objects.filter(is_active=True).first()
     title = request.POST.get("title", "").strip() or (active_channel.title if active_channel else Path(video.name).stem)
     headline = request.POST.get("headline", "").strip() or (active_channel.headline if active_channel else title)
+    ticker_label = request.POST.get("ticker_label", "").strip() or (active_channel.ticker_label if active_channel else "BREAKING NEWS")
     ticker_text = request.POST.get("ticker_text", "").strip() or (active_channel.ticker_text if active_channel else "The Up Media")
     lower_third_label = request.POST.get("lower_third_label", "").strip() or (active_channel.lower_third_label if active_channel else "BREAKING NEWS")
     render_format = request.POST.get("render_format", "16:9").strip()
     if render_format not in {"fast_720p", "16:9", "9:16"}:
         render_format = "16:9"
+    frame_category = request.POST.get("frame_category", "").strip()
+    frame_template = request.POST.get("frame_template", "").strip()
 
     job = SocialRenderedVideo.objects.create(
         title=title[:180],
         headline=headline[:180],
+        ticker_label=ticker_label[:60],
         ticker_text=ticker_text[:260],
         lower_third_label=lower_third_label[:60],
         render_format=render_format,
+        frame_category=frame_category[:40],
+        frame_template=frame_template[:60],
         original_video=video,
         created_by=user,
     )

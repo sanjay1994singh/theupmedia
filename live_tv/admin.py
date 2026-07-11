@@ -145,7 +145,7 @@ class MediaDownloadAdmin(admin.ModelAdmin):
     readonly_fields = ("progress_percent", "created_at", "updated_at", "error_message")
 @admin.register(SocialRenderedVideo)
 class SocialRenderedVideoAdmin(admin.ModelAdmin):
-    list_display = ("title", "status", "progress_percent", "created_by", "created_at")
-    list_filter = ("status", "created_at")
-    search_fields = ("title", "headline", "ticker_text")
+    list_display = ("title", "frame_template", "render_format", "status", "progress_percent", "created_by", "created_at")
+    list_filter = ("status", "render_format", "frame_category", "created_at")
+    search_fields = ("title", "headline", "ticker_label", "ticker_text", "frame_template")
     readonly_fields = ("progress_percent", "created_at", "updated_at", "error_message")

@@ -312,9 +312,12 @@ class SocialRenderedVideo(models.Model):
 
     title = models.CharField(max_length=180)
     headline = models.CharField(max_length=180, blank=True)
+    ticker_label = models.CharField(max_length=60, default="BREAKING NEWS")
     ticker_text = models.CharField(max_length=260, blank=True)
     lower_third_label = models.CharField(max_length=60, default="BREAKING NEWS")
     render_format = models.CharField(max_length=10, default="16:9", db_default="16:9")
+    frame_category = models.CharField(max_length=40, blank=True)
+    frame_template = models.CharField(max_length=60, blank=True)
     original_video = models.FileField(upload_to="social-render/original/%Y/%m/")
     rendered_video = models.FileField(upload_to="social-render/rendered/%Y/%m/", blank=True, null=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PROCESSING)
