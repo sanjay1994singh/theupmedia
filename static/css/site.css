@@ -585,14 +585,17 @@ h3 {
 }
 
 .story-media {
+  aspect-ratio: 16 / 9;
   background: #e9e4dc;
   display: block;
   overflow: hidden;
+  width: 100%;
 }
 
 .story-card img {
   aspect-ratio: 16 / 9;
   background: #f7f5f1;
+  height: 100%;
   object-fit: contain;
   transition: transform 0.25s ease;
   width: 100%;
@@ -1504,6 +1507,7 @@ time {
   }
 
   .content-band .story-card .story-media img {
+    display: block;
     height: 100% !important;
     object-fit: contain !important;
     transform: none !important;

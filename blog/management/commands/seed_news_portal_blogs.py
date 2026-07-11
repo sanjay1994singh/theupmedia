@@ -173,16 +173,22 @@ class Command(BaseCommand):
         accent, bg, ink = PALETTES[(index - 1) % len(PALETTES)]
         safe_title = self._escape(title)
         safe_keyword = self._escape(keyword)
-        short_title = self._escape(title[:58])
+        title_lines = self._wrap_title(title, max_chars=42, max_lines=2)
+        title_tspans = "\n".join(
+            f'    <tspan x="88" dy="{0 if line_index == 0 else 64}">{self._escape(line)}</tspan>'
+            for line_index, line in enumerate(title_lines)
+        )
         svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-label="{safe_title}">
   <rect width="1200" height="675" fill="{bg}"/>
   <rect x="54" y="54" width="1092" height="567" rx="30" fill="#ffffff" stroke="{accent}" stroke-width="5"/>
   <rect x="88" y="92" width="240" height="62" rx="31" fill="{accent}"/>
   <text x="208" y="132" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="900" fill="#ffffff">NEWS SEO</text>
-  <text x="88" y="252" font-family="Georgia, serif" font-size="58" font-weight="900" fill="{ink}">{short_title}</text>
-  <text x="88" y="326" font-family="Arial, sans-serif" font-size="38" font-weight="800" fill="{accent}">{safe_keyword}</text>
-  <text x="88" y="414" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#374151">SEO-ready news website strategy</text>
-  <text x="88" y="466" font-family="Arial, sans-serif" font-size="26" fill="#4b5563">Django | Google-friendly structure | Media growth</text>
+  <text y="242" font-family="Georgia, serif" font-size="50" font-weight="900" fill="{ink}">
+{title_tspans}
+  </text>
+  <text x="88" y="382" font-family="Arial, sans-serif" font-size="36" font-weight="800" fill="{accent}">{safe_keyword}</text>
+  <text x="88" y="458" font-family="Arial, sans-serif" font-size="27" font-weight="700" fill="#374151">SEO-ready news website strategy</text>
+  <text x="88" y="508" font-family="Arial, sans-serif" font-size="25" fill="#4b5563">Django | Google-friendly structure | Media growth</text>
   <circle cx="978" cy="180" r="92" fill="{accent}" opacity="0.13"/>
   <circle cx="978" cy="180" r="58" fill="{accent}"/>
   <text x="978" y="192" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="900" fill="#ffffff">BLOG</text>
@@ -191,6 +197,33 @@ class Command(BaseCommand):
 </svg>
 """
         path.write_text(svg, encoding="utf-8")
+
+    def _wrap_title(self, title, max_chars, max_lines):
+        words = str(title).split()
+        lines = []
+        current = ""
+        consumed = 0
+        for word in words:
+            next_line = f"{current} {word}".strip()
+            if len(next_line) <= max_chars:
+                current = next_line
+                consumed += 1
+                continue
+            if current:
+                lines.append(current)
+                current = word
+                consumed += 1
+            else:
+                lines.append(word[:max_chars])
+                current = word[max_chars:]
+                consumed += 1
+            if len(lines) == max_lines:
+                break
+        if current and len(lines) < max_lines:
+            lines.append(current)
+        if len(lines) == max_lines and consumed < len(words):
+            lines[-1] = lines[-1].rstrip(".,:;") + "..."
+        return lines or [str(title)[:max_chars]]
 
     def _escape(self, value):
         return (
