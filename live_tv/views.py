@@ -1012,7 +1012,9 @@ def current_live_tv_api(request):
     active_channel = channels.filter(is_live=True).first() or channels.first()
     if not active_channel:
         return JsonResponse(serialize_empty_live_tv(request))
-    return JsonResponse(serialize_channel_for_mobile(request, active_channel))
+    data = serialize_channel_for_mobile(request, active_channel)
+    data["playlist"] = [serialize_channel_for_mobile(request, channel) for channel in channels]
+    return JsonResponse(data)
 
 
 @csrf_exempt
