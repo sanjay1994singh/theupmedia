@@ -535,9 +535,10 @@ def serialize_shorts_video(request, short):
     return {
         "id": short.pk,
         "title": short.title,
+        "headline": short.headline,
         "caption": short.caption,
         "location": short.location,
-        "audio_title": short.audio_title,
+        "frame_template": short.frame_template,
         "video_url": absolute_media_url(request, short.video_file),
         "thumbnail_url": absolute_media_url(request, short.thumbnail),
         "is_published": short.is_published,
@@ -1223,9 +1224,10 @@ def mobile_admin_shorts_upload_api(request):
         return JsonResponse({"detail": "Shorts video file required.", "errors": {"video_file": ["This field is required."]}}, status=400)
 
     title = request.POST.get("title", "").strip()
+    headline = request.POST.get("headline", "").strip()
     caption = request.POST.get("caption", "").strip()
     location = request.POST.get("location", "").strip()
-    audio_title = request.POST.get("audio_title", "").strip() or "Original Audio - The UP Media"
+    frame_template = request.POST.get("frame_template", "").strip() or "normal_black_red"
     raw_display_order = request.POST.get("display_order")
     try:
         display_order = int(raw_display_order) if raw_display_order not in (None, "") else None
@@ -1237,9 +1239,10 @@ def mobile_admin_shorts_upload_api(request):
 
     short = ShortsVideo.objects.create(
         title=title[:180],
+        headline=headline[:180],
         caption=caption,
         location=location[:120],
-        audio_title=audio_title[:120],
+        frame_template=frame_template[:60],
         video_file=video_file,
         thumbnail=request.FILES.get("thumbnail"),
         is_published=True,

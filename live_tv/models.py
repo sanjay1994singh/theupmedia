@@ -213,9 +213,10 @@ class NewsTickerSetting(models.Model):
 
 class ShortsVideo(models.Model):
     title = models.CharField(max_length=180, blank=True)
+    headline = models.CharField(max_length=180, blank=True)
     caption = models.TextField(blank=True)
     location = models.CharField(max_length=120, blank=True)
-    audio_title = models.CharField(max_length=120, default="Original Audio - The UP Media")
+    frame_template = models.CharField(max_length=60, default="normal_black_red")
     video_file = models.FileField(upload_to="shorts/videos/%Y/%m/")
     thumbnail = models.ImageField(upload_to="shorts/thumbnails/%Y/%m/", blank=True, null=True)
     is_published = models.BooleanField(default=True)

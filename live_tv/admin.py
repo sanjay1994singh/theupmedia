@@ -132,13 +132,13 @@ class NewsTickerSettingAdmin(admin.ModelAdmin):
 
 @admin.register(ShortsVideo)
 class ShortsVideoAdmin(admin.ModelAdmin):
-    list_display = ("title", "location", "is_published", "display_order", "likes_count", "comments_count", "shares_count", "created_at")
-    list_filter = ("is_published", "created_at")
-    search_fields = ("title", "caption", "location", "audio_title")
+    list_display = ("title", "frame_template", "location", "is_published", "display_order", "likes_count", "comments_count", "shares_count", "created_at")
+    list_filter = ("is_published", "frame_template", "created_at")
+    search_fields = ("title", "headline", "caption", "location")
     list_editable = ("is_published", "display_order")
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (
-        ("Shorts Video", {"fields": ("title", "caption", "location", "audio_title", "video_file", "thumbnail")}),
+        ("Shorts Video", {"fields": ("title", "headline", "caption", "location", "frame_template", "video_file", "thumbnail")}),
         ("Status", {"fields": ("is_published", "display_order", "created_by")}),
         ("Counters", {"fields": ("likes_count", "comments_count", "shares_count")}),
         ("Dates", {"fields": ("created_at", "updated_at")}),
