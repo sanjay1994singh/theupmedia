@@ -28,7 +28,7 @@ from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_POST
 
 from .forms import LiveTVChannelForm
-from .models import FacebookLiveSetting, LiveTVChannel, LiveTVSetting, MediaDownload, MobileAdminToken, NewsTickerSetting, SocialRenderedVideo
+from .models import FacebookLiveSetting, LiveTVChannel, LiveTVSetting, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsVideo, SocialRenderedVideo
 from news.models import Article
 
 RESTRICTED_DOWNLOAD_HOSTS = {
@@ -531,6 +531,25 @@ def serialize_channel_for_admin(request, channel):
     return data
 
 
+def serialize_shorts_video(request, short):
+    return {
+        "id": short.pk,
+        "title": short.title,
+        "caption": short.caption,
+        "location": short.location,
+        "audio_title": short.audio_title,
+        "video_url": absolute_media_url(request, short.video_file),
+        "thumbnail_url": absolute_media_url(request, short.thumbnail),
+        "is_published": short.is_published,
+        "display_order": short.display_order,
+        "likes_count": short.likes_count,
+        "comments_count": short.comments_count,
+        "shares_count": short.shares_count,
+        "created_at": short.created_at.isoformat(),
+        "updated_at": short.updated_at.isoformat(),
+    }
+
+
 def ffmpeg_binary():
     return getattr(settings, "FFMPEG_BINARY", "ffmpeg")
 
@@ -1017,6 +1036,12 @@ def current_live_tv_api(request):
     return JsonResponse(data)
 
 
+@require_GET
+def shorts_list_api(request):
+    shorts = ShortsVideo.objects.filter(is_published=True)
+    return JsonResponse({"shorts": [serialize_shorts_video(request, short) for short in shorts]})
+
+
 @csrf_exempt
 @require_POST
 def mobile_admin_login_api(request):
@@ -1184,6 +1209,44 @@ def mobile_admin_channel_delete_api(request, pk):
     channel = get_object_or_404(LiveTVChannel, pk=pk)
     channel.delete()
     return JsonResponse({"ok": True})
+
+
+@csrf_exempt
+@require_POST
+def mobile_admin_shorts_upload_api(request):
+    user, error = mobile_admin_required(request)
+    if error:
+        return error
+
+    video_file = request.FILES.get("video_file")
+    if not video_file:
+        return JsonResponse({"detail": "Shorts video file required.", "errors": {"video_file": ["This field is required."]}}, status=400)
+
+    title = request.POST.get("title", "").strip()
+    caption = request.POST.get("caption", "").strip()
+    location = request.POST.get("location", "").strip()
+    audio_title = request.POST.get("audio_title", "").strip() or "Original Audio - The UP Media"
+    raw_display_order = request.POST.get("display_order")
+    try:
+        display_order = int(raw_display_order) if raw_display_order not in (None, "") else None
+    except (TypeError, ValueError):
+        display_order = None
+    if display_order is None or display_order < 0 or display_order > 2147483647:
+        last_short = ShortsVideo.objects.order_by("-display_order").first()
+        display_order = (last_short.display_order + 1) if last_short else 0
+
+    short = ShortsVideo.objects.create(
+        title=title[:180],
+        caption=caption,
+        location=location[:120],
+        audio_title=audio_title[:120],
+        video_file=video_file,
+        thumbnail=request.FILES.get("thumbnail"),
+        is_published=True,
+        display_order=display_order,
+        created_by=user,
+    )
+    return JsonResponse({"short": serialize_shorts_video(request, short)}, status=201)
 
 
 @csrf_exempt

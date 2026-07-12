@@ -211,6 +211,45 @@ class NewsTickerSetting(models.Model):
         super().save(*args, **kwargs)
 
 
+class ShortsVideo(models.Model):
+    title = models.CharField(max_length=180, blank=True)
+    caption = models.TextField(blank=True)
+    location = models.CharField(max_length=120, blank=True)
+    audio_title = models.CharField(max_length=120, default="Original Audio - The UP Media")
+    video_file = models.FileField(upload_to="shorts/videos/%Y/%m/")
+    thumbnail = models.ImageField(upload_to="shorts/thumbnails/%Y/%m/", blank=True, null=True)
+    is_published = models.BooleanField(default=True)
+    display_order = models.PositiveIntegerField(default=0)
+    likes_count = models.PositiveIntegerField(default=0)
+    comments_count = models.PositiveIntegerField(default=0)
+    shares_count = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, blank=True, null=True, related_name="live_tv_shorts")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["display_order", "-created_at"]
+        indexes = [
+            models.Index(fields=["is_published", "display_order"], name="shorts_published_order_idx"),
+        ]
+
+    def __str__(self):
+        return self.title or Path(self.video_file.name).stem or "Shorts video"
+
+    def save(self, *args, **kwargs):
+        if not self.title:
+            self.title = Path(self.video_file.name).stem[:180] if self.video_file else "The UP Media Shorts"
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        files = [self.video_file, self.thumbnail]
+        result = super().delete(*args, **kwargs)
+        for file_obj in files:
+            if file_obj and file_obj.name:
+                file_obj.delete(save=False)
+        return result
+
+
 class MobileAdminToken(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="live_tv_mobile_tokens")
     key = models.CharField(max_length=64, unique=True, db_index=True)

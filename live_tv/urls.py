@@ -6,6 +6,7 @@ app_name = "live_tv"
 
 urlpatterns = [
     path("api/live-tv/current/", views.current_live_tv_api, name="api_current"),
+    path("api/live-tv/shorts/", views.shorts_list_api, name="api_shorts_list"),
     path("api/live-tv/admin/login/", views.mobile_admin_login_api, name="api_admin_login"),
     path("api/live-tv/admin/logout/", views.mobile_admin_logout_api, name="api_admin_logout"),
     path("api/live-tv/admin/dashboard/", views.mobile_admin_dashboard_api, name="api_admin_dashboard"),
@@ -16,6 +17,7 @@ urlpatterns = [
     path("api/live-tv/admin/facebook-live/stop/", views.mobile_admin_facebook_live_stop_api, name="api_admin_facebook_live_stop"),
     path("api/live-tv/admin/facebook-live/status/", views.mobile_admin_facebook_live_status_api, name="api_admin_facebook_live_status"),
     path("api/live-tv/admin/channels/<int:pk>/delete/", views.mobile_admin_channel_delete_api, name="api_admin_channel_delete"),
+    path("api/live-tv/admin/shorts/upload/", views.mobile_admin_shorts_upload_api, name="api_admin_shorts_upload"),
     path("api/live-tv/admin/render-social-video/", views.mobile_admin_render_social_video_api, name="api_admin_render_social_video"),
     path("api/live-tv/admin/render-social-video/<int:pk>/status/", views.mobile_admin_render_social_video_status_api, name="api_admin_render_social_video_status"),
     path("api/live-tv/admin/rendered-videos/<int:pk>/update/", views.mobile_admin_rendered_video_update_api, name="api_admin_rendered_video_update"),

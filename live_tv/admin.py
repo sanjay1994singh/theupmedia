@@ -4,7 +4,7 @@ from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from .models import FacebookLiveSetting, LiveTVChannel, LiveTVSetting, MediaDownload, MobileAdminToken, NewsTickerSetting, SocialRenderedVideo
+from .models import FacebookLiveSetting, LiveTVChannel, LiveTVSetting, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsVideo, SocialRenderedVideo
 
 
 @admin.register(LiveTVChannel)
@@ -128,6 +128,21 @@ class NewsTickerSettingAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(ShortsVideo)
+class ShortsVideoAdmin(admin.ModelAdmin):
+    list_display = ("title", "location", "is_published", "display_order", "likes_count", "comments_count", "shares_count", "created_at")
+    list_filter = ("is_published", "created_at")
+    search_fields = ("title", "caption", "location", "audio_title")
+    list_editable = ("is_published", "display_order")
+    readonly_fields = ("created_at", "updated_at")
+    fieldsets = (
+        ("Shorts Video", {"fields": ("title", "caption", "location", "audio_title", "video_file", "thumbnail")}),
+        ("Status", {"fields": ("is_published", "display_order", "created_by")}),
+        ("Counters", {"fields": ("likes_count", "comments_count", "shares_count")}),
+        ("Dates", {"fields": ("created_at", "updated_at")}),
+    )
 
 
 @admin.register(MobileAdminToken)
