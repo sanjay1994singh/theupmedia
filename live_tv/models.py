@@ -24,8 +24,8 @@ class LiveTVChannel(models.Model):
     poster_image = models.ImageField(upload_to="live-tv/posters/%Y/%m/", blank=True, null=True)
     is_active = models.BooleanField(default=True)
     is_live = models.BooleanField(default=True)
-    lower_third_label = models.CharField(max_length=60, default="BREAKING NEWS")
-    headline = models.CharField(max_length=180, default="The Up Media Live TV")
+    lower_third_label = models.CharField(max_length=60, blank=True, default="")
+    headline = models.CharField(max_length=180, blank=True, default="")
     ticker_label = models.CharField(max_length=60, default="TODAY'S NEWS")
     ticker_text = models.TextField(default="Latest updates from The Up Media")
 

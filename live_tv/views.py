@@ -394,8 +394,8 @@ def serialize_channel_for_mobile(request, channel):
         "id": channel.pk,
         "title": channel.title,
         "description": channel.description,
-        "headline": channel.headline or setting.default_headline,
-        "lower_third_label": channel.lower_third_label or setting.default_lower_third_label,
+        "headline": channel.headline or "",
+        "lower_third_label": channel.lower_third_label or "",
         "ticker_label": ticker_setting.label or setting.default_ticker_label,
         "ticker": ticker,
         "player_type": player_type,
@@ -409,7 +409,7 @@ def serialize_channel_for_mobile(request, channel):
         "live_label": setting.live_label,
         "show_live_badge": setting.show_live_badge,
         "show_channel_logo": setting.show_channel_logo,
-        "show_lower_third": setting.show_lower_third,
+        "show_lower_third": setting.show_lower_third and bool((channel.lower_third_label or "").strip() or (channel.headline or "").strip()),
         "show_ticker": setting.show_ticker,
         "ticker_speed_seconds": ticker_setting.speed_seconds,
         "mobile_ticker_speed_seconds": ticker_setting.mobile_speed_seconds,
@@ -1092,8 +1092,8 @@ def mobile_admin_channel_save_api(request):
     if request.FILES.get("video_file"):
         data["source_type"] = LiveTVChannel.SourceType.DIRECT
     settings_obj = live_tv_setting()
-    data.setdefault("lower_third_label", settings_obj.default_lower_third_label)
-    data.setdefault("headline", data.get("title", settings_obj.default_headline))
+    data.setdefault("lower_third_label", "")
+    data.setdefault("headline", "")
     data.setdefault("display_order", "0")
     data["is_active"] = "on"
     data["is_live"] = "on"
