@@ -420,6 +420,43 @@ def serialize_channel_for_mobile(request, channel):
     }
 
 
+def serialize_empty_live_tv(request):
+    setting = live_tv_setting()
+    ticker_setting = news_ticker_setting()
+    return {
+        "id": None,
+        "title": "",
+        "description": "",
+        "headline": "",
+        "lower_third_label": "",
+        "ticker_label": ticker_setting.label or setting.default_ticker_label,
+        "ticker_text": ticker_setting.text,
+        "default_ticker_label": ticker_setting.label or setting.default_ticker_label,
+        "default_ticker_text": ticker_setting.text,
+        "ticker": ticker_items_from_text(ticker_setting.text),
+        "player_type": "",
+        "stream_url": "",
+        "youtube_url": "",
+        "youtube_embed_url": "",
+        "poster_image": "",
+        "channel_logo": absolute_media_url(request, setting.channel_logo),
+        "is_live": False,
+        "autoplay": False,
+        "live_label": setting.live_label,
+        "show_live_badge": False,
+        "show_channel_logo": setting.show_channel_logo,
+        "show_lower_third": False,
+        "show_ticker": setting.show_ticker,
+        "ticker_speed_seconds": ticker_setting.speed_seconds,
+        "mobile_ticker_speed_seconds": ticker_setting.mobile_speed_seconds,
+        "ticker_style": ticker_setting.style,
+        "settings": serialize_live_tv_setting(request, setting),
+        "web_url": "",
+        "ads": mobile_live_tv_ads(),
+        "detail": "No active live TV channel found.",
+    }
+
+
 def mobile_live_tv_ads():
     return [
         {
@@ -974,7 +1011,7 @@ def current_live_tv_api(request):
     channels = LiveTVChannel.objects.filter(is_active=True)
     active_channel = channels.filter(is_live=True).first() or channels.first()
     if not active_channel:
-        return JsonResponse({"detail": "No active live TV channel found."}, status=404)
+        return JsonResponse(serialize_empty_live_tv(request))
     return JsonResponse(serialize_channel_for_mobile(request, active_channel))
 
 
@@ -1084,25 +1121,46 @@ def mobile_admin_channel_save_api(request):
         return error
 
     channel_id = request.POST.get("id") or request.POST.get("channel_id")
-    instance = LiveTVChannel.objects.filter(pk=channel_id).first() if channel_id else None
+    channel = LiveTVChannel.objects.filter(pk=channel_id).first() if channel_id else LiveTVChannel()
 
-    data = request.POST.copy()
-    data.setdefault("title", "The Up Media Live TV")
-    data.setdefault("source_type", LiveTVChannel.SourceType.YOUTUBE)
-    if request.FILES.get("video_file"):
-        data["source_type"] = LiveTVChannel.SourceType.DIRECT
-    settings_obj = live_tv_setting()
-    data.setdefault("lower_third_label", "")
-    data.setdefault("headline", "")
-    data.setdefault("display_order", "0")
-    data["is_active"] = "on"
-    data["is_live"] = "on"
+    video_file = request.FILES.get("video_file")
+    source_type = request.POST.get("source_type", LiveTVChannel.SourceType.YOUTUBE).strip() or LiveTVChannel.SourceType.YOUTUBE
+    if video_file:
+        source_type = LiveTVChannel.SourceType.DIRECT
+    youtube_url = request.POST.get("youtube_url", "").strip()
+    stream_url = request.POST.get("stream_url", "").strip()
 
-    form = LiveTVChannelForm(data, request.FILES, instance=instance)
-    if not form.is_valid():
-        return JsonResponse({"detail": "Please correct the channel fields.", "errors": form.errors}, status=400)
+    if source_type == LiveTVChannel.SourceType.YOUTUBE and not youtube_url:
+        return JsonResponse({"detail": "YouTube URL required.", "errors": {"youtube_url": ["This field is required."]}}, status=400)
+    if source_type == LiveTVChannel.SourceType.DIRECT and not video_file and not channel.video_file:
+        return JsonResponse({"detail": "Video file required.", "errors": {"video_file": ["This field is required."]}}, status=400)
 
-    channel = form.save()
+    title = request.POST.get("title", "").strip()
+    if not title:
+        title = Path(getattr(video_file, "name", "")).stem if video_file else "The Up Media Live TV"
+
+    channel.title = title[:180] or "The Up Media Live TV"
+    channel.description = request.POST.get("description", "").strip()
+    channel.source_type = source_type
+    channel.youtube_url = youtube_url if source_type == LiveTVChannel.SourceType.YOUTUBE else ""
+    channel.stream_url = stream_url if source_type == LiveTVChannel.SourceType.HLS else ""
+    if video_file:
+        delete_file_field(channel.video_file)
+        channel.video_file = video_file
+    if request.FILES.get("poster_image"):
+        delete_file_field(channel.poster_image)
+        channel.poster_image = request.FILES["poster_image"]
+    channel.is_active = True
+    channel.is_live = True
+    channel.lower_third_label = request.POST.get("lower_third_label", "").strip()[:60]
+    channel.headline = request.POST.get("headline", "").strip()[:180]
+    try:
+        channel.display_order = int(request.POST.get("display_order") or channel.display_order or 0)
+    except (TypeError, ValueError):
+        channel.display_order = channel.display_order or 0
+    channel.meta_title = request.POST.get("meta_title", "").strip()[:160]
+    channel.meta_description = request.POST.get("meta_description", "").strip()[:220]
+    channel.save()
     return JsonResponse({"channel": serialize_channel_for_admin(request, channel)})
 
 
