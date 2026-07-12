@@ -1154,10 +1154,18 @@ def mobile_admin_channel_save_api(request):
     channel.is_live = True
     channel.lower_third_label = request.POST.get("lower_third_label", "").strip()[:60]
     channel.headline = request.POST.get("headline", "").strip()[:180]
+    raw_display_order = request.POST.get("display_order")
     try:
-        channel.display_order = int(request.POST.get("display_order") or channel.display_order or 0)
+        display_order = int(raw_display_order) if raw_display_order not in (None, "") else None
     except (TypeError, ValueError):
-        channel.display_order = channel.display_order or 0
+        display_order = None
+    if display_order is None or display_order < 0 or display_order > 2147483647:
+        if channel.pk and channel.display_order is not None:
+            display_order = channel.display_order
+        else:
+            last_channel = LiveTVChannel.objects.order_by("-display_order").first()
+            display_order = (last_channel.display_order + 1) if last_channel else 0
+    channel.display_order = display_order
     channel.meta_title = request.POST.get("meta_title", "").strip()[:160]
     channel.meta_description = request.POST.get("meta_description", "").strip()[:220]
     channel.save()
