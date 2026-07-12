@@ -65,10 +65,10 @@
 
             {% if live_settings.show_ticker %}
               <div class="news-ticker">
-                <span>{{ active_channel.ticker_label|default:live_settings.default_ticker_label }}</span>
-                <div class="ticker-track" style="--ticker-speed: {{ live_settings.ticker_speed_seconds }}s" aria-label="{{ active_channel.ticker_text|default:live_settings.default_ticker_text }}">
-                  <p>{{ active_channel.ticker_text|default:live_settings.default_ticker_text }}</p>
-                  <p aria-hidden="true">{{ active_channel.ticker_text|default:live_settings.default_ticker_text }}</p>
+                <span>{{ news_ticker.label }}</span>
+                <div class="ticker-track" style="--ticker-speed: {{ news_ticker.speed_seconds }}s" aria-label="{{ news_ticker.text }}">
+                  <p>{{ news_ticker.text }}</p>
+                  <p aria-hidden="true">{{ news_ticker.text }}</p>
                 </div>
               </div>
             {% endif %}

@@ -4,7 +4,7 @@ from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from .models import FacebookLiveSetting, LiveTVChannel, LiveTVSetting, MediaDownload, MobileAdminToken, MobileVideoUpload, SocialRenderedVideo
+from .models import FacebookLiveSetting, LiveTVChannel, LiveTVSetting, MediaDownload, MobileAdminToken, NewsTickerSetting, SocialRenderedVideo
 
 
 @admin.register(LiveTVChannel)
@@ -17,7 +17,7 @@ class LiveTVChannelAdmin(admin.ModelAdmin):
     fieldsets = (
         ("Basic", {"fields": ("title", "slug", "description", "is_active", "is_live", "display_order")}),
         ("Video Source", {"fields": ("source_type", "youtube_url", "stream_url", "video_file", "poster_image")}),
-        ("Video Text", {"fields": ("lower_third_label", "headline", "ticker_label", "ticker_text")}),
+        ("Video Text", {"fields": ("lower_third_label", "headline")}),
         ("SEO", {"fields": ("meta_title", "meta_description")}),
     )
 
@@ -25,11 +25,11 @@ class LiveTVChannelAdmin(admin.ModelAdmin):
 
 @admin.register(LiveTVSetting)
 class LiveTVSettingAdmin(admin.ModelAdmin):
-    list_display = ("name", "live_label", "ticker_speed_seconds", "mobile_ticker_speed_seconds", "show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker", "updated_at")
+    list_display = ("name", "live_label", "show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker", "updated_at")
     fieldsets = (
         ("Branding", {"fields": ("name", "live_label", "channel_logo", "autoplay")}),
         ("Frame Visibility", {"fields": ("show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker")}),
-        ("Default Video Text", {"fields": ("default_lower_third_label", "default_headline", "default_ticker_label", "default_ticker_text", "ticker_speed_seconds", "mobile_ticker_speed_seconds")}),
+        ("Default Video Text", {"fields": ("default_lower_third_label", "default_headline")}),
     )
 
     def has_add_permission(self, request):
@@ -115,17 +115,19 @@ class FacebookLiveSettingAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
-@admin.register(MobileVideoUpload)
-class MobileVideoUploadAdmin(admin.ModelAdmin):
-    list_display = ("title", "status", "uploaded_by_name", "uploaded_by_phone", "created_at")
-    list_filter = ("status", "created_at")
-    search_fields = ("title", "description", "uploaded_by_name", "uploaded_by_phone")
-    readonly_fields = ("created_at", "updated_at")
+@admin.register(NewsTickerSetting)
+class NewsTickerSettingAdmin(admin.ModelAdmin):
+    list_display = ("label", "speed_seconds", "mobile_speed_seconds", "style", "updated_at")
     fieldsets = (
-        ("Video", {"fields": ("title", "description", "video", "status")}),
-        ("Uploader", {"fields": ("uploaded_by_name", "uploaded_by_phone", "device_info")}),
-        ("Dates", {"fields": ("created_at", "updated_at")}),
+        ("Ticker", {"fields": ("label", "text", "style")}),
+        ("Speed", {"fields": ("speed_seconds", "mobile_speed_seconds")}),
     )
+
+    def has_add_permission(self, request):
+        return not NewsTickerSetting.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(MobileAdminToken)

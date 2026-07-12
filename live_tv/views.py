@@ -28,7 +28,7 @@ from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_POST
 
 from .forms import LiveTVChannelForm
-from .models import FacebookLiveSetting, LiveTVChannel, LiveTVSetting, MediaDownload, MobileAdminToken, MobileVideoUpload, SocialRenderedVideo
+from .models import FacebookLiveSetting, LiveTVChannel, LiveTVSetting, MediaDownload, MobileAdminToken, NewsTickerSetting, SocialRenderedVideo
 from news.models import Article
 
 RESTRICTED_DOWNLOAD_HOSTS = {
@@ -112,6 +112,7 @@ def live_tv_context(active_channel, channels, force_autoplay=False):
         "force_autoplay": force_autoplay,
         "latest_news": latest_news,
         "live_settings": live_tv_setting(),
+        "news_ticker": news_ticker_setting(),
     }
 
 
@@ -212,9 +213,10 @@ def facebook_live_input_for_channel(channel):
 
 def facebook_live_filter(channel):
     setting = live_tv_setting()
+    ticker_setting = news_ticker_setting()
     label_text = channel.lower_third_label or setting.default_lower_third_label
     headline_text = channel.headline or setting.default_headline
-    ticker_text = channel.ticker_text or setting.default_ticker_text
+    ticker_text = ticker_setting.text or setting.default_ticker_text
     title_text = channel.title or setting.name
     label_file = ffmpeg_text_file(label_text, "fb-label")
     headline_file = ffmpeg_text_file(headline_text, "fb-headline")
@@ -339,7 +341,12 @@ def live_tv_setting():
     return LiveTVSetting.get_solo()
 
 
+def news_ticker_setting():
+    return NewsTickerSetting.get_solo()
+
+
 def serialize_live_tv_setting(request, setting):
+    ticker = news_ticker_setting()
     return {
         "id": setting.pk,
         "name": setting.name,
@@ -352,22 +359,24 @@ def serialize_live_tv_setting(request, setting):
         "autoplay": setting.autoplay,
         "default_lower_third_label": setting.default_lower_third_label,
         "default_headline": setting.default_headline,
-        "default_ticker_label": setting.default_ticker_label,
-        "default_ticker_text": setting.default_ticker_text,
-        "ticker_speed_seconds": setting.ticker_speed_seconds,
-        "mobile_ticker_speed_seconds": setting.mobile_ticker_speed_seconds,
+        "default_ticker_label": ticker.label,
+        "default_ticker_text": ticker.text,
+        "ticker_speed_seconds": ticker.speed_seconds,
+        "mobile_ticker_speed_seconds": ticker.mobile_speed_seconds,
+        "ticker_style": ticker.style,
         "updated_at": setting.updated_at.isoformat(),
     }
 
-def ticker_items(channel):
-    if not channel or not channel.ticker_text:
+def ticker_items_from_text(text):
+    if not text:
         return []
-    raw_items = channel.ticker_text.replace("\r", "\n").replace("|", "\n").split("\n")
+    raw_items = text.replace("\r", "\n").replace("|", "\n").split("\n")
     return [item.strip() for item in raw_items if item.strip()]
 
 
 def serialize_channel_for_mobile(request, channel):
     setting = live_tv_setting()
+    ticker_setting = news_ticker_setting()
     player_type = channel.player_source_type
     stream_url = ""
     youtube_embed_url = ""
@@ -379,9 +388,7 @@ def serialize_channel_for_mobile(request, channel):
     elif player_type == LiveTVChannel.SourceType.YOUTUBE:
         youtube_embed_url = channel.youtube_embed_url
 
-    ticker = ticker_items(channel)
-    if not ticker:
-        ticker = ticker_items(type("DefaultTicker", (), {"ticker_text": setting.default_ticker_text})())
+    ticker = ticker_items_from_text(ticker_setting.text)
 
     return {
         "id": channel.pk,
@@ -389,7 +396,7 @@ def serialize_channel_for_mobile(request, channel):
         "description": channel.description,
         "headline": channel.headline or setting.default_headline,
         "lower_third_label": channel.lower_third_label or setting.default_lower_third_label,
-        "ticker_label": channel.ticker_label or setting.default_ticker_label,
+        "ticker_label": ticker_setting.label or setting.default_ticker_label,
         "ticker": ticker,
         "player_type": player_type,
         "stream_url": stream_url,
@@ -404,8 +411,9 @@ def serialize_channel_for_mobile(request, channel):
         "show_channel_logo": setting.show_channel_logo,
         "show_lower_third": setting.show_lower_third,
         "show_ticker": setting.show_ticker,
-        "ticker_speed_seconds": setting.ticker_speed_seconds,
-        "mobile_ticker_speed_seconds": setting.mobile_ticker_speed_seconds,
+        "ticker_speed_seconds": ticker_setting.speed_seconds,
+        "mobile_ticker_speed_seconds": ticker_setting.mobile_speed_seconds,
+        "ticker_style": ticker_setting.style,
         "settings": serialize_live_tv_setting(request, setting),
         "web_url": request.build_absolute_uri(channel.get_absolute_url()),
         "ads": mobile_live_tv_ads(),
@@ -439,16 +447,6 @@ def mobile_live_tv_ads():
             "style": "property",
         },
     ]
-
-
-def mobile_api_authorized(request):
-    expected_key = getattr(settings, "MOBILE_UPLOAD_API_KEY", "")
-    if not expected_key:
-        return False
-
-    auth_header = request.headers.get("Authorization", "")
-    token = auth_header.removeprefix("Token ").removeprefix("Bearer ").strip()
-    return token == expected_key or request.POST.get("api_key") == expected_key
 
 
 def mobile_admin_user(request):
@@ -940,27 +938,9 @@ def serialize_render_job(request, job):
     }
 
 
-def serialize_mobile_upload(request, upload):
-    return {
-        "id": upload.pk,
-        "title": upload.title,
-        "description": upload.description,
-        "status": upload.status,
-        "status_label": upload.get_status_display(),
-        "uploaded_by_name": upload.uploaded_by_name,
-        "uploaded_by_phone": upload.uploaded_by_phone,
-        "video_url": request.build_absolute_uri(upload.video.url),
-        "created_at": upload.created_at.isoformat(),
-    }
-
-
 def delete_file_field(file_field):
     if file_field:
         file_field.delete(save=False)
-
-
-def manageable_uploads_for(user):
-    return MobileVideoUpload.objects.filter(Q(uploaded_by=user) | Q(uploaded_by__isnull=True))
 
 
 def manageable_render_jobs_for(user):
@@ -996,45 +976,6 @@ def current_live_tv_api(request):
     if not active_channel:
         return JsonResponse({"detail": "No active live TV channel found."}, status=404)
     return JsonResponse(serialize_channel_for_mobile(request, active_channel))
-
-
-@csrf_exempt
-@require_POST
-def mobile_video_upload_api(request):
-    admin_user = mobile_admin_user(request)
-    is_admin = bool(admin_user)
-    if not is_admin and not getattr(settings, "MOBILE_UPLOAD_API_KEY", ""):
-        return JsonResponse({"detail": "Mobile upload API token is not configured."}, status=503)
-    if not is_admin and not mobile_api_authorized(request):
-        return JsonResponse({"detail": "Invalid mobile upload API token."}, status=403)
-
-    video = request.FILES.get("video")
-    title = request.POST.get("title", "").strip()
-
-    if not video:
-        return JsonResponse({"detail": "Video file is required."}, status=400)
-    if not title:
-        title = Path(video.name).stem[:180] or "Mobile video upload"
-
-    upload = MobileVideoUpload.objects.create(
-        title=title,
-        description=request.POST.get("description", "").strip(),
-        video=video,
-        uploaded_by=admin_user if is_admin else None,
-        uploaded_by_name=request.POST.get("uploaded_by_name", "").strip(),
-        uploaded_by_phone=request.POST.get("uploaded_by_phone", "").strip(),
-        device_info=request.POST.get("device_info", "").strip()[:220],
-    )
-
-    return JsonResponse(
-        {
-            "id": upload.pk,
-            "title": upload.title,
-            "status": upload.status,
-            "video_url": request.build_absolute_uri(upload.video.url),
-        },
-        status=201,
-    )
 
 
 @csrf_exempt
@@ -1081,7 +1022,6 @@ def mobile_admin_dashboard_api(request):
         return error
 
     channels = LiveTVChannel.objects.all()
-    uploads = manageable_uploads_for(user)[:50]
     rendered_videos = manageable_render_jobs_for(user)[:50]
     media_downloads = manageable_media_downloads_for(user)[:50]
     settings_obj = live_tv_setting()
@@ -1091,7 +1031,7 @@ def mobile_admin_dashboard_api(request):
             "settings": serialize_live_tv_setting(request, settings_obj),
             "facebook_live": serialize_facebook_live_setting(facebook_live_setting()),
             "channels": [serialize_channel_for_admin(request, channel) for channel in channels],
-            "mobile_uploads": [serialize_mobile_upload(request, upload) for upload in uploads],
+            "mobile_uploads": [],
             "rendered_videos": [serialize_render_job(request, job) for job in rendered_videos],
             "media_downloads": [serialize_media_download(request, job) for job in media_downloads],
             "source_types": list(LiveTVChannel.SourceType.values),
@@ -1112,24 +1052,27 @@ def mobile_admin_settings_save_api(request):
     setting.live_label = request.POST.get("live_label", setting.live_label).strip()[:40] or setting.live_label
     setting.default_lower_third_label = request.POST.get("default_lower_third_label", setting.default_lower_third_label).strip()[:60] or setting.default_lower_third_label
     setting.default_headline = request.POST.get("default_headline", setting.default_headline).strip()[:180] or setting.default_headline
-    setting.default_ticker_label = request.POST.get("default_ticker_label", setting.default_ticker_label).strip()[:60] or setting.default_ticker_label
-    setting.default_ticker_text = request.POST.get("default_ticker_text", setting.default_ticker_text).strip()[:260] or setting.default_ticker_text
+    ticker = news_ticker_setting()
+    ticker.label = request.POST.get("default_ticker_label", ticker.label).strip()[:60] or ticker.label
+    ticker.text = request.POST.get("default_ticker_text", ticker.text).strip() or ticker.text
     if "ticker_speed_seconds" in request.POST:
         try:
-            setting.ticker_speed_seconds = max(6, min(120, int(request.POST.get("ticker_speed_seconds") or setting.ticker_speed_seconds)))
+            ticker.speed_seconds = max(6, min(120, int(request.POST.get("ticker_speed_seconds") or ticker.speed_seconds)))
         except (TypeError, ValueError):
             pass
     if "mobile_ticker_speed_seconds" in request.POST:
         try:
-            setting.mobile_ticker_speed_seconds = max(6, min(120, int(request.POST.get("mobile_ticker_speed_seconds") or setting.mobile_ticker_speed_seconds)))
+            ticker.mobile_speed_seconds = max(6, min(120, int(request.POST.get("mobile_ticker_speed_seconds") or ticker.mobile_speed_seconds)))
         except (TypeError, ValueError):
             pass
+    ticker.style = request.POST.get("ticker_style", ticker.style).strip()[:60] or ticker.style
     for field in ["show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker", "autoplay"]:
         if field in request.POST:
             setattr(setting, field, request.POST.get(field) in {"1", "true", "on", "yes"})
     if request.FILES.get("channel_logo"):
         delete_file_field(setting.channel_logo)
         setting.channel_logo = request.FILES["channel_logo"]
+    ticker.save()
     setting.save()
     return JsonResponse({"settings": serialize_live_tv_setting(request, setting)})
 
@@ -1146,11 +1089,11 @@ def mobile_admin_channel_save_api(request):
     data = request.POST.copy()
     data.setdefault("title", "The Up Media Live TV")
     data.setdefault("source_type", LiveTVChannel.SourceType.YOUTUBE)
+    if request.FILES.get("video_file"):
+        data["source_type"] = LiveTVChannel.SourceType.DIRECT
     settings_obj = live_tv_setting()
     data.setdefault("lower_third_label", settings_obj.default_lower_third_label)
     data.setdefault("headline", data.get("title", settings_obj.default_headline))
-    data.setdefault("ticker_label", settings_obj.default_ticker_label)
-    data.setdefault("ticker_text", "")
     data.setdefault("display_order", "0")
     data["is_active"] = "on"
     data["is_live"] = "on"
@@ -1172,36 +1115,6 @@ def mobile_admin_channel_delete_api(request, pk):
 
     channel = get_object_or_404(LiveTVChannel, pk=pk)
     channel.delete()
-    return JsonResponse({"ok": True})
-
-
-@csrf_exempt
-@require_POST
-def mobile_admin_upload_update_api(request, pk):
-    user, error = mobile_admin_required(request)
-    if error:
-        return error
-
-    upload = get_object_or_404(manageable_uploads_for(user), pk=pk)
-    title = request.POST.get("title", "").strip()
-    description = request.POST.get("description", "").strip()
-    if title:
-        upload.title = title[:180]
-    upload.description = description
-    upload.save(update_fields=["title", "description", "updated_at"])
-    return JsonResponse({"upload": serialize_mobile_upload(request, upload)})
-
-
-@csrf_exempt
-@require_POST
-def mobile_admin_upload_delete_api(request, pk):
-    user, error = mobile_admin_required(request)
-    if error:
-        return error
-
-    upload = get_object_or_404(manageable_uploads_for(user), pk=pk)
-    delete_file_field(upload.video)
-    upload.delete()
     return JsonResponse({"ok": True})
 
 
@@ -1323,8 +1236,9 @@ def mobile_admin_render_social_video_api(request):
     active_channel = LiveTVChannel.objects.filter(is_active=True, is_live=True).first() or LiveTVChannel.objects.filter(is_active=True).first()
     title = request.POST.get("title", "").strip() or (active_channel.title if active_channel else Path(video.name).stem)
     headline = request.POST.get("headline", "").strip() or (active_channel.headline if active_channel else title)
-    ticker_label = request.POST.get("ticker_label", "").strip() or (active_channel.ticker_label if active_channel else "BREAKING NEWS")
-    ticker_text = request.POST.get("ticker_text", "").strip() or (active_channel.ticker_text if active_channel else "The Up Media")
+    ticker_setting = news_ticker_setting()
+    ticker_label = request.POST.get("ticker_label", "").strip() or ticker_setting.label or "BREAKING NEWS"
+    ticker_text = request.POST.get("ticker_text", "").strip() or ticker_setting.text or "The Up Media"
     lower_third_label = request.POST.get("lower_third_label", "").strip() or (active_channel.lower_third_label if active_channel else "BREAKING NEWS")
     render_format = request.POST.get("render_format", "16:9").strip()
     if render_format not in {"fast_720p", "16:9", "9:16"}:
@@ -1427,7 +1341,7 @@ def dashboard(request):
             "form": form,
             "selected_channel": instance,
             "preview_channel": preview_channel,
-            "mobile_uploads": MobileVideoUpload.objects.all()[:10],
+            "news_ticker": news_ticker_setting(),
         },
     )
 

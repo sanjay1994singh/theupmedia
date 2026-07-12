@@ -13,7 +13,7 @@ from blog.models import BlogPost
 from blog.sitemaps import BlogPostSitemap
 from services.models import Service
 from services.sitemaps import ServiceSitemap
-from live_tv.models import LiveTVChannel, LiveTVSetting
+from live_tv.models import LiveTVChannel, LiveTVSetting, NewsTickerSetting
 from .sitemaps import StaticPageSitemap
 
 
@@ -27,6 +27,7 @@ def home(request):
     home_live_tv = home_live_tv_channels[0] if home_live_tv_channels else None
     home_live_tv_next = None
     home_live_settings = LiveTVSetting.get_solo()
+    home_news_ticker = NewsTickerSetting.get_solo()
     if home_live_tv_channels:
         home_live_tv_next = home_live_tv_channels[1] if len(home_live_tv_channels) > 1 else home_live_tv
     return render(
@@ -42,6 +43,7 @@ def home(request):
             "home_live_tv_next": home_live_tv_next,
             "home_live_tv_loop_same": bool(home_live_tv and home_live_tv_next and home_live_tv.pk == home_live_tv_next.pk),
             "home_live_settings": home_live_settings,
+            "home_news_ticker": home_news_ticker,
         },
     )
 

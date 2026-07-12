@@ -19,15 +19,12 @@ class LiveTVChannelForm(forms.ModelForm):
             "is_live",
             "lower_third_label",
             "headline",
-            "ticker_label",
-            "ticker_text",
             "display_order",
             "meta_title",
             "meta_description",
         ]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
-            "ticker_text": forms.Textarea(attrs={"rows": 3}),
             "meta_description": forms.Textarea(attrs={"rows": 2}),
             "source_type": forms.RadioSelect,
         }

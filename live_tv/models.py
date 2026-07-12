@@ -186,32 +186,29 @@ class LiveTVSetting(models.Model):
         self.pk = 1
         super().save(*args, **kwargs)
 
-class MobileVideoUpload(models.Model):
-    class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        REVIEWED = "reviewed", "Reviewed"
-        PUBLISHED = "published", "Published"
-        REJECTED = "rejected", "Rejected"
-
-    title = models.CharField(max_length=180)
-    description = models.TextField(blank=True)
-    video = models.FileField(upload_to="mobile-video-uploads/%Y/%m/")
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, blank=True, null=True, related_name="mobile_video_uploads")
-    uploaded_by_name = models.CharField(max_length=120, blank=True)
-    uploaded_by_phone = models.CharField(max_length=30, blank=True)
-    device_info = models.CharField(max_length=220, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+class NewsTickerSetting(models.Model):
+    label = models.CharField(max_length=60, default="ताज़ा खबर")
+    text = models.TextField(default="Latest updates from The Up Media")
+    speed_seconds = models.PositiveSmallIntegerField(default=22)
+    mobile_speed_seconds = models.PositiveSmallIntegerField(default=12)
+    style = models.CharField(max_length=60, default="red_white_slant")
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["status", "-created_at"], name="mobile_video_status_idx"),
-        ]
+        verbose_name = "News Ticker Setting"
+        verbose_name_plural = "News Ticker Settings"
 
     def __str__(self):
-        return self.title
+        return self.label
+
+    @classmethod
+    def get_solo(cls):
+        ticker, _created = cls.objects.get_or_create(pk=1)
+        return ticker
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
 
 
 class MobileAdminToken(models.Model):
