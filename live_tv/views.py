@@ -18,7 +18,7 @@ from django.contrib.auth import authenticate
 from django.core.files import File
 from django.core.files.base import ContentFile
 from django.db import close_old_connections
-from django.db.models import Q
+from django.db.models import F, Q
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -28,7 +28,7 @@ from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_POST
 
 from .forms import LiveTVChannelForm
-from .models import FacebookLiveSetting, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsVideo, SocialRenderedVideo
+from .models import FacebookLiveSetting, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsVideo, SocialRenderedVideo
 from news.models import Article
 
 RESTRICTED_DOWNLOAD_HOSTS = {
@@ -524,6 +524,37 @@ def mobile_admin_required(request):
     return user, None
 
 
+def parse_required_location(post_data):
+    raw_state_id = post_data.get("state_id", "").strip()
+    raw_city_id = post_data.get("city_id", "").strip()
+    errors = {}
+
+    if not raw_state_id.isdigit():
+        errors["state_id"] = ["State is required."]
+    if not raw_city_id.isdigit():
+        errors["city_id"] = ["City is required."]
+    if errors:
+        return None, None, errors
+
+    state_id = int(raw_state_id)
+    city_id = int(raw_city_id)
+    if not LiveTVState.objects.filter(pk=state_id, is_active=True).exists():
+        errors["state_id"] = ["Selected state is not active."]
+    city = LiveTVCity.objects.filter(pk=city_id, state_id=state_id, is_active=True).first()
+    if not city:
+        errors["city_id"] = ["Selected city is required and must belong to selected state."]
+    if errors:
+        return None, None, errors
+    return state_id, city_id, {}
+
+
+def parse_optional_category(post_data):
+    raw_category_id = post_data.get("category_id", "").strip()
+    if raw_category_id.isdigit() and LiveTVCategory.objects.filter(pk=int(raw_category_id), is_active=True).exists():
+        return int(raw_category_id)
+    return None
+
+
 def channel_file_url(request, channel, field_name):
     return absolute_media_url(request, getattr(channel, field_name))
 
@@ -548,6 +579,15 @@ def serialize_channel_for_admin(request, channel):
 
 
 def serialize_shorts_video(request, short):
+    comments = [
+        {
+            "id": comment.pk,
+            "name": comment.name or "Viewer",
+            "text": comment.text,
+            "created_at": comment.created_at.isoformat(),
+        }
+        for comment in short.comments.all()[:5]
+    ]
     return {
         "id": short.pk,
         "title": short.title,
@@ -571,6 +611,10 @@ def serialize_shorts_video(request, short):
         "likes_count": short.likes_count,
         "comments_count": short.comments_count,
         "shares_count": short.shares_count,
+        "likes": short.likes_count,
+        "comments_total": short.comments_count,
+        "shares": short.shares_count,
+        "comments": comments,
         "created_at": short.created_at.isoformat(),
         "updated_at": short.updated_at.isoformat(),
     }
@@ -1064,8 +1108,53 @@ def current_live_tv_api(request):
 
 @require_GET
 def shorts_list_api(request):
-    shorts = ShortsVideo.objects.filter(is_published=True)
+    shorts = ShortsVideo.objects.filter(is_published=True).select_related("category", "state", "city").prefetch_related("comments")
     return JsonResponse({"shorts": [serialize_shorts_video(request, short) for short in shorts]})
+
+
+@csrf_exempt
+@require_POST
+def shorts_like_api(request, pk):
+    short = get_object_or_404(ShortsVideo, pk=pk, is_published=True)
+    ShortsVideo.objects.filter(pk=short.pk).update(likes_count=F("likes_count") + 1)
+    short.refresh_from_db(fields=["likes_count", "updated_at"])
+    return JsonResponse({"id": short.pk, "likes_count": short.likes_count, "likes": short.likes_count})
+
+
+@csrf_exempt
+@require_POST
+def shorts_share_api(request, pk):
+    short = get_object_or_404(ShortsVideo, pk=pk, is_published=True)
+    ShortsVideo.objects.filter(pk=short.pk).update(shares_count=F("shares_count") + 1)
+    short.refresh_from_db(fields=["shares_count", "updated_at"])
+    return JsonResponse({"id": short.pk, "shares_count": short.shares_count, "shares": short.shares_count})
+
+
+@csrf_exempt
+@require_POST
+def shorts_comment_api(request, pk):
+    short = get_object_or_404(ShortsVideo, pk=pk, is_published=True)
+    text = request.POST.get("text", "").strip()
+    if not text:
+        return JsonResponse({"detail": "Comment text is required.", "errors": {"text": ["This field is required."]}}, status=400)
+    name = request.POST.get("name", "").strip()[:80]
+    comment = ShortsComment.objects.create(short=short, name=name, text=text[:1000])
+    ShortsVideo.objects.filter(pk=short.pk).update(comments_count=F("comments_count") + 1)
+    short.refresh_from_db(fields=["comments_count", "updated_at"])
+    return JsonResponse(
+        {
+            "id": short.pk,
+            "comments_count": short.comments_count,
+            "comments_total": short.comments_count,
+            "comment": {
+                "id": comment.pk,
+                "name": comment.name or "Viewer",
+                "text": comment.text,
+                "created_at": comment.created_at.isoformat(),
+            },
+        },
+        status=201,
+    )
 
 
 @require_GET
@@ -1085,7 +1174,14 @@ def mobile_live_tv_meta_api(request):
         {"id": category.pk, "name": category.name}
         for category in LiveTVCategory.objects.filter(is_active=True).order_by("display_order", "name")
     ]
-    return JsonResponse({"categories": categories, "states": states})
+    return JsonResponse({
+        "categories": categories,
+        "states": states,
+        "required_fields": {
+            "video_upload": ["state_id", "city_id"],
+            "shorts_upload": ["state_id", "city_id"],
+        },
+    })
 
 
 @csrf_exempt
@@ -1217,12 +1313,12 @@ def mobile_admin_channel_save_api(request):
     channel.source_type = source_type
     channel.youtube_url = youtube_url if source_type == LiveTVChannel.SourceType.YOUTUBE else ""
     channel.stream_url = stream_url if source_type == LiveTVChannel.SourceType.HLS else ""
-    raw_category_id = request.POST.get("category_id", "").strip()
-    raw_state_id = request.POST.get("state_id", "").strip()
-    raw_city_id = request.POST.get("city_id", "").strip()
-    channel.category_id = int(raw_category_id) if raw_category_id.isdigit() else None
-    channel.state_id = int(raw_state_id) if raw_state_id.isdigit() else None
-    channel.city_id = int(raw_city_id) if raw_city_id.isdigit() else None
+    state_id, city_id, location_errors = parse_required_location(request.POST)
+    if location_errors:
+        return JsonResponse({"detail": "State and city are required.", "errors": location_errors}, status=400)
+    channel.category_id = parse_optional_category(request.POST)
+    channel.state_id = state_id
+    channel.city_id = city_id
     if video_file:
         delete_file_field(channel.video_file)
         channel.video_file = video_file
@@ -1278,9 +1374,10 @@ def mobile_admin_shorts_upload_api(request):
     headline = request.POST.get("headline", "").strip()
     caption = request.POST.get("caption", "").strip()
     location = request.POST.get("location", "").strip()
-    raw_category_id = request.POST.get("category_id", "").strip()
-    raw_state_id = request.POST.get("state_id", "").strip()
-    raw_city_id = request.POST.get("city_id", "").strip()
+    state_id, city_id, location_errors = parse_required_location(request.POST)
+    if location_errors:
+        return JsonResponse({"detail": "State and city are required.", "errors": location_errors}, status=400)
+    category_id = parse_optional_category(request.POST)
     frame_template = request.POST.get("frame_template", "").strip() or "normal_black_red"
     raw_display_order = request.POST.get("display_order")
     try:
@@ -1296,9 +1393,9 @@ def mobile_admin_shorts_upload_api(request):
         headline=headline[:180],
         caption=caption,
         location=location[:120],
-        category_id=int(raw_category_id) if raw_category_id.isdigit() else None,
-        state_id=int(raw_state_id) if raw_state_id.isdigit() else None,
-        city_id=int(raw_city_id) if raw_city_id.isdigit() else None,
+        category_id=category_id,
+        state_id=state_id,
+        city_id=city_id,
         frame_template=frame_template[:60],
         video_file=video_file,
         thumbnail=request.FILES.get("thumbnail"),

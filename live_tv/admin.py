@@ -4,7 +4,7 @@ from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from .models import FacebookLiveSetting, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsVideo, SocialRenderedVideo
+from .models import FacebookLiveSetting, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsVideo, SocialRenderedVideo
 
 
 @admin.register(LiveTVCategory)
@@ -169,6 +169,14 @@ class ShortsVideoAdmin(admin.ModelAdmin):
         ("Counters", {"fields": ("likes_count", "comments_count", "shares_count")}),
         ("Dates", {"fields": ("created_at", "updated_at")}),
     )
+
+
+@admin.register(ShortsComment)
+class ShortsCommentAdmin(admin.ModelAdmin):
+    list_display = ("short", "name", "created_at")
+    search_fields = ("short__title", "name", "text")
+    list_filter = ("created_at",)
+    readonly_fields = ("created_at",)
 
 
 @admin.register(MobileAdminToken)

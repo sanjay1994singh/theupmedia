@@ -3,6 +3,7 @@ import secrets
 from urllib.parse import parse_qs, urlencode, urlparse
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.template.defaultfilters import slugify
 from django.urls import reverse
@@ -155,6 +156,17 @@ class LiveTVChannel(models.Model):
             new_file = getattr(self, field_name)
             if old_file and old_file.name and old_file.name != getattr(new_file, "name", ""):
                 self._delete_file_if_unused(field_name, old_file)
+
+    def clean(self):
+        errors = {}
+        if not self.state_id:
+            errors["state"] = "State is required."
+        if not self.city_id:
+            errors["city"] = "City is required."
+        elif self.state_id and self.city and self.city.state_id != self.state_id:
+            errors["city"] = "City must belong to selected state."
+        if errors:
+            raise ValidationError(errors)
 
     def delete(self, *args, **kwargs):
         files = {
@@ -328,6 +340,17 @@ class ShortsVideo(models.Model):
             self.title = Path(self.video_file.name).stem[:180] if self.video_file else "The UP Media Shorts"
         super().save(*args, **kwargs)
 
+    def clean(self):
+        errors = {}
+        if not self.state_id:
+            errors["state"] = "State is required."
+        if not self.city_id:
+            errors["city"] = "City is required."
+        elif self.state_id and self.city and self.city.state_id != self.state_id:
+            errors["city"] = "City must belong to selected state."
+        if errors:
+            raise ValidationError(errors)
+
     def delete(self, *args, **kwargs):
         files = [self.video_file, self.thumbnail]
         result = super().delete(*args, **kwargs)
@@ -335,6 +358,22 @@ class ShortsVideo(models.Model):
             if file_obj and file_obj.name:
                 file_obj.delete(save=False)
         return result
+
+
+class ShortsComment(models.Model):
+    short = models.ForeignKey(ShortsVideo, on_delete=models.CASCADE, related_name="comments")
+    name = models.CharField(max_length=80, blank=True)
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["short", "-created_at"], name="short_comment_recent_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.name or 'Viewer'}: {self.text[:40]}"
 
 
 class MobileAdminToken(models.Model):
