@@ -34,7 +34,7 @@ class LiveTVCityAdmin(admin.ModelAdmin):
 
 @admin.register(LiveTVChannel)
 class LiveTVChannelAdmin(admin.ModelAdmin):
-    list_display = ("title", "source_type", "hls_status", "category", "state", "city", "is_live", "is_active", "display_order", "updated_at")
+    list_display = ("title", "source_type", "hls_status", "safe_category", "safe_state", "safe_city", "is_live", "is_active", "display_order", "updated_at")
     list_filter = ("source_type", "hls_status", "is_live", "is_active")
     search_fields = ("title", "headline", "ticker_text", "city__name", "state__name", "category__name")
     prepopulated_fields = {"slug": ("title",)}
@@ -48,6 +48,31 @@ class LiveTVChannelAdmin(admin.ModelAdmin):
         ("Video Text", {"fields": ("lower_third_label", "headline")}),
         ("SEO", {"fields": ("meta_title", "meta_description")}),
     )
+
+    def _safe_related_name(self, obj, field_name, id_field_name):
+        raw_id = getattr(obj, id_field_name, None)
+        if raw_id in (None, ""):
+            return "-"
+        try:
+            related = getattr(obj, field_name)
+            return str(related) if related else "-"
+        except (ValueError, TypeError, LiveTVCategory.DoesNotExist, LiveTVState.DoesNotExist, LiveTVCity.DoesNotExist):
+            return f"Invalid ID: {raw_id}"
+
+    def safe_category(self, obj):
+        return self._safe_related_name(obj, "category", "category_id")
+
+    safe_category.short_description = "Category"
+
+    def safe_state(self, obj):
+        return self._safe_related_name(obj, "state", "state_id")
+
+    safe_state.short_description = "State"
+
+    def safe_city(self, obj):
+        return self._safe_related_name(obj, "city", "city_id")
+
+    safe_city.short_description = "City"
 
 
 
