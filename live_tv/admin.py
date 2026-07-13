@@ -35,7 +35,7 @@ class LiveTVCityAdmin(admin.ModelAdmin):
 @admin.register(LiveTVChannel)
 class LiveTVChannelAdmin(admin.ModelAdmin):
     list_display = ("title", "source_type", "hls_status", "category", "state", "city", "is_live", "is_active", "display_order", "updated_at")
-    list_filter = ("source_type", "hls_status", "category", "state", "is_live", "is_active")
+    list_filter = ("source_type", "hls_status", "is_live", "is_active")
     search_fields = ("title", "headline", "ticker_text", "city__name", "state__name", "category__name")
     prepopulated_fields = {"slug": ("title",)}
     list_editable = ("is_live", "is_active", "display_order")
@@ -161,7 +161,7 @@ class NewsTickerSettingAdmin(admin.ModelAdmin):
 @admin.register(ShortsVideo)
 class ShortsVideoAdmin(admin.ModelAdmin):
     list_display = ("title", "frame_template", "category", "state", "city", "location", "hls_status", "is_published", "display_order", "likes_count", "comments_count", "shares_count", "created_at")
-    list_filter = ("is_published", "hls_status", "frame_template", "category", "state", "created_at")
+    list_filter = ("is_published", "hls_status", "frame_template")
     search_fields = ("title", "headline", "caption", "location", "city__name")
     list_editable = ("is_published", "display_order")
     readonly_fields = ("hls_master_url", "hls_status", "processing_error", "duration", "created_at", "updated_at")
@@ -178,14 +178,12 @@ class ShortsVideoAdmin(admin.ModelAdmin):
 class ShortsCommentAdmin(admin.ModelAdmin):
     list_display = ("short", "name", "created_at")
     search_fields = ("short__title", "name", "text")
-    list_filter = ("created_at",)
     readonly_fields = ("created_at",)
 
 
 @admin.register(MobileAdminToken)
 class MobileAdminTokenAdmin(admin.ModelAdmin):
     list_display = ("user", "device_name", "created_at", "last_used_at")
-    list_filter = ("created_at", "last_used_at")
     search_fields = ("user__username", "user__email", "device_name")
     readonly_fields = ("key", "created_at", "last_used_at")
 
@@ -194,12 +192,12 @@ class MobileAdminTokenAdmin(admin.ModelAdmin):
 @admin.register(MediaDownload)
 class MediaDownloadAdmin(admin.ModelAdmin):
     list_display = ("title", "media_type", "status", "progress_percent", "created_by", "created_at")
-    list_filter = ("status", "media_type", "created_at")
+    list_filter = ("status", "media_type")
     search_fields = ("title", "source_url")
     readonly_fields = ("progress_percent", "created_at", "updated_at", "error_message")
 @admin.register(SocialRenderedVideo)
 class SocialRenderedVideoAdmin(admin.ModelAdmin):
     list_display = ("title", "frame_template", "render_format", "status", "progress_percent", "created_by", "created_at")
-    list_filter = ("status", "render_format", "frame_category", "created_at")
+    list_filter = ("status", "render_format", "frame_category")
     search_fields = ("title", "headline", "ticker_label", "ticker_text", "frame_template")
     readonly_fields = ("progress_percent", "created_at", "updated_at", "error_message")
