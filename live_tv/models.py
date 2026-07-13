@@ -95,6 +95,12 @@ class LiveTVChannel(models.Model):
         DIRECT = "direct", "Direct Video Upload"
         HLS = "hls", "HLS / M3U8 Stream"
 
+    class HLSStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSING = "processing", "Processing"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
     title = models.CharField(max_length=180)
     slug = models.SlugField(max_length=200, unique=True, blank=True)
     description = models.TextField(blank=True)
@@ -102,6 +108,10 @@ class LiveTVChannel(models.Model):
     youtube_url = models.URLField(blank=True, help_text="Paste YouTube watch, live, or embed URL.")
     stream_url = models.URLField(blank=True, help_text="For HLS/M3U8 or external MP4/WebM URLs.")
     video_file = models.FileField(upload_to="live-tv/videos/%Y/%m/", blank=True, null=True)
+    hls_master_url = models.CharField(max_length=500, blank=True)
+    hls_status = models.CharField(max_length=20, choices=HLSStatus.choices, default=HLSStatus.PENDING)
+    processing_error = models.TextField(blank=True)
+    duration = models.FloatField(blank=True, null=True)
     poster_image = models.ImageField(upload_to="live-tv/posters/%Y/%m/", blank=True, null=True)
     category = models.ForeignKey(LiveTVCategory, on_delete=models.SET_NULL, blank=True, null=True, related_name="channels")
     state = models.ForeignKey(LiveTVState, on_delete=models.SET_NULL, blank=True, null=True, related_name="channels")
@@ -307,6 +317,12 @@ class NewsTickerSetting(models.Model):
 
 
 class ShortsVideo(models.Model):
+    class HLSStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSING = "processing", "Processing"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
     title = models.CharField(max_length=180, blank=True)
     headline = models.CharField(max_length=180, blank=True)
     caption = models.TextField(blank=True)
@@ -316,6 +332,11 @@ class ShortsVideo(models.Model):
     city = models.ForeignKey(LiveTVCity, on_delete=models.SET_NULL, blank=True, null=True, related_name="shorts")
     frame_template = models.CharField(max_length=60, default="normal_black_red")
     video_file = models.FileField(upload_to="shorts/videos/%Y/%m/")
+    original_video = models.FileField(upload_to="shorts/original/%Y/%m/", blank=True, null=True)
+    hls_master_url = models.CharField(max_length=500, blank=True)
+    hls_status = models.CharField(max_length=20, choices=HLSStatus.choices, default=HLSStatus.PENDING)
+    processing_error = models.TextField(blank=True)
+    duration = models.FloatField(blank=True, null=True)
     thumbnail = models.ImageField(upload_to="shorts/thumbnails/%Y/%m/", blank=True, null=True)
     is_published = models.BooleanField(default=True)
     display_order = models.PositiveIntegerField(default=0)

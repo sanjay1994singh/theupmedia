@@ -34,14 +34,16 @@ class LiveTVCityAdmin(admin.ModelAdmin):
 
 @admin.register(LiveTVChannel)
 class LiveTVChannelAdmin(admin.ModelAdmin):
-    list_display = ("title", "source_type", "category", "state", "city", "is_live", "is_active", "display_order", "updated_at")
-    list_filter = ("source_type", "category", "state", "is_live", "is_active")
+    list_display = ("title", "source_type", "hls_status", "category", "state", "city", "is_live", "is_active", "display_order", "updated_at")
+    list_filter = ("source_type", "hls_status", "category", "state", "is_live", "is_active")
     search_fields = ("title", "headline", "ticker_text", "city__name", "state__name", "category__name")
     prepopulated_fields = {"slug": ("title",)}
     list_editable = ("is_live", "is_active", "display_order")
+    readonly_fields = ("hls_master_url", "hls_status", "processing_error", "duration")
     fieldsets = (
         ("Basic", {"fields": ("title", "slug", "description", "is_active", "is_live", "display_order")}),
         ("Video Source", {"fields": ("source_type", "youtube_url", "stream_url", "video_file", "poster_image")}),
+        ("HLS Processing", {"fields": ("hls_master_url", "hls_status", "processing_error", "duration")}),
         ("Category / Location", {"fields": ("category", "state", "city")}),
         ("Video Text", {"fields": ("lower_third_label", "headline")}),
         ("SEO", {"fields": ("meta_title", "meta_description")}),
@@ -158,13 +160,14 @@ class NewsTickerSettingAdmin(admin.ModelAdmin):
 
 @admin.register(ShortsVideo)
 class ShortsVideoAdmin(admin.ModelAdmin):
-    list_display = ("title", "frame_template", "category", "state", "city", "location", "is_published", "display_order", "likes_count", "comments_count", "shares_count", "created_at")
-    list_filter = ("is_published", "frame_template", "category", "state", "created_at")
-    search_fields = ("title", "headline", "caption", "location", "city")
+    list_display = ("title", "frame_template", "category", "state", "city", "location", "hls_status", "is_published", "display_order", "likes_count", "comments_count", "shares_count", "created_at")
+    list_filter = ("is_published", "hls_status", "frame_template", "category", "state", "created_at")
+    search_fields = ("title", "headline", "caption", "location", "city__name")
     list_editable = ("is_published", "display_order")
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = ("hls_master_url", "hls_status", "processing_error", "duration", "created_at", "updated_at")
     fieldsets = (
-        ("Shorts Video", {"fields": ("title", "headline", "caption", "location", "category", "state", "city", "frame_template", "video_file", "thumbnail")}),
+        ("Shorts Video", {"fields": ("title", "headline", "caption", "location", "category", "state", "city", "frame_template", "video_file", "original_video", "thumbnail")}),
+        ("HLS Processing", {"fields": ("hls_master_url", "hls_status", "processing_error", "duration")}),
         ("Status", {"fields": ("is_published", "display_order", "created_by")}),
         ("Counters", {"fields": ("likes_count", "comments_count", "shares_count")}),
         ("Dates", {"fields": ("created_at", "updated_at")}),

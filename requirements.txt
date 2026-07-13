@@ -8,3 +8,4 @@ celery>=5.4
 redis>=5.0
 dj-static>=0.0.6
 static-ranges
+yt-dlp>=2025.1.0

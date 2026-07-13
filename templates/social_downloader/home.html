@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Social Video Downloader | {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}Download authorized public social videos or audio with quality options and secure history on {{ SITE_NAME }}.{% endblock %}
+
+{% block extra_head %}
+<style>
+  .svd-wrap { max-width: 1180px; margin: 0 auto; padding: 34px 16px 56px; }
+  .svd-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(300px, .8fr); gap: 22px; align-items: start; }
+  .svd-card { background: #fff; border: 1px solid #e5ded2; border-radius: 8px; padding: 22px; box-shadow: 0 16px 34px rgba(31, 25, 20, .06); }
+  .svd-eyebrow { color: #b31624; font-weight: 900; text-transform: uppercase; font-size: 13px; }
+  .svd-title { margin: 8px 0 8px; font-family: Georgia, serif; font-size: clamp(34px, 5vw, 58px); line-height: 1; }
+  .svd-note { border-left: 4px solid #b31624; background: #fff7e8; padding: 12px 14px; margin: 18px 0; color: #4a4038; }
+  .svd-form { display: grid; gap: 14px; }
+  .svd-form label { font-weight: 800; color: #1c1c1c; }
+  .svd-form input, .svd-form select { width: 100%; box-sizing: border-box; border: 1px solid #d9d1c5; border-radius: 7px; padding: 12px 13px; font: inherit; background: #fff; }
+  .svd-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .svd-btn { border: 0; border-radius: 7px; background: #bd1c2b; color: #fff; padding: 12px 16px; font-weight: 900; cursor: pointer; text-decoration: none; display: inline-flex; }
+  .svd-btn.secondary { background: #121821; }
+  .svd-meta { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 16px; margin-top: 18px; }
+  .svd-meta img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 7px; background: #eee; }
+  .svd-kv { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 6px 12px; font-size: 14px; color: #504a44; }
+  .svd-kv strong { color: #161616; }
+  .svd-error { color: #a5111f; font-weight: 700; }
+  .svd-jobs { display: grid; gap: 12px; }
+  .svd-job { border: 1px solid #e8e0d5; border-radius: 7px; padding: 12px; }
+  .svd-status { font-size: 12px; font-weight: 900; text-transform: uppercase; color: #bd1c2b; }
+  .svd-progress { height: 8px; background: #eee8df; border-radius: 99px; overflow: hidden; margin-top: 8px; }
+  .svd-progress span { display: block; height: 100%; background: #bd1c2b; }
+  @media (max-width: 760px) { .svd-grid, .svd-meta { grid-template-columns: 1fr; } .svd-card { padding: 16px; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="svd-wrap">
+  <div class="svd-grid">
+    <div class="svd-card">
+      <div class="svd-eyebrow">Social Video Downloader</div>
+      <h1 class="svd-title">सोशल वीडियो डाउनलोडर</h1>
+      <p>Supported public websites only. Availability depends on the source website and its current policies.</p>
+      <div class="svd-note">
+        केवल वही वीडियो या ऑडियो डाउनलोड करें जिसका उपयोग और डाउनलोड करने की आपको अनुमति हो। Private, DRM-protected या restricted content समर्थित नहीं है।
+      </div>
+
+      <form class="svd-form" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="fetch">
+        <label for="{{ fetch_form.url.id_for_label }}">Video URL</label>
+        {{ fetch_form.url }}
+        {% if fetch_form.url.errors %}<div class="svd-error">{{ fetch_form.url.errors|striptags }}</div>{% endif %}
+        <div class="svd-actions">
+          <button class="svd-btn secondary" type="submit">Fetch Information</button>
+          <a class="svd-btn secondary" href="{% url 'social_downloader:history' %}">Download History</a>
+        </div>
+      </form>
+
+      {% if metadata %}
+        <div class="svd-meta">
+          {% if metadata.thumbnail_url %}<img src="{{ metadata.thumbnail_url }}" alt="{{ metadata.title }}">{% endif %}
+          <div>
+            <h2>{{ metadata.title }}</h2>
+            <div class="svd-kv">
+              <strong>Duration</strong><span>{{ metadata.duration_label|default:"Unknown" }}</span>
+              <strong>Platform</strong><span>{{ metadata.extractor_name|default:metadata.source_domain }}</span>
+              <strong>Uploader</strong><span>{{ metadata.uploader|default:"Public metadata not available" }}</span>
+              <strong>Formats</strong><span>{{ metadata.formats|length }} public formats detected</span>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+
+      <form class="svd-form" method="post" style="margin-top: 20px;">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="download">
+        <label for="{{ start_form.url.id_for_label }}">Video URL</label>
+        {{ start_form.url }}
+        {% if start_form.non_field_errors %}<div class="svd-error">{{ start_form.non_field_errors|striptags }}</div>{% endif %}
+        <label>Download Type</label>
+        {{ start_form.download_type }}
+        <label>Video Quality</label>
+        {{ start_form.video_quality }}
+        <label>Audio Format</label>
+        {{ start_form.audio_format }}
+        <div class="svd-actions">
+          <button class="svd-btn" type="submit">Start Download</button>
+        </div>
+      </form>
+    </div>
+
+    <aside class="svd-card">
+      <div class="svd-eyebrow">Recent Jobs</div>
+      <h2>Download History</h2>
+      <div class="svd-jobs">
+        {% for job in recent_jobs %}
+          <article class="svd-job" data-job-id="{{ job.pk }}">
+            <strong>{{ job.title|default:"Media download" }}</strong>
+            <div>{{ job.get_download_type_display }} · <span class="svd-status">{{ job.status }}</span></div>
+            <div class="svd-progress"><span style="width: {{ job.progress_percent }}%"></span></div>
+            {% if job.get_file_url %}<a href="{{ job.get_file_url }}">Download file</a>{% endif %}
+          </article>
+        {% empty %}
+          <p>No downloads yet.</p>
+        {% endfor %}
+      </div>
+    </aside>
+  </div>
+</section>
+{% endblock %}
+

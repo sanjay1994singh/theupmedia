@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Download History | {{ SITE_NAME }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .svd-wrap { max-width: 1180px; margin: 0 auto; padding: 34px 16px 56px; }
+  .svd-head { display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  .svd-head h1 { font-family: Georgia, serif; font-size: clamp(32px, 4vw, 52px); margin: 0; }
+  .svd-btn { border: 0; border-radius: 7px; background: #bd1c2b; color: #fff; padding: 11px 14px; font-weight: 900; cursor: pointer; text-decoration: none; }
+  .svd-table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e5ded2; border-radius: 8px; overflow: hidden; box-shadow: 0 16px 34px rgba(31, 25, 20, .06); }
+  .svd-table th, .svd-table td { padding: 12px; border-bottom: 1px solid #eee7dc; text-align: left; vertical-align: top; }
+  .svd-table th { background: #f7f3ed; font-size: 13px; text-transform: uppercase; }
+  .svd-thumb { width: 82px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: #eee; }
+  .svd-progress { min-width: 100px; height: 8px; background: #eee8df; border-radius: 99px; overflow: hidden; }
+  .svd-progress span { display: block; height: 100%; background: #bd1c2b; }
+  .svd-status { font-weight: 900; text-transform: uppercase; color: #bd1c2b; font-size: 12px; }
+  .svd-delete { background: none; border: 0; color: #9b111d; font-weight: 900; cursor: pointer; padding: 0; }
+  .svd-pagination { margin-top: 18px; display: flex; gap: 10px; align-items: center; justify-content: center; }
+  @media (max-width: 760px) {
+    .svd-table, .svd-table tbody, .svd-table tr, .svd-table td { display: block; width: 100%; box-sizing: border-box; }
+    .svd-table thead { display: none; }
+    .svd-table tr { border-bottom: 1px solid #e5ded2; padding: 10px; }
+    .svd-table td { border: 0; padding: 7px 0; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="svd-wrap">
+  <div class="svd-head">
+    <h1>Download History</h1>
+    <a class="svd-btn" href="{% url 'social_downloader:home' %}">New Download</a>
+  </div>
+  <table class="svd-table">
+    <thead>
+      <tr>
+        <th>Thumb</th>
+        <th>Title / URL</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>Size</th>
+        <th>Date & Time</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for job in page_obj %}
+        <tr data-job-id="{{ job.pk }}">
+          <td>{% if job.thumbnail_url %}<img class="svd-thumb" src="{{ job.thumbnail_url }}" alt="">{% endif %}</td>
+          <td><strong>{{ job.title|default:"Media download" }}</strong><br><small>{{ job.source_domain|default:job.source_url }}</small></td>
+          <td>{{ job.get_download_type_display }}<br><small>{{ job.selected_quality|default:job.audio_format }}</small></td>
+          <td><span class="svd-status">{{ job.status }}</span><div class="svd-progress"><span style="width: {{ job.progress_percent }}%"></span></div>{% if job.error_message %}<small>{{ job.error_message }}</small>{% endif %}</td>
+          <td>{% if job.file_size %}{{ job.file_size|filesizeformat }}{% else %}-{% endif %}</td>
+          <td>{{ job.created_at|date:"M d, Y" }}<br>{{ job.created_at|time:"h:i A" }}</td>
+          <td>
+            {% if job.get_file_url %}<a href="{{ job.get_file_url }}">Download</a>{% endif %}
+            <form method="post" action="{% url 'social_downloader:delete' job.pk %}" style="margin-top: 8px;">{% csrf_token %}<button class="svd-delete" type="submit">Delete</button></form>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7">No downloads found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="svd-pagination">
+    {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+  </div>
+</section>
+<script>
+  document.querySelectorAll("[data-job-id]").forEach((row) => {
+    const status = row.querySelector(".svd-status");
+    if (!status || !["pending", "processing"].includes(status.textContent.trim().toLowerCase())) return;
+    const jobId = row.dataset.jobId;
+    const timer = setInterval(async () => {
+      const response = await fetch(`/social-downloader/status/${jobId}/`);
+      if (!response.ok) return;
+      const data = await response.json();
+      status.textContent = data.status;
+      const bar = row.querySelector(".svd-progress span");
+      if (bar) bar.style.width = `${data.progress_percent || 0}%`;
+      if (!["pending", "processing"].includes(data.status)) {
+        clearInterval(timer);
+        window.location.reload();
+      }
+    }, 3000);
+  });
+</script>
+{% endblock %}

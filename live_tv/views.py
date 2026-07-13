@@ -28,6 +28,7 @@ from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_POST
 
 from .forms import LiveTVChannelForm
+from .hls import validate_uploaded_video
 from .models import FacebookLiveSetting, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsVideo, SocialRenderedVideo
 from news.models import Article
 
@@ -90,6 +91,46 @@ def enqueue_social_render_job(job_id):
     return "thread"
 
 
+def enqueue_short_hls_job(short_id):
+    if getattr(settings, "LIVE_TV_RENDER_USE_CELERY", True):
+        try:
+            from .tasks import process_short_hls_task
+
+            process_short_hls_task.delay(short_id)
+            return "celery"
+        except Exception as exc:
+            ShortsVideo.objects.filter(pk=short_id).update(
+                processing_error=f"Celery enqueue failed, fallback thread started: {exc}",
+            )
+
+    import threading
+
+    from .hls import convert_short_to_hls
+
+    threading.Thread(target=convert_short_to_hls, args=(short_id,), daemon=True).start()
+    return "thread"
+
+
+def enqueue_live_channel_hls_job(channel_id):
+    if getattr(settings, "LIVE_TV_RENDER_USE_CELERY", True):
+        try:
+            from .tasks import process_live_channel_hls_task
+
+            process_live_channel_hls_task.delay(channel_id)
+            return "celery"
+        except Exception as exc:
+            LiveTVChannel.objects.filter(pk=channel_id).update(
+                processing_error=f"Celery enqueue failed, fallback thread started: {exc}",
+            )
+
+    import threading
+
+    from .hls import convert_live_channel_to_hls
+
+    threading.Thread(target=convert_live_channel_to_hls, args=(channel_id,), daemon=True).start()
+    return "thread"
+
+
 def next_live_tv_channel(active_channel, channels):
     channels = list(channels)
     if not active_channel or not channels:
@@ -120,6 +161,17 @@ def absolute_media_url(request, file_obj):
     if not file_obj:
         return ""
     return request.build_absolute_uri(file_obj.url)
+
+
+def absolute_media_path_url(request, media_path):
+    if not media_path:
+        return ""
+    base_url = str(settings.MEDIA_URL or "/media/")
+    if not base_url.endswith("/"):
+        base_url += "/"
+    if base_url.startswith("http://") or base_url.startswith("https://"):
+        return f"{base_url}{str(media_path).lstrip('/')}"
+    return request.build_absolute_uri(f"{base_url}{str(media_path).lstrip('/')}")
 
 
 
@@ -381,8 +433,13 @@ def serialize_channel_for_mobile(request, channel):
     stream_url = ""
     youtube_embed_url = ""
 
+    hls_url = absolute_media_path_url(request, channel.hls_master_url)
+    mp4_url = absolute_media_url(request, channel.video_file)
+
     if player_type == LiveTVChannel.SourceType.DIRECT:
-        stream_url = absolute_media_url(request, channel.video_file)
+        stream_url = hls_url or mp4_url
+        if hls_url:
+            player_type = LiveTVChannel.SourceType.HLS
     elif player_type == LiveTVChannel.SourceType.HLS:
         stream_url = channel.stream_url
     elif player_type == LiveTVChannel.SourceType.YOUTUBE:
@@ -409,6 +466,12 @@ def serialize_channel_for_mobile(request, channel):
         "ticker": ticker,
         "player_type": player_type,
         "stream_url": stream_url,
+        "mp4_url": mp4_url,
+        "hls_url": hls_url,
+        "processing_status": channel.hls_status,
+        "hls_status": channel.hls_status,
+        "processing_error": channel.processing_error,
+        "duration": channel.duration,
         "youtube_url": channel.youtube_url,
         "youtube_embed_url": youtube_embed_url,
         "poster_image": absolute_media_url(request, channel.poster_image),
@@ -588,6 +651,8 @@ def serialize_shorts_video(request, short):
         }
         for comment in short.comments.all()[:5]
     ]
+    hls_url = absolute_media_path_url(request, short.hls_master_url)
+    fallback_video_url = absolute_media_url(request, short.video_file)
     return {
         "id": short.pk,
         "title": short.title,
@@ -604,8 +669,14 @@ def serialize_shorts_video(request, short):
         "city_id": short.city_id,
         "city_name": short.city.name if short.city_id else "",
         "frame_template": short.frame_template,
-        "video_url": absolute_media_url(request, short.video_file),
+        "video_url": hls_url or fallback_video_url,
+        "mp4_url": fallback_video_url,
+        "hls_url": hls_url,
         "thumbnail_url": absolute_media_url(request, short.thumbnail),
+        "processing_status": short.hls_status,
+        "hls_status": short.hls_status,
+        "processing_error": short.processing_error,
+        "duration": short.duration,
         "is_published": short.is_published,
         "display_order": short.display_order,
         "likes_count": short.likes_count,
@@ -1320,8 +1391,16 @@ def mobile_admin_channel_save_api(request):
     channel.state_id = state_id
     channel.city_id = city_id
     if video_file:
+        try:
+            validate_uploaded_video(video_file)
+        except Exception as exc:
+            return JsonResponse({"detail": str(exc), "errors": {"video_file": [str(exc)]}}, status=400)
         delete_file_field(channel.video_file)
         channel.video_file = video_file
+        channel.hls_master_url = ""
+        channel.hls_status = LiveTVChannel.HLSStatus.PENDING
+        channel.processing_error = ""
+        channel.duration = None
     if request.FILES.get("poster_image"):
         delete_file_field(channel.poster_image)
         channel.poster_image = request.FILES["poster_image"]
@@ -1344,6 +1423,8 @@ def mobile_admin_channel_save_api(request):
     channel.meta_title = request.POST.get("meta_title", "").strip()[:160]
     channel.meta_description = request.POST.get("meta_description", "").strip()[:220]
     channel.save()
+    if channel.source_type == LiveTVChannel.SourceType.DIRECT and channel.video_file:
+        enqueue_live_channel_hls_job(channel.pk)
     return JsonResponse({"channel": serialize_channel_for_admin(request, channel)})
 
 
@@ -1369,6 +1450,10 @@ def mobile_admin_shorts_upload_api(request):
     video_file = request.FILES.get("video_file")
     if not video_file:
         return JsonResponse({"detail": "Shorts video file required.", "errors": {"video_file": ["This field is required."]}}, status=400)
+    try:
+        validate_uploaded_video(video_file)
+    except Exception as exc:
+        return JsonResponse({"detail": str(exc), "errors": {"video_file": [str(exc)]}}, status=400)
 
     title = request.POST.get("title", "").strip()
     headline = request.POST.get("headline", "").strip()
@@ -1403,6 +1488,10 @@ def mobile_admin_shorts_upload_api(request):
         display_order=display_order,
         created_by=user,
     )
+    if not short.original_video:
+        short.original_video.name = short.video_file.name
+        short.save(update_fields=["original_video", "updated_at"])
+    enqueue_short_hls_job(short.pk)
     return JsonResponse({"short": serialize_shorts_video(request, short)}, status=201)
 
 
