@@ -139,6 +139,57 @@ def download_file(request, pk):
 
 @login_required
 @require_POST
+def retry_download(request, pk):
+    job = get_object_or_404(user_downloads(request.user), pk=pk)
+    if job.status not in {SocialMediaDownload.Status.FAILED, SocialMediaDownload.Status.EXPIRED}:
+        messages.info(request, "Sirf failed ya expired download ko retry kar sakte hain.")
+        return redirect("social_downloader:history")
+
+    try:
+        enforce_job_limits(request.user)
+        if job.relative_file_path:
+            try:
+                resolve_download_path(job.relative_file_path).unlink(missing_ok=True)
+            except ValueError:
+                pass
+        job.status = SocialMediaDownload.Status.PENDING
+        job.progress_percent = 0
+        job.downloaded_bytes = 0
+        job.total_bytes = None
+        job.relative_file_path = ""
+        job.original_filename = ""
+        job.stored_filename = ""
+        job.file_extension = ""
+        job.file_size = None
+        job.error_message = ""
+        job.started_at = None
+        job.completed_at = None
+        job.save(
+            update_fields=[
+                "status",
+                "progress_percent",
+                "downloaded_bytes",
+                "total_bytes",
+                "relative_file_path",
+                "original_filename",
+                "stored_filename",
+                "file_extension",
+                "file_size",
+                "error_message",
+                "started_at",
+                "completed_at",
+                "updated_at",
+            ]
+        )
+        backend = enqueue_download(job.pk)
+        messages.success(request, f"Retry start ho gaya ({backend}).")
+    except ValidationError as exc:
+        messages.error(request, "; ".join(exc.messages))
+    return redirect("social_downloader:history")
+
+
+@login_required
+@require_POST
 def delete_download(request, pk):
     job = get_object_or_404(user_downloads(request.user), pk=pk)
     if job.relative_file_path:

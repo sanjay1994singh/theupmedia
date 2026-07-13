@@ -16,6 +16,7 @@
   .svd-progress span { display: block; height: 100%; background: #bd1c2b; }
   .svd-status { font-weight: 900; text-transform: uppercase; color: #bd1c2b; font-size: 12px; }
   .svd-delete { background: none; border: 0; color: #9b111d; font-weight: 900; cursor: pointer; padding: 0; }
+  .svd-retry { background: #111827; border: 0; border-radius: 6px; color: #fff; font-weight: 900; cursor: pointer; padding: 7px 10px; margin-top: 8px; }
   .svd-pagination { margin-top: 18px; display: flex; gap: 10px; align-items: center; justify-content: center; }
   @media (max-width: 760px) {
     .svd-table, .svd-table tbody, .svd-table tr, .svd-table td { display: block; width: 100%; box-sizing: border-box; }
@@ -55,6 +56,9 @@
           <td>{{ job.created_at|date:"M d, Y" }}<br>{{ job.created_at|time:"h:i A" }}</td>
           <td>
             {% if job.get_file_url %}<a href="{{ job.get_file_url }}">Download</a>{% endif %}
+            {% if job.status == "failed" or job.status == "expired" %}
+              <form method="post" action="{% url 'social_downloader:retry' job.pk %}" style="margin-top: 8px;">{% csrf_token %}<button class="svd-retry" type="submit">Retry</button></form>
+            {% endif %}
             <form method="post" action="{% url 'social_downloader:delete' job.pk %}" style="margin-top: 8px;">{% csrf_token %}<button class="svd-delete" type="submit">Delete</button></form>
           </td>
         </tr>

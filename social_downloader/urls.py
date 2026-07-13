@@ -9,5 +9,6 @@ urlpatterns = [
     path("history/", views.download_history, name="history"),
     path("status/<int:pk>/", views.download_status, name="status"),
     path("file/<int:pk>/", views.download_file, name="file"),
+    path("retry/<int:pk>/", views.retry_download, name="retry"),
     path("delete/<int:pk>/", views.delete_download, name="delete"),
 ]
