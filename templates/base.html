@@ -50,12 +50,11 @@
         {% endif %}
         <a href="{% url 'blog:post_list' %}">Blog</a>
         <a href="{% url 'services:service_list' %}">Services</a>
-        <a href="{% url 'social_downloader:home' %}">Social Video Downloader</a>
+        <a href="{% url 'social_downloader:home' %}">Downloader</a>
         {% if user.is_staff %}<a href="{% url 'distribution:dashboard' %}">Distribution</a>{% endif %}
         {% for category in NAV_CATEGORIES %}
           <a href="{{ category.get_absolute_url }}">{{ category.name }}</a>
         {% endfor %}
-          <a href="{% url 'live_tv:media_downloads' %}">Downloads</a>
       </nav>
       <div class="account-links">
         {% if user.is_authenticated %}
@@ -90,8 +89,7 @@
       <a href="{% url 'live_tv:home' %}">Live TV</a>
       <a href="{% url 'blog:post_list' %}">Blog</a>
       <a href="{% url 'services:service_list' %}">Services</a>
-      <a href="{% url 'social_downloader:home' %}">Social Video Downloader</a>
-        {% if user.is_superuser %}<a href="{% url 'live_tv:media_downloads' %}">Downloads</a>{% endif %}
+      <a href="{% url 'social_downloader:home' %}">Downloader</a>
       <a href="{% url 'core:privacy_policy' %}">Privacy Policy</a>
       <a href="{% url 'core:terms' %}">Terms</a>
       <a href="{% url 'core:disclaimer' %}">Disclaimer</a>
