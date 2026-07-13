@@ -18,7 +18,7 @@ class SocialMediaDownloadAdmin(admin.ModelAdmin):
         "created_at",
         "file_link",
     )
-    list_filter = ("status", "download_type", "extractor_name", "created_at")
+    list_filter = ("status", "download_type", "extractor_name")
     search_fields = ("title", "source_url", "source_domain", "user__username", "user__email")
     readonly_fields = (
         "progress_percent",
@@ -32,12 +32,9 @@ class SocialMediaDownloadAdmin(admin.ModelAdmin):
         "updated_at",
         "file_link",
     )
-    date_hierarchy = "created_at"
-
     def file_link(self, obj):
         if not obj.relative_file_path or obj.status != SocialMediaDownload.Status.COMPLETED:
             return "-"
         return format_html('<a href="{}" target="_blank">Download</a>', reverse("social_downloader:file", kwargs={"pk": obj.pk}))
 
     file_link.short_description = "File"
-
