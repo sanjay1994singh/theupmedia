@@ -12,7 +12,7 @@ from .forms import DownloadStartForm, MetadataFetchForm
 from .models import SocialMediaDownload
 from .services.formats import AUDIO_FORMAT_CHOICES, VIDEO_QUALITY_CHOICES
 from .services.metadata import extract_metadata
-from .services.paths import resolve_download_path
+from .services.paths import open_download_file, resolve_download_path, safe_filename
 from .services.validators import enforce_job_limits
 
 
@@ -128,10 +128,13 @@ def download_file(request, pk):
     job = get_object_or_404(user_downloads(request.user), pk=pk)
     if job.status != SocialMediaDownload.Status.COMPLETED or not job.relative_file_path:
         raise PermissionDenied("File is not ready.")
-    file_path = resolve_download_path(job.relative_file_path)
-    if not file_path.exists() or not file_path.is_file():
+    try:
+        file_handle, disk_filename = open_download_file(job.relative_file_path)
+    except (OSError, ValueError):
         raise PermissionDenied("File is missing.")
-    return FileResponse(file_path.open("rb"), as_attachment=True, filename=job.stored_filename or Path(file_path).name)
+    download_name = job.stored_filename or disk_filename or f"theupmedia-download.{job.file_extension or 'mp4'}"
+    ascii_name = safe_filename(Path(download_name).stem, Path(download_name).suffix or job.file_extension or "mp4")
+    return FileResponse(file_handle, as_attachment=True, filename=ascii_name)
 
 
 @login_required
