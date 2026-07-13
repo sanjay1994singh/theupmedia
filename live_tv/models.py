@@ -8,6 +8,58 @@ from django.template.defaultfilters import slugify
 from django.urls import reverse
 
 
+class LiveTVCategory(models.Model):
+    name = models.CharField(max_length=80, unique=True)
+    slug = models.SlugField(max_length=100, unique=True, blank=True)
+    display_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["display_order", "name"]
+        verbose_name = "Live TV Category"
+        verbose_name_plural = "Live TV Categories"
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            base_slug = slugify(self.name)[:90] or "category"
+            slug = base_slug
+            counter = 2
+            while LiveTVCategory.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            self.slug = slug
+        super().save(*args, **kwargs)
+
+
+class LiveTVState(models.Model):
+    name = models.CharField(max_length=80, unique=True)
+    slug = models.SlugField(max_length=100, unique=True, blank=True)
+    display_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["display_order", "name"]
+        verbose_name = "Live TV State"
+        verbose_name_plural = "Live TV States"
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            base_slug = slugify(self.name)[:90] or "state"
+            slug = base_slug
+            counter = 2
+            while LiveTVState.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            self.slug = slug
+        super().save(*args, **kwargs)
+
+
 class LiveTVChannel(models.Model):
     class SourceType(models.TextChoices):
         YOUTUBE = "youtube", "YouTube URL"
@@ -22,6 +74,9 @@ class LiveTVChannel(models.Model):
     stream_url = models.URLField(blank=True, help_text="For HLS/M3U8 or external MP4/WebM URLs.")
     video_file = models.FileField(upload_to="live-tv/videos/%Y/%m/", blank=True, null=True)
     poster_image = models.ImageField(upload_to="live-tv/posters/%Y/%m/", blank=True, null=True)
+    category = models.ForeignKey(LiveTVCategory, on_delete=models.SET_NULL, blank=True, null=True, related_name="channels")
+    state = models.ForeignKey(LiveTVState, on_delete=models.SET_NULL, blank=True, null=True, related_name="channels")
+    city = models.CharField(max_length=100, blank=True)
     is_active = models.BooleanField(default=True)
     is_live = models.BooleanField(default=True)
     lower_third_label = models.CharField(max_length=60, blank=True, default="")
@@ -216,6 +271,9 @@ class ShortsVideo(models.Model):
     headline = models.CharField(max_length=180, blank=True)
     caption = models.TextField(blank=True)
     location = models.CharField(max_length=120, blank=True)
+    category = models.ForeignKey(LiveTVCategory, on_delete=models.SET_NULL, blank=True, null=True, related_name="shorts")
+    state = models.ForeignKey(LiveTVState, on_delete=models.SET_NULL, blank=True, null=True, related_name="shorts")
+    city = models.CharField(max_length=100, blank=True)
     frame_template = models.CharField(max_length=60, default="normal_black_red")
     video_file = models.FileField(upload_to="shorts/videos/%Y/%m/")
     thumbnail = models.ImageField(upload_to="shorts/thumbnails/%Y/%m/", blank=True, null=True)

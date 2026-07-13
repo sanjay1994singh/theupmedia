@@ -4,19 +4,36 @@ from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from .models import FacebookLiveSetting, LiveTVChannel, LiveTVSetting, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsVideo, SocialRenderedVideo
+from .models import FacebookLiveSetting, LiveTVCategory, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsVideo, SocialRenderedVideo
+
+
+@admin.register(LiveTVCategory)
+class LiveTVCategoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug", "display_order", "is_active")
+    list_editable = ("display_order", "is_active")
+    prepopulated_fields = {"slug": ("name",)}
+    search_fields = ("name",)
+
+
+@admin.register(LiveTVState)
+class LiveTVStateAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug", "display_order", "is_active")
+    list_editable = ("display_order", "is_active")
+    prepopulated_fields = {"slug": ("name",)}
+    search_fields = ("name",)
 
 
 @admin.register(LiveTVChannel)
 class LiveTVChannelAdmin(admin.ModelAdmin):
-    list_display = ("title", "source_type", "is_live", "is_active", "display_order", "updated_at")
-    list_filter = ("source_type", "is_live", "is_active")
-    search_fields = ("title", "headline", "ticker_text")
+    list_display = ("title", "source_type", "category", "state", "city", "is_live", "is_active", "display_order", "updated_at")
+    list_filter = ("source_type", "category", "state", "is_live", "is_active")
+    search_fields = ("title", "headline", "ticker_text", "city")
     prepopulated_fields = {"slug": ("title",)}
     list_editable = ("is_live", "is_active", "display_order")
     fieldsets = (
         ("Basic", {"fields": ("title", "slug", "description", "is_active", "is_live", "display_order")}),
         ("Video Source", {"fields": ("source_type", "youtube_url", "stream_url", "video_file", "poster_image")}),
+        ("Category / Location", {"fields": ("category", "state", "city")}),
         ("Video Text", {"fields": ("lower_third_label", "headline")}),
         ("SEO", {"fields": ("meta_title", "meta_description")}),
     )
@@ -132,13 +149,13 @@ class NewsTickerSettingAdmin(admin.ModelAdmin):
 
 @admin.register(ShortsVideo)
 class ShortsVideoAdmin(admin.ModelAdmin):
-    list_display = ("title", "frame_template", "location", "is_published", "display_order", "likes_count", "comments_count", "shares_count", "created_at")
-    list_filter = ("is_published", "frame_template", "created_at")
-    search_fields = ("title", "headline", "caption", "location")
+    list_display = ("title", "frame_template", "category", "state", "city", "location", "is_published", "display_order", "likes_count", "comments_count", "shares_count", "created_at")
+    list_filter = ("is_published", "frame_template", "category", "state", "created_at")
+    search_fields = ("title", "headline", "caption", "location", "city")
     list_editable = ("is_published", "display_order")
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (
-        ("Shorts Video", {"fields": ("title", "headline", "caption", "location", "frame_template", "video_file", "thumbnail")}),
+        ("Shorts Video", {"fields": ("title", "headline", "caption", "location", "category", "state", "city", "frame_template", "video_file", "thumbnail")}),
         ("Status", {"fields": ("is_published", "display_order", "created_by")}),
         ("Counters", {"fields": ("likes_count", "comments_count", "shares_count")}),
         ("Dates", {"fields": ("created_at", "updated_at")}),
