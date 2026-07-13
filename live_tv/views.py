@@ -28,7 +28,7 @@ from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_POST
 
 from .forms import LiveTVChannelForm
-from .models import FacebookLiveSetting, LiveTVChannel, LiveTVSetting, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsVideo, SocialRenderedVideo
+from .models import FacebookLiveSetting, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsVideo, SocialRenderedVideo
 from news.models import Article
 
 RESTRICTED_DOWNLOAD_HOSTS = {
@@ -400,7 +400,9 @@ def serialize_channel_for_mobile(request, channel):
         "state": {"id": channel.state_id, "name": channel.state.name} if channel.state_id else None,
         "state_id": channel.state_id,
         "state_name": channel.state.name if channel.state_id else "",
-        "city": channel.city,
+        "city": {"id": channel.city_id, "name": channel.city.name} if channel.city_id else None,
+        "city_id": channel.city_id,
+        "city_name": channel.city.name if channel.city_id else "",
         "headline": channel.headline or "",
         "lower_third_label": channel.lower_third_label or "",
         "ticker_label": ticker_setting.label or setting.default_ticker_label,
@@ -558,7 +560,9 @@ def serialize_shorts_video(request, short):
         "state": {"id": short.state_id, "name": short.state.name} if short.state_id else None,
         "state_id": short.state_id,
         "state_name": short.state.name if short.state_id else "",
-        "city": short.city,
+        "city": {"id": short.city_id, "name": short.city.name} if short.city_id else None,
+        "city_id": short.city_id,
+        "city_name": short.city.name if short.city_id else "",
         "frame_template": short.frame_template,
         "video_url": absolute_media_url(request, short.video_file),
         "thumbnail_url": absolute_media_url(request, short.thumbnail),
@@ -1064,6 +1068,26 @@ def shorts_list_api(request):
     return JsonResponse({"shorts": [serialize_shorts_video(request, short) for short in shorts]})
 
 
+@require_GET
+def mobile_live_tv_meta_api(request):
+    states = [
+        {
+            "id": state.pk,
+            "name": state.name,
+            "cities": [
+                {"id": city.pk, "name": city.name}
+                for city in state.cities.filter(is_active=True).order_by("display_order", "name")
+            ],
+        }
+        for state in LiveTVState.objects.filter(is_active=True).order_by("display_order", "name")
+    ]
+    categories = [
+        {"id": category.pk, "name": category.name}
+        for category in LiveTVCategory.objects.filter(is_active=True).order_by("display_order", "name")
+    ]
+    return JsonResponse({"categories": categories, "states": states})
+
+
 @csrf_exempt
 @require_POST
 def mobile_admin_login_api(request):
@@ -1193,6 +1217,12 @@ def mobile_admin_channel_save_api(request):
     channel.source_type = source_type
     channel.youtube_url = youtube_url if source_type == LiveTVChannel.SourceType.YOUTUBE else ""
     channel.stream_url = stream_url if source_type == LiveTVChannel.SourceType.HLS else ""
+    raw_category_id = request.POST.get("category_id", "").strip()
+    raw_state_id = request.POST.get("state_id", "").strip()
+    raw_city_id = request.POST.get("city_id", "").strip()
+    channel.category_id = int(raw_category_id) if raw_category_id.isdigit() else None
+    channel.state_id = int(raw_state_id) if raw_state_id.isdigit() else None
+    channel.city_id = int(raw_city_id) if raw_city_id.isdigit() else None
     if video_file:
         delete_file_field(channel.video_file)
         channel.video_file = video_file
@@ -1248,6 +1278,9 @@ def mobile_admin_shorts_upload_api(request):
     headline = request.POST.get("headline", "").strip()
     caption = request.POST.get("caption", "").strip()
     location = request.POST.get("location", "").strip()
+    raw_category_id = request.POST.get("category_id", "").strip()
+    raw_state_id = request.POST.get("state_id", "").strip()
+    raw_city_id = request.POST.get("city_id", "").strip()
     frame_template = request.POST.get("frame_template", "").strip() or "normal_black_red"
     raw_display_order = request.POST.get("display_order")
     try:
@@ -1263,6 +1296,9 @@ def mobile_admin_shorts_upload_api(request):
         headline=headline[:180],
         caption=caption,
         location=location[:120],
+        category_id=int(raw_category_id) if raw_category_id.isdigit() else None,
+        state_id=int(raw_state_id) if raw_state_id.isdigit() else None,
+        city_id=int(raw_city_id) if raw_city_id.isdigit() else None,
         frame_template=frame_template[:60],
         video_file=video_file,
         thumbnail=request.FILES.get("thumbnail"),

@@ -4,7 +4,7 @@ from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from .models import FacebookLiveSetting, LiveTVCategory, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsVideo, SocialRenderedVideo
+from .models import FacebookLiveSetting, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsVideo, SocialRenderedVideo
 
 
 @admin.register(LiveTVCategory)
@@ -23,11 +23,20 @@ class LiveTVStateAdmin(admin.ModelAdmin):
     search_fields = ("name",)
 
 
+@admin.register(LiveTVCity)
+class LiveTVCityAdmin(admin.ModelAdmin):
+    list_display = ("name", "state", "slug", "display_order", "is_active")
+    list_filter = ("state", "is_active")
+    list_editable = ("display_order", "is_active")
+    prepopulated_fields = {"slug": ("name",)}
+    search_fields = ("name", "state__name")
+
+
 @admin.register(LiveTVChannel)
 class LiveTVChannelAdmin(admin.ModelAdmin):
     list_display = ("title", "source_type", "category", "state", "city", "is_live", "is_active", "display_order", "updated_at")
     list_filter = ("source_type", "category", "state", "is_live", "is_active")
-    search_fields = ("title", "headline", "ticker_text", "city")
+    search_fields = ("title", "headline", "ticker_text", "city__name", "state__name", "category__name")
     prepopulated_fields = {"slug": ("title",)}
     list_editable = ("is_live", "is_active", "display_order")
     fieldsets = (

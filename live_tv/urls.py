@@ -7,6 +7,7 @@ app_name = "live_tv"
 urlpatterns = [
     path("api/live-tv/current/", views.current_live_tv_api, name="api_current"),
     path("api/live-tv/shorts/", views.shorts_list_api, name="api_shorts_list"),
+    path("api/live-tv/meta/", views.mobile_live_tv_meta_api, name="api_meta"),
     path("api/live-tv/admin/login/", views.mobile_admin_login_api, name="api_admin_login"),
     path("api/live-tv/admin/logout/", views.mobile_admin_logout_api, name="api_admin_logout"),
     path("api/live-tv/admin/dashboard/", views.mobile_admin_dashboard_api, name="api_admin_dashboard"),
