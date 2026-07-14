@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Cart - {{ SITE_NAME }}{% endblock %}
+
+{% block extra_head %}
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+{% endblock %}
+
+{% block content %}
+<section class="page-shell subscription-page">
+  <p class="eyebrow">Checkout</p>
+  <h1>Service Cart</h1>
+  <div class="subscription-layout">
+    <div class="subscription-list">
+      {% for item in items %}
+        <article class="subscription-line">
+          <div>
+            <strong>{{ item.plan.service.name }}</strong>
+            <h2>{{ item.plan.name }}</h2>
+            <p>{{ item.plan.duration_months }} month{% if item.plan.duration_months > 1 %}s{% endif %} subscription</p>
+          </div>
+          <div class="subscription-line-price">₹{{ item.plan.price }}</div>
+          <form method="post" action="{% url 'subscriptions:remove_from_cart' item.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="text-link button-link">Remove</button>
+          </form>
+        </article>
+      {% empty %}
+        <p>Your cart is empty.</p>
+      {% endfor %}
+    </div>
+    <aside class="subscription-summary">
+      <h2>Total</h2>
+      <strong>₹{{ total }}</strong>
+      <p>Secure payment via Razorpay Standard Checkout.</p>
+      {% if items %}
+        <button id="rzp-pay-btn" class="whatsapp-cta" type="button">Pay Now</button>
+        <p id="payment-message" class="subscription-message"></p>
+      {% endif %}
+      <a class="text-link" href="{% url 'services:service_list' %}">Continue shopping</a>
+    </aside>
+  </div>
+</section>
+<script>
+  (() => {
+    const button = document.getElementById("rzp-pay-btn");
+    const message = document.getElementById("payment-message");
+    if (!button) return;
+    const csrfToken = document.querySelector("input[name='csrfmiddlewaretoken']")?.value || "{{ csrf_token }}";
+
+    const postJson = async (url, payload = {}) => {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": csrfToken,
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.success === false) throw new Error(data.error || "Request failed");
+      return data;
+    };
+
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      message.textContent = "Creating secure order...";
+      try {
+        const order = await postJson("{% url 'subscriptions:create_order' %}");
+        const options = {
+          key: order.key_id,
+          amount: order.amount,
+          currency: order.currency,
+          name: order.name,
+          description: order.description,
+          order_id: order.order_id,
+          prefill: order.prefill || {},
+          theme: { color: "#bd1c2b" },
+          modal: {
+            ondismiss: () => {
+              message.textContent = "Payment cancelled.";
+              button.disabled = false;
+            },
+          },
+          handler: async (response) => {
+            message.textContent = "Verifying payment...";
+            const result = await postJson("{% url 'subscriptions:verify_payment' %}", response);
+            message.textContent = "Payment successful.";
+            window.location.href = result.redirect_url || "{% url 'subscriptions:my_subscriptions' %}";
+          },
+        };
+        const checkout = new Razorpay(options);
+        checkout.on("payment.failed", async (response) => {
+          message.textContent = response.error?.description || "Payment failed.";
+          await postJson("{% url 'subscriptions:payment_failed' %}", {
+            razorpay_order_id: order.order_id,
+            error: message.textContent,
+          }).catch(() => {});
+          button.disabled = false;
+        });
+        checkout.open();
+      } catch (error) {
+        message.textContent = error.message;
+        button.disabled = false;
+      }
+    });
+  })();
+</script>
+{% endblock %}
+

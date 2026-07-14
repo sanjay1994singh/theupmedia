@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}My Services - {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<section class="page-shell subscription-page">
+  <p class="eyebrow">Active Services</p>
+  <h1>My Services</h1>
+  <div class="subscription-list">
+    {% for subscription in subscriptions %}
+      <article class="subscription-line">
+        <div>
+          <strong>{{ subscription.plan.service.name }}</strong>
+          <h2>{{ subscription.plan.name }}</h2>
+          <p>Valid from {{ subscription.starts_at|date:"M d, Y" }} to {{ subscription.expires_at|date:"M d, Y" }}</p>
+        </div>
+        <span class="subscription-badge">{% if subscription.is_active %}Active{% else %}Inactive{% endif %}</span>
+      </article>
+    {% empty %}
+      <p>No active service subscription yet.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

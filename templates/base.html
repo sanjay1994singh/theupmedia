@@ -50,6 +50,10 @@
         {% endif %}
         <a href="{% url 'blog:post_list' %}">Blog</a>
         <a href="{% url 'services:service_list' %}">Services</a>
+        {% if user.is_authenticated %}
+          <a href="{% url 'subscriptions:cart' %}">Cart</a>
+          <a href="{% url 'subscriptions:wishlist' %}">Wishlist</a>
+        {% endif %}
         <a href="{% url 'social_downloader:home' %}">Downloader</a>
         {% if user.is_staff %}<a href="{% url 'distribution:dashboard' %}">Distribution</a>{% endif %}
         {% for category in NAV_CATEGORIES %}
@@ -89,6 +93,10 @@
       <a href="{% url 'live_tv:home' %}">Live TV</a>
       <a href="{% url 'blog:post_list' %}">Blog</a>
       <a href="{% url 'services:service_list' %}">Services</a>
+      {% if user.is_authenticated %}
+        <a href="{% url 'subscriptions:cart' %}">Cart</a>
+        <a href="{% url 'subscriptions:my_subscriptions' %}">My Services</a>
+      {% endif %}
       <a href="{% url 'social_downloader:home' %}">Downloader</a>
       <a href="{% url 'core:privacy_policy' %}">Privacy Policy</a>
       <a href="{% url 'core:terms' %}">Terms</a>

@@ -25,6 +25,39 @@
     <p><strong>Contact:</strong> 8279408396 | WhatsApp: 6397712918</p>
     <p><a class="whatsapp-cta" href="{{ service.whatsapp_url }}" target="_blank" rel="noopener">Direct WhatsApp Chat</a></p>
   </div>
+  {% if service.active_subscription_plans %}
+    <section class="subscription-plan-section">
+      <p class="eyebrow">Paid Subscription</p>
+      <h2>Buy This Service</h2>
+      <div class="subscription-plan-grid">
+        {% for plan in service.active_subscription_plans %}
+          <article class="subscription-plan-card">
+            <h3>{{ plan.name }}</h3>
+            <strong class="plan-price">₹{{ plan.price }}</strong>
+            <span>{{ plan.duration_months }} month{% if plan.duration_months > 1 %}s{% endif %}</span>
+            {% if plan.description %}<p>{{ plan.description }}</p>{% endif %}
+            {% if plan.features %}<div class="plan-features">{{ plan.features|linebreaks }}</div>{% endif %}
+            {% if user.is_authenticated %}
+              <div class="service-actions">
+                <form method="post" action="{% url 'subscriptions:add_to_cart' plan.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{% url 'subscriptions:cart' %}">
+                  <button class="whatsapp-cta" type="submit">Add to Cart</button>
+                </form>
+                <form method="post" action="{% url 'subscriptions:toggle_wishlist' plan.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button class="text-link button-link" type="submit">Wishlist</button>
+                </form>
+              </div>
+            {% else %}
+              <a class="whatsapp-cta" href="{% url 'accounts:login' %}?next={{ request.get_full_path|urlencode }}">Login to Buy</a>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
   <div class="article-content">
     {% if service.description_hi %}
       {{ service.description_hi|linebreaks }}

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Orders - {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<section class="page-shell subscription-page">
+  <p class="eyebrow">Payments</p>
+  <h1>Orders</h1>
+  <div class="subscription-list">
+    {% for order in orders %}
+      <article class="subscription-line">
+        <div>
+          <strong>{{ order.receipt }}</strong>
+          <p>{{ order.status|title }} · ₹{{ order.amount }} · {{ order.created_at|date:"M d, Y h:i A" }}</p>
+          {% for item in order.items.all %}<small>{{ item.service_name }} - {{ item.plan_name }}</small><br>{% endfor %}
+        </div>
+      </article>
+    {% empty %}
+      <p>No orders yet.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
+

@@ -20,6 +20,25 @@
         <a class="text-link" href="{{ service.get_absolute_url }}">View details</a>
         <a class="whatsapp-cta" href="{{ service.whatsapp_url }}" target="_blank" rel="noopener">WhatsApp Chat</a>
       </div>
+      {% if service.active_subscription_plans %}
+        <div class="service-plan-strip">
+          {% for plan in service.active_subscription_plans|slice:":2" %}
+            <div class="service-plan-mini">
+              <strong>{{ plan.name }}</strong>
+              <span>₹{{ plan.price }} / {{ plan.duration_months }} month{% if plan.duration_months > 1 %}s{% endif %}</span>
+              {% if user.is_authenticated %}
+                <form method="post" action="{% url 'subscriptions:add_to_cart' plan.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button type="submit">Add to Cart</button>
+                </form>
+              {% else %}
+                <a href="{% url 'accounts:login' %}?next={{ request.get_full_path|urlencode }}">Login to Buy</a>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
     </article>
   {% empty %}
     <p>No services published yet.</p>

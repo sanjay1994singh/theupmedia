@@ -1,11 +1,14 @@
 from django.core.paginator import Paginator
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404, render
 
 from .models import Service
+from subscriptions.models import SubscriptionPlan
 
 
 def service_list(request):
-    services = Service.objects.filter(is_active=True)
+    plan_qs = SubscriptionPlan.objects.filter(is_active=True).order_by("display_order", "price")
+    services = Service.objects.filter(is_active=True).prefetch_related(Prefetch("subscription_plans", queryset=plan_qs, to_attr="active_subscription_plans"))
     featured_services = services.filter(is_featured=True)[:6]
     paginator = Paginator(services, 12)
     page_obj = paginator.get_page(request.GET.get("page"))
@@ -18,8 +21,9 @@ def service_list(request):
 
 
 def service_detail(request, slug):
-    service = get_object_or_404(Service.objects.filter(is_active=True), slug=slug)
-    related_services = Service.objects.filter(is_active=True).exclude(pk=service.pk)[:4]
+    plan_qs = SubscriptionPlan.objects.filter(is_active=True).order_by("display_order", "price")
+    service = get_object_or_404(Service.objects.filter(is_active=True).prefetch_related(Prefetch("subscription_plans", queryset=plan_qs, to_attr="active_subscription_plans")), slug=slug)
+    related_services = Service.objects.filter(is_active=True).prefetch_related(Prefetch("subscription_plans", queryset=plan_qs, to_attr="active_subscription_plans")).exclude(pk=service.pk)[:4]
     return render(request, "services/service_detail.html", {"service": service, "related_services": related_services})
 
 # Create your views here.

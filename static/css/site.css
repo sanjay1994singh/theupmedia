@@ -351,6 +351,146 @@ img {
   }
 }
 
+.subscription-plan-section {
+  margin: 30px 0;
+}
+
+.subscription-plan-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.subscription-plan-card,
+.subscription-line,
+.subscription-summary {
+  background: var(--surface);
+  border: 1px solid #e5ded2;
+  border-radius: 8px;
+  box-shadow: 0 14px 32px rgba(25, 20, 16, 0.06);
+  padding: 18px;
+}
+
+.subscription-plan-card h3,
+.subscription-line h2 {
+  margin: 0 0 8px;
+}
+
+.plan-price {
+  color: var(--accent);
+  display: block;
+  font-size: 30px;
+  margin-bottom: 4px;
+}
+
+.plan-features ul,
+.plan-features ol {
+  margin-left: 18px;
+}
+
+.button-link {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.service-plan-strip {
+  border-top: 1px solid #eee7dc;
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.service-plan-mini {
+  background: #fff8ec;
+  border: 1px solid #eadcc9;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+}
+
+.service-plan-mini button,
+.service-plan-mini a {
+  align-self: start;
+  background: var(--accent);
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 800;
+  padding: 8px 10px;
+  text-decoration: none;
+}
+
+.subscription-page {
+  max-width: 1120px;
+}
+
+.subscription-layout {
+  align-items: start;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+.subscription-list {
+  display: grid;
+  gap: 14px;
+}
+
+.subscription-line {
+  align-items: center;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.subscription-line-price {
+  color: var(--accent);
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.subscription-summary {
+  position: sticky;
+  top: 90px;
+}
+
+.subscription-summary strong {
+  color: var(--accent);
+  display: block;
+  font-size: 34px;
+  margin: 8px 0 12px;
+}
+
+.subscription-message {
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.subscription-badge {
+  background: #e8fff0;
+  border-radius: 999px;
+  color: #137a3b;
+  font-weight: 900;
+  padding: 7px 12px;
+}
+
+@media (max-width: 760px) {
+  .subscription-layout,
+  .subscription-line {
+    grid-template-columns: 1fr;
+  }
+
+  .subscription-summary {
+    position: static;
+  }
+}
+
 .featured-block {
   background: transparent;
   display: grid;
