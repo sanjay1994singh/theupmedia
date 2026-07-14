@@ -84,10 +84,15 @@
             },
           },
           handler: async (response) => {
-            message.textContent = "Verifying payment...";
-            const result = await postJson("{% url 'subscriptions:verify_payment' %}", response);
-            message.textContent = "Payment successful.";
-            window.location.href = result.redirect_url || "{% url 'subscriptions:my_subscriptions' %}";
+            try {
+              message.textContent = "Verifying payment...";
+              const result = await postJson("{% url 'subscriptions:verify_payment' %}", response);
+              message.textContent = "Payment successful.";
+              window.location.href = result.redirect_url || "{% url 'subscriptions:my_subscriptions' %}";
+            } catch (error) {
+              message.textContent = error.message || "Payment verification failed.";
+              button.disabled = false;
+            }
           },
         };
         const checkout = new Razorpay(options);
@@ -108,4 +113,3 @@
   })();
 </script>
 {% endblock %}
-

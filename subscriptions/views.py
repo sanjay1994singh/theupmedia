@@ -56,7 +56,7 @@ def add_to_cart(request, plan_id):
     plan = get_object_or_404(active_plan_queryset(), pk=plan_id)
     CartItem.objects.get_or_create(user=request.user, plan=plan)
     messages.success(request, "Service cart me add ho gayi.")
-    return redirect(request.POST.get("next") or "subscriptions:cart")
+    return redirect("subscriptions:cart")
 
 
 @login_required
@@ -161,10 +161,14 @@ def create_order(request):
         )
     except Exception as exc:
         status_code = getattr(exc, "status_code", 500)
+        error_message = str(exc) or "Razorpay order create failed."
         order.status = ServiceOrder.Status.FAILED
-        order.error_message = str(exc)[:2000]
+        order.error_message = error_message[:2000]
         order.save(update_fields=["status", "error_message", "updated_at"])
-        return JsonResponse({"success": False, "error": "Razorpay order create failed."}, status=401 if status_code == 401 else 500)
+        if "Authentication failed" in error_message:
+            error_message = "Razorpay authentication failed. Please update valid Test Mode key ID and secret in .env, then restart the server."
+            status_code = 401
+        return JsonResponse({"success": False, "error": error_message}, status=401 if status_code == 401 else 500)
 
     order.razorpay_order_id = razorpay_order["id"]
     order.save(update_fields=["razorpay_order_id", "updated_at"])
@@ -248,4 +252,3 @@ def payment_failed(request):
     if order_id:
         ServiceOrder.objects.filter(user=request.user, razorpay_order_id=order_id).update(status=ServiceOrder.Status.FAILED, error_message=(data.get("error") or "Payment failed.")[:2000])
     return JsonResponse({"success": True})
-

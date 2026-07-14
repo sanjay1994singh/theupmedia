@@ -388,6 +388,85 @@ img {
   margin-left: 18px;
 }
 
+.home-plan-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.home-plan-card {
+  background: var(--surface);
+  border: 1px solid #eadcc9;
+  border-radius: 8px;
+  box-shadow: 0 14px 32px rgba(25, 20, 16, 0.06);
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.home-plan-card h3 {
+  font-size: 24px;
+  margin: 6px 0;
+}
+
+.home-plan-card p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.home-plan-card ul {
+  color: #2c2c2c;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.home-plan-meta {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+}
+
+.home-plan-meta strong {
+  color: var(--accent);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.home-plan-meta span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.home-plan-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.home-plan-actions form {
+  margin: 0;
+}
+
+.home-plan-actions button,
+.home-plan-actions .whatsapp-cta {
+  background: var(--accent);
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 900;
+  padding: 9px 12px;
+}
+
+.home-plan-actions .ghost-button {
+  background: #fff;
+  border: 1px solid #f0c3c8;
+  color: var(--accent);
+}
+
 .button-link {
   background: transparent;
   border: 0;

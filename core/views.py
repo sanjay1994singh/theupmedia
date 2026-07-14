@@ -13,6 +13,7 @@ from blog.models import BlogPost
 from blog.sitemaps import BlogPostSitemap
 from services.models import Service
 from services.sitemaps import ServiceSitemap
+from subscriptions.models import SubscriptionPlan
 from live_tv.models import LiveTVChannel, LiveTVSetting, NewsTickerSetting
 from .sitemaps import StaticPageSitemap
 
@@ -23,6 +24,9 @@ def home(request):
     categories = Category.objects.filter(is_active=True)[:8]
     latest_blogs = BlogPost.published.select_related("author")[:3]
     services = Service.objects.filter(is_active=True, is_featured=True)[:6]
+    subscription_plans = list(SubscriptionPlan.objects.select_related("service").filter(is_active=True, service__is_active=True)[:6])
+    for plan in subscription_plans:
+        plan.home_features = [feature.strip() for feature in plan.features.splitlines() if feature.strip()][:3]
     home_live_tv_channels = list(LiveTVChannel.objects.filter(is_active=True))
     home_live_tv = home_live_tv_channels[0] if home_live_tv_channels else None
     home_live_tv_next = None
@@ -39,6 +43,7 @@ def home(request):
             "categories": categories,
             "latest_blogs": latest_blogs,
             "business_services": services,
+            "subscription_plans": subscription_plans,
             "home_live_tv": home_live_tv,
             "home_live_tv_next": home_live_tv_next,
             "home_live_tv_loop_same": bool(home_live_tv and home_live_tv_next and home_live_tv.pk == home_live_tv_next.pk),
