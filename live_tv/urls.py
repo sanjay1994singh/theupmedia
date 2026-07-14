@@ -5,6 +5,7 @@ from . import views
 app_name = "live_tv"
 
 urlpatterns = [
+    path("api/app/home/", views.app_home_api, name="api_app_home"),
     path("api/live-tv/current/", views.current_live_tv_api, name="api_current"),
     path("api/live-tv/shorts/", views.shorts_list_api, name="api_shorts_list"),
     path("api/live-tv/shorts/<int:pk>/like/", views.shorts_like_api, name="api_shorts_like"),

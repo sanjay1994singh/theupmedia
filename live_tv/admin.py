@@ -4,7 +4,49 @@ from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from .models import FacebookLiveSetting, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsVideo, SocialRenderedVideo
+from .models import AppHomeSetting, AppMenu, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsVideo, SocialRenderedVideo
+
+
+@admin.register(AppMenu)
+class AppMenuAdmin(admin.ModelAdmin):
+    list_display = ("title", "slug", "target_type", "target_value", "display_order", "is_active")
+    list_editable = ("display_order", "is_active")
+    prepopulated_fields = {"slug": ("title",)}
+    search_fields = ("title", "target_value")
+
+
+@admin.register(HomeContent)
+class HomeContentAdmin(admin.ModelAdmin):
+    list_display = ("title", "section", "stream_type", "badge_text", "display_order", "is_active", "updated_at")
+    list_filter = ("section", "stream_type", "is_active")
+    list_editable = ("display_order", "is_active")
+    search_fields = ("title", "subtitle", "badge_text")
+    fieldsets = (
+        ("Section", {"fields": ("section", "title", "subtitle", "badge_text", "display_order", "is_active")}),
+        ("Media", {"fields": ("thumbnail", "image_url", "stream_type", "video_url", "youtube_url", "duration", "viewers_count")}),
+    )
+
+
+@admin.register(HomeUtility)
+class HomeUtilityAdmin(admin.ModelAdmin):
+    list_display = ("title", "icon", "action", "display_order", "is_active")
+    list_editable = ("display_order", "is_active")
+    search_fields = ("title", "subtitle", "action")
+
+
+@admin.register(AppHomeSetting)
+class AppHomeSettingAdmin(admin.ModelAdmin):
+    list_display = ("title", "hero_badge", "hero_button_text", "updated_at")
+    fieldsets = (
+        ("Home Header", {"fields": ("title", "subtitle", "logo")}),
+        ("Live TV Hero", {"fields": ("hero_badge", "hero_button_text")}),
+    )
+
+    def has_add_permission(self, request):
+        return not AppHomeSetting.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(LiveTVCategory)

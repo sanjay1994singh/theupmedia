@@ -258,6 +258,141 @@ class LiveTVChannel(models.Model):
         return f"https://www.youtube-nocookie.com/embed/{video_id}?{urlencode(params)}"
 
 
+class AppMenu(models.Model):
+    title = models.CharField(max_length=80)
+    slug = models.SlugField(max_length=100, unique=True, blank=True)
+    target_type = models.CharField(max_length=40, default="section", help_text="section, live_tv, shorts, videos, district, url")
+    target_value = models.CharField(max_length=180, blank=True)
+    display_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["display_order", "title"]
+        verbose_name = "App Menu"
+        verbose_name_plural = "App Menus"
+
+    def __str__(self):
+        return self.title
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            base_slug = slugify(self.title)[:90] or "menu"
+            slug = base_slug
+            counter = 2
+            while AppMenu.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            self.slug = slug
+        super().save(*args, **kwargs)
+
+
+class HomeContent(models.Model):
+    class Section(models.TextChoices):
+        FEATURED = "featured", "Mukhya Khabrein"
+        TOP_VIDEO = "top_video", "Top Video"
+
+    class StreamType(models.TextChoices):
+        DIRECT = "direct", "Direct MP4"
+        HLS = "hls", "HLS / M3U8"
+        YOUTUBE = "youtube", "YouTube"
+        ACTION = "action", "App Action"
+
+    section = models.CharField(max_length=20, choices=Section.choices, default=Section.FEATURED)
+    title = models.CharField(max_length=160)
+    subtitle = models.CharField(max_length=220, blank=True)
+    badge_text = models.CharField(max_length=40, blank=True)
+    thumbnail = models.ImageField(upload_to="live-tv/home/%Y/%m/", blank=True, null=True)
+    image_url = models.URLField(blank=True)
+    video_url = models.URLField(blank=True)
+    youtube_url = models.URLField(blank=True)
+    stream_type = models.CharField(max_length=20, choices=StreamType.choices, default=StreamType.DIRECT)
+    duration = models.CharField(max_length=24, blank=True)
+    viewers_count = models.PositiveIntegerField(default=0)
+    display_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["section", "display_order", "-created_at"]
+        verbose_name = "Home Content"
+        verbose_name_plural = "Home Contents"
+
+    def __str__(self):
+        return f"{self.get_section_display()}: {self.title}"
+
+    @property
+    def youtube_embed_url(self):
+        if not self.youtube_url:
+            return ""
+        parsed = urlparse(self.youtube_url)
+        host = parsed.netloc.lower()
+        video_id = ""
+        if "youtu.be" in host:
+            video_id = parsed.path.strip("/").split("/")[0]
+        elif "youtube.com" in host:
+            if parsed.path.startswith("/embed/"):
+                video_id = parsed.path.split("/embed/", 1)[1].split("/")[0]
+            elif parsed.path.startswith("/live/"):
+                video_id = parsed.path.split("/live/", 1)[1].split("/")[0]
+            elif parsed.path.startswith("/shorts/"):
+                video_id = parsed.path.split("/shorts/", 1)[1].split("/")[0]
+            else:
+                video_id = parse_qs(parsed.query).get("v", [""])[0]
+        if not video_id:
+            return self.youtube_url
+        params = {
+            "rel": "0",
+            "modestbranding": "1",
+            "playsinline": "1",
+            "enablejsapi": "1",
+            "origin": settings.SITE_DOMAIN,
+        }
+        return f"https://www.youtube-nocookie.com/embed/{video_id}?{urlencode(params)}"
+
+
+class HomeUtility(models.Model):
+    title = models.CharField(max_length=80)
+    subtitle = models.CharField(max_length=160, blank=True)
+    icon = models.CharField(max_length=40, default="play-circle")
+    action = models.CharField(max_length=80, default="live_tv")
+    display_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["display_order", "title"]
+        verbose_name = "Home Utility"
+        verbose_name_plural = "Home Utilities"
+
+    def __str__(self):
+        return self.title
+
+
+class AppHomeSetting(models.Model):
+    title = models.CharField(max_length=120, default="THE UP MEDIA")
+    subtitle = models.CharField(max_length=180, default="Live TV and videos")
+    hero_badge = models.CharField(max_length=40, default="LIVE TV")
+    hero_button_text = models.CharField(max_length=40, default="Live dekhein")
+    logo = models.ImageField(upload_to="live-tv/home-settings/", blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "App Home Setting"
+        verbose_name_plural = "App Home Settings"
+
+    def __str__(self):
+        return self.title
+
+    @classmethod
+    def get_solo(cls):
+        setting, _created = cls.objects.get_or_create(pk=1)
+        return setting
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+
 class LiveTVSetting(models.Model):
     name = models.CharField(max_length=120, default="The Up Media Live TV")
     live_label = models.CharField(max_length=40, default="LIVE")

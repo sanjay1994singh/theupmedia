@@ -29,7 +29,7 @@ from django.views.decorators.http import require_POST
 
 from .forms import LiveTVChannelForm
 from .hls import validate_uploaded_video
-from .models import FacebookLiveSetting, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsVideo, SocialRenderedVideo
+from .models import AppHomeSetting, AppMenu, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsVideo, SocialRenderedVideo
 from news.models import Article
 
 RESTRICTED_DOWNLOAD_HOSTS = {
@@ -489,6 +489,84 @@ def serialize_channel_for_mobile(request, channel):
         "settings": serialize_live_tv_setting(request, setting),
         "web_url": request.build_absolute_uri(channel.get_absolute_url()),
         "ads": mobile_live_tv_ads(),
+    }
+
+
+def serialize_home_content(request, content):
+    thumbnail_url = absolute_media_url(request, content.thumbnail) or content.image_url
+    stream_url = content.video_url
+    youtube_embed_url = ""
+    player_type = content.stream_type
+    if content.stream_type == HomeContent.StreamType.YOUTUBE:
+        youtube_embed_url = content.youtube_embed_url
+        stream_url = ""
+        player_type = "youtube"
+    elif content.stream_type == HomeContent.StreamType.HLS:
+        player_type = "hls"
+    elif content.stream_type == HomeContent.StreamType.ACTION:
+        player_type = "action"
+    return {
+        "id": content.pk,
+        "section": content.section,
+        "title": content.title,
+        "subtitle": content.subtitle,
+        "badge_text": content.badge_text,
+        "thumbnail": thumbnail_url,
+        "image_url": thumbnail_url,
+        "stream_type": content.stream_type,
+        "player_type": player_type,
+        "video_url": stream_url,
+        "stream_url": stream_url,
+        "youtube_url": content.youtube_url,
+        "youtube_embed_url": youtube_embed_url,
+        "duration": content.duration,
+        "viewers_count": content.viewers_count,
+        "display_order": content.display_order,
+    }
+
+
+def serialize_home_utility(utility):
+    return {
+        "id": utility.pk,
+        "title": utility.title,
+        "subtitle": utility.subtitle,
+        "icon": utility.icon,
+        "action": utility.action,
+        "display_order": utility.display_order,
+    }
+
+
+def serialize_app_menu(menu):
+    return {
+        "id": menu.pk,
+        "title": menu.title,
+        "slug": menu.slug,
+        "target_type": menu.target_type,
+        "target_value": menu.target_value,
+        "display_order": menu.display_order,
+    }
+
+
+def serialize_app_home_setting(request, setting):
+    return {
+        "id": setting.pk,
+        "title": setting.title,
+        "subtitle": setting.subtitle,
+        "hero_badge": setting.hero_badge,
+        "hero_button_text": setting.hero_button_text,
+        "logo": absolute_media_url(request, setting.logo),
+        "updated_at": setting.updated_at.isoformat(),
+    }
+
+
+def serialize_home_district(city):
+    return {
+        "id": city.pk,
+        "name": city.name,
+        "slug": city.slug,
+        "state": city.state.name if city.state_id else "",
+        "state_id": city.state_id,
+        "display_order": city.display_order,
     }
 
 
@@ -1174,6 +1252,42 @@ def current_live_tv_api(request):
         return JsonResponse(serialize_empty_live_tv(request))
     data = serialize_channel_for_mobile(request, active_channel)
     data["playlist"] = [serialize_channel_for_mobile(request, channel) for channel in channels]
+    return JsonResponse(data)
+
+
+@require_GET
+def app_home_api(request):
+    channels = LiveTVChannel.objects.filter(is_active=True).select_related("category", "state", "city")
+    active_channel = channels.filter(is_live=True).first() or channels.first()
+    main_live_tv = serialize_channel_for_mobile(request, active_channel) if active_channel else serialize_empty_live_tv(request)
+    main_live_tv["playlist"] = [serialize_channel_for_mobile(request, channel) for channel in channels[:20]]
+
+    ticker_setting = news_ticker_setting()
+    content = HomeContent.objects.filter(is_active=True)
+    featured = content.filter(section=HomeContent.Section.FEATURED)[:12]
+    top_videos = content.filter(section=HomeContent.Section.TOP_VIDEO)[:12]
+    shorts = ShortsVideo.objects.filter(is_published=True).select_related("category", "state", "city").prefetch_related("comments")[:12]
+    districts = LiveTVCity.objects.filter(is_active=True).select_related("state")[:30]
+
+    data = {
+        "success": True,
+        "menu": [serialize_app_menu(menu) for menu in AppMenu.objects.filter(is_active=True)[:20]],
+        "main_live_tv": main_live_tv,
+        "ticker": {
+            "label": ticker_setting.label,
+            "text": ticker_setting.text,
+            "items": ticker_items_from_text(ticker_setting.text),
+            "speed_seconds": ticker_setting.speed_seconds,
+            "mobile_speed_seconds": ticker_setting.mobile_speed_seconds,
+            "style": ticker_setting.style,
+        },
+        "featured_content": [serialize_home_content(request, item) for item in featured],
+        "shorts": [serialize_shorts_video(request, short) for short in shorts],
+        "top_videos": [serialize_home_content(request, item) for item in top_videos],
+        "utilities": [serialize_home_utility(utility) for utility in HomeUtility.objects.filter(is_active=True)[:12]],
+        "districts": [serialize_home_district(city) for city in districts],
+        "settings": serialize_app_home_setting(request, AppHomeSetting.get_solo()),
+    }
     return JsonResponse(data)
 
 
