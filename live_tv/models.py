@@ -346,8 +346,6 @@ class LiveTVPlaylistItem(models.Model):
                 errors["video"] = "Only a direct uploaded video can be added to the live playlist."
             elif not self.video.is_active:
                 errors["video"] = "Inactive video cannot be added to the live playlist."
-            elif self.video.hls_status != LiveTVChannel.HLSStatus.COMPLETED:
-                errors["video"] = "Video processing must complete before playlist insertion."
             elif self.video.effective_duration_seconds <= 0:
                 errors["duration_seconds"] = "A positive video duration is required."
         if errors:

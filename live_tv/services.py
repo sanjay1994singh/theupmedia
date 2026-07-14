@@ -59,8 +59,6 @@ def validate_playlist_video(video, check_storage=True):
                 errors.append("Video file does not exist in storage.")
         except (OSError, ValueError) as exc:
             errors.append(f"Video storage check failed: {exc}")
-    if video.hls_status != LiveTVChannel.HLSStatus.COMPLETED:
-        errors.append("Video processing is not completed.")
     if video.effective_duration_seconds <= 0:
         errors.append("Video duration must be greater than zero.")
     if errors:

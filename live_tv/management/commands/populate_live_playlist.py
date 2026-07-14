@@ -10,6 +10,13 @@ from live_tv.services import add_uploaded_video_to_live_playlist, get_main_live_
 class Command(BaseCommand):
     help = "Populate the 24x7 main live playlist from eligible existing direct uploads."
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--process-hls",
+            action="store_true",
+            help="Convert missing HLS before adding videos. By default direct MP4 fallback is used.",
+        )
+
     def handle(self, *args, **options):
         channel = get_main_live_channel(create=True)
         videos = LiveTVChannel.objects.filter(
@@ -26,7 +33,9 @@ class Command(BaseCommand):
                     video.duration = metadata.get("duration")
                     video.duration_seconds = max(0, int(round(metadata.get("duration") or 0)))
                     video.save(update_fields=["duration", "duration_seconds", "updated_at"])
-                if video.hls_status != LiveTVChannel.HLSStatus.COMPLETED or not video.hls_master_url:
+                if options["process_hls"] and (
+                    video.hls_status != LiveTVChannel.HLSStatus.COMPLETED or not video.hls_master_url
+                ):
                     self.stdout.write(f"[{video.pk}] processing HLS: {video.title}")
                     convert_live_channel_to_hls(video.pk)
                     video.refresh_from_db()
