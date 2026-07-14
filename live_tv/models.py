@@ -478,6 +478,7 @@ class ShortsVideo(models.Model):
     likes_count = models.PositiveIntegerField(default=0)
     comments_count = models.PositiveIntegerField(default=0)
     shares_count = models.PositiveIntegerField(default=0)
+    views_count = models.PositiveIntegerField(default=0)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, blank=True, null=True, related_name="live_tv_shorts")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -530,6 +531,40 @@ class ShortsComment(models.Model):
 
     def __str__(self):
         return f"{self.name or 'Viewer'}: {self.text[:40]}"
+
+
+class ShortsLike(models.Model):
+    short = models.ForeignKey(ShortsVideo, on_delete=models.CASCADE, related_name="short_likes")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="liked_live_tv_shorts")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["short", "user"], name="unique_shorts_like_user"),
+        ]
+        indexes = [
+            models.Index(fields=["short", "user"], name="shorts_like_short_user_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.user} liked {self.short_id}"
+
+
+class ChannelFollow(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="live_tv_following")
+    channel_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="live_tv_followers")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "channel_user"], name="unique_live_tv_channel_follow"),
+        ]
+        indexes = [
+            models.Index(fields=["channel_user", "user"], name="channel_follow_user_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.user} follows {self.channel_user}"
 
 
 class MobileAdminToken(models.Model):

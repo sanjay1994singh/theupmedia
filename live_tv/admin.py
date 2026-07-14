@@ -4,7 +4,7 @@ from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from .models import AppHomeSetting, AppMenu, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsVideo, SocialRenderedVideo
+from .models import AppHomeSetting, AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
 
 
 @admin.register(AppMenu)
@@ -227,7 +227,7 @@ class NewsTickerSettingAdmin(admin.ModelAdmin):
 
 @admin.register(ShortsVideo)
 class ShortsVideoAdmin(admin.ModelAdmin):
-    list_display = ("title", "frame_template", "category", "state", "city", "location", "hls_status", "is_published", "display_order", "likes_count", "comments_count", "shares_count", "created_at")
+    list_display = ("title", "frame_template", "category", "state", "city", "location", "hls_status", "is_published", "display_order", "views_count", "likes_count", "comments_count", "shares_count", "created_at")
     list_filter = ("is_published", "hls_status", "frame_template")
     search_fields = ("title", "headline", "caption", "location", "city__name")
     list_editable = ("is_published", "display_order")
@@ -236,7 +236,7 @@ class ShortsVideoAdmin(admin.ModelAdmin):
         ("Shorts Video", {"fields": ("title", "headline", "caption", "location", "category", "state", "city", "frame_template", "video_file", "original_video", "thumbnail")}),
         ("HLS Processing", {"fields": ("hls_master_url", "hls_status", "processing_error", "duration")}),
         ("Status", {"fields": ("is_published", "display_order", "created_by")}),
-        ("Counters", {"fields": ("likes_count", "comments_count", "shares_count")}),
+        ("Counters", {"fields": ("views_count", "likes_count", "comments_count", "shares_count")}),
         ("Dates", {"fields": ("created_at", "updated_at")}),
     )
 
@@ -245,6 +245,20 @@ class ShortsVideoAdmin(admin.ModelAdmin):
 class ShortsCommentAdmin(admin.ModelAdmin):
     list_display = ("short", "name", "created_at")
     search_fields = ("short__title", "name", "text")
+    readonly_fields = ("created_at",)
+
+
+@admin.register(ShortsLike)
+class ShortsLikeAdmin(admin.ModelAdmin):
+    list_display = ("short", "user", "created_at")
+    search_fields = ("short__title", "user__username", "user__email")
+    readonly_fields = ("created_at",)
+
+
+@admin.register(ChannelFollow)
+class ChannelFollowAdmin(admin.ModelAdmin):
+    list_display = ("user", "channel_user", "created_at")
+    search_fields = ("user__username", "user__email", "channel_user__username", "channel_user__email")
     readonly_fields = ("created_at",)
 
 

@@ -15,9 +15,10 @@ from uuid import uuid4
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate
+from django.contrib.auth import get_user_model
 from django.core.files import File
 from django.core.files.base import ContentFile
-from django.db import close_old_connections
+from django.db import close_old_connections, transaction
 from django.db.models import F, Q
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import JsonResponse
@@ -29,7 +30,7 @@ from django.views.decorators.http import require_POST
 
 from .forms import LiveTVChannelForm
 from .hls import validate_uploaded_video
-from .models import AppHomeSetting, AppMenu, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsVideo, SocialRenderedVideo
+from .models import AppHomeSetting, AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
 from news.models import Article
 
 RESTRICTED_DOWNLOAD_HOSTS = {
@@ -658,6 +659,20 @@ def mobile_admin_user(request):
     return token.user
 
 
+def shorts_request_user(request):
+    if hasattr(request, "_shorts_request_user"):
+        return request._shorts_request_user
+    token_user = mobile_admin_user(request)
+    if token_user:
+        request._shorts_request_user = token_user
+        return token_user
+    if getattr(request, "user", None) and request.user.is_authenticated:
+        request._shorts_request_user = request.user
+        return request.user
+    request._shorts_request_user = None
+    return None
+
+
 def mobile_admin_required(request):
     user = mobile_admin_user(request)
     if not user:
@@ -720,6 +735,17 @@ def serialize_channel_for_admin(request, channel):
 
 
 def serialize_shorts_video(request, short):
+    user = shorts_request_user(request)
+    setting = live_tv_setting()
+    channel_user = short.created_by or get_user_model().objects.filter(is_superuser=True, is_active=True).order_by("id").first()
+    channel_logo_url = absolute_media_url(request, setting.channel_logo)
+    is_liked = bool(user and ShortsLike.objects.filter(short=short, user=user).exists())
+    is_following = bool(
+        user
+        and channel_user
+        and ChannelFollow.objects.filter(user=user, channel_user=channel_user).exists()
+    )
+    followers_count = ChannelFollow.objects.filter(channel_user=channel_user).count() if channel_user else 0
     comments = [
         {
             "id": comment.pk,
@@ -731,6 +757,7 @@ def serialize_shorts_video(request, short):
     ]
     hls_url = absolute_media_path_url(request, short.hls_master_url)
     fallback_video_url = absolute_media_url(request, short.video_file)
+    video_url = hls_url or fallback_video_url
     return {
         "id": short.pk,
         "title": short.title,
@@ -746,10 +773,13 @@ def serialize_shorts_video(request, short):
         "city": {"id": short.city_id, "name": short.city.name} if short.city_id else None,
         "city_id": short.city_id,
         "city_name": short.city.name if short.city_id else "",
+        "location_name": short.location or (short.city.name if short.city_id else ""),
         "frame_template": short.frame_template,
-        "video_url": hls_url or fallback_video_url,
+        "video_url": video_url,
+        "compressed_video_url": video_url,
         "mp4_url": fallback_video_url,
         "hls_url": hls_url,
+        "thumbnail": absolute_media_url(request, short.thumbnail),
         "thumbnail_url": absolute_media_url(request, short.thumbnail),
         "processing_status": short.hls_status,
         "hls_status": short.hls_status,
@@ -760,9 +790,22 @@ def serialize_shorts_video(request, short):
         "likes_count": short.likes_count,
         "comments_count": short.comments_count,
         "shares_count": short.shares_count,
+        "views_count": short.views_count,
         "likes": short.likes_count,
         "comments_total": short.comments_count,
         "shares": short.shares_count,
+        "views": short.views_count,
+        "is_liked": is_liked,
+        "is_following": is_following,
+        "channel_id": channel_user.pk if channel_user else None,
+        "channel": {
+            "id": channel_user.pk if channel_user else None,
+            "name": "The UP Media",
+            "logo_url": channel_logo_url,
+            "is_verified": True,
+            "is_following": is_following,
+            "followers_count": followers_count,
+        },
         "comments": comments,
         "created_at": short.created_at.isoformat(),
         "updated_at": short.updated_at.isoformat(),
@@ -1293,17 +1336,87 @@ def app_home_api(request):
 
 @require_GET
 def shorts_list_api(request):
-    shorts = ShortsVideo.objects.filter(is_published=True).select_related("category", "state", "city").prefetch_related("comments")
-    return JsonResponse({"shorts": [serialize_shorts_video(request, short) for short in shorts]})
+    try:
+        page = max(int(request.GET.get("page", "1")), 1)
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = min(max(int(request.GET.get("page_size", "12")), 1), 30)
+    except (TypeError, ValueError):
+        page_size = 12
+    offset = (page - 1) * page_size
+    shorts_qs = (
+        ShortsVideo.objects.filter(is_published=True)
+        .select_related("category", "state", "city", "created_by")
+        .prefetch_related("comments")
+    )
+    total = shorts_qs.count()
+    shorts = list(shorts_qs[offset : offset + page_size])
+    results = [serialize_shorts_video(request, short) for short in shorts]
+    return JsonResponse(
+        {
+            "count": total,
+            "next": page + 1 if offset + page_size < total else None,
+            "previous": page - 1 if page > 1 else None,
+            "results": results,
+            "shorts": results,
+        }
+    )
 
 
 @csrf_exempt
 @require_POST
 def shorts_like_api(request, pk):
+    user = shorts_request_user(request)
+    if not user:
+        return JsonResponse({"detail": "Login required."}, status=401)
     short = get_object_or_404(ShortsVideo, pk=pk, is_published=True)
-    ShortsVideo.objects.filter(pk=short.pk).update(likes_count=F("likes_count") + 1)
+    with transaction.atomic():
+        like, created = ShortsLike.objects.get_or_create(short=short, user=user)
+        if not created:
+            like.delete()
+        likes_count = ShortsLike.objects.filter(short=short).count()
+        ShortsVideo.objects.filter(pk=short.pk).update(likes_count=likes_count)
     short.refresh_from_db(fields=["likes_count", "updated_at"])
-    return JsonResponse({"id": short.pk, "likes_count": short.likes_count, "likes": short.likes_count})
+    return JsonResponse({"id": short.pk, "is_liked": created, "likes_count": short.likes_count, "likes": short.likes_count})
+
+
+@csrf_exempt
+@require_POST
+def shorts_follow_api(request, pk):
+    user = shorts_request_user(request)
+    if not user:
+        return JsonResponse({"detail": "Login required."}, status=401)
+    short = get_object_or_404(ShortsVideo.objects.select_related("created_by"), pk=pk, is_published=True)
+    channel_user = short.created_by or get_user_model().objects.filter(is_superuser=True, is_active=True).order_by("id").first()
+    if not channel_user:
+        return JsonResponse({"detail": "Channel user not found."}, status=404)
+    with transaction.atomic():
+        follow, created = ChannelFollow.objects.get_or_create(user=user, channel_user=channel_user)
+        if not created:
+            follow.delete()
+        followers_count = ChannelFollow.objects.filter(channel_user=channel_user).count()
+    return JsonResponse(
+        {
+            "id": short.pk,
+            "channel_id": channel_user.pk,
+            "is_following": created,
+            "followers_count": followers_count,
+        }
+    )
+
+
+@csrf_exempt
+@require_POST
+def shorts_view_api(request, pk):
+    short = get_object_or_404(ShortsVideo, pk=pk, is_published=True)
+    session_key = f"shorts_viewed_{short.pk}"
+    registered = not request.session.get(session_key)
+    if registered:
+        ShortsVideo.objects.filter(pk=short.pk).update(views_count=F("views_count") + 1)
+        request.session[session_key] = True
+        short.refresh_from_db(fields=["views_count", "updated_at"])
+    return JsonResponse({"id": short.pk, "view_registered": registered, "views_count": short.views_count, "views": short.views_count})
 
 
 @csrf_exempt
