@@ -83,16 +83,26 @@ class Command(BaseCommand):
         parser.add_argument("--start-date", help="Schedule start date in YYYY-MM-DD format. Default: tomorrow.")
         parser.add_argument("--reschedule", action="store_true", help="Reset published_at for existing seeded posts.")
         parser.add_argument("--no-images", action="store_true", help="Only seed records, do not write SVG image files.")
+        parser.add_argument("--images-only", action="store_true", help="Only generate SVG files in this server's media/static folders; do not touch the database.")
 
     def handle(self, *args, **options):
         start_date = self._start_date(options.get("start_date"))
         media_dir = Path(settings.MEDIA_ROOT) / BLOG_IMAGE_DIR
         service_image_dir = Path(settings.BASE_DIR) / "static" / "img" / "services" / "seo"
 
+        if options["images_only"] and options["no_images"]:
+            raise CommandError("Use either --images-only or --no-images, not both.")
+
         if not options["no_images"]:
-            media_dir.mkdir(parents=True, exist_ok=True)
-            service_image_dir.mkdir(parents=True, exist_ok=True)
-            self._write_service_svg(service_image_dir / "epaper-website-app-development.svg")
+            image_count = self._write_campaign_images(media_dir, service_image_dir)
+            if options["images_only"]:
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"E-paper SVG images generated on this server. Blog images: {image_count}. "
+                        f"Media path: {media_dir}. Service image path: {service_image_dir / 'epaper-website-app-development.svg'}"
+                    )
+                )
+                return
 
         self._seed_service()
 
@@ -103,8 +113,6 @@ class Command(BaseCommand):
             title = f"E-Paper Website and App for {audience}: {topic}"
             keyword = f"E-Paper {audience}"
             image_name = f"{slug}.svg"
-            if not options["no_images"]:
-                self._write_blog_svg(media_dir / image_name, title, keyword, index)
 
             scheduled_at = self._scheduled_at(start_date, index)
             defaults = {
@@ -142,6 +150,19 @@ class Command(BaseCommand):
                 f"Schedule starts: {start_date.isoformat()} 08:00, two posts per day."
             )
         )
+
+    def _write_campaign_images(self, media_dir, service_image_dir):
+        media_dir.mkdir(parents=True, exist_ok=True)
+        service_image_dir.mkdir(parents=True, exist_ok=True)
+        self._write_service_svg(service_image_dir / "epaper-website-app-development.svg")
+        image_count = 0
+        for index, (audience_slug, audience, topic_slug, topic) in enumerate(self._blog_rows(), start=1):
+            slug = f"epaper-{audience_slug}-{topic_slug}"
+            title = f"E-Paper Website and App for {audience}: {topic}"
+            keyword = f"E-Paper {audience}"
+            self._write_blog_svg(media_dir / f"{slug}.svg", title, keyword, index)
+            image_count += 1
+        return image_count
 
     def _start_date(self, value):
         if not value:
