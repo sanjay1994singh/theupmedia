@@ -5,6 +5,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from django.template.defaultfilters import slugify
 from django.urls import reverse
 
@@ -94,6 +95,7 @@ class LiveTVChannel(models.Model):
         YOUTUBE = "youtube", "YouTube URL"
         DIRECT = "direct", "Direct Video Upload"
         HLS = "hls", "HLS / M3U8 Stream"
+        PLAYLIST = "playlist", "Auto Live Playlist"
 
     class HLSStatus(models.TextChoices):
         PENDING = "pending", "Pending"
@@ -112,6 +114,23 @@ class LiveTVChannel(models.Model):
     hls_status = models.CharField(max_length=20, choices=HLSStatus.choices, default=HLSStatus.PENDING)
     processing_error = models.TextField(blank=True)
     duration = models.FloatField(blank=True, null=True)
+    duration_seconds = models.PositiveIntegerField(default=0)
+    auto_add_to_live = models.BooleanField(
+        default=True,
+        help_text="Automatically add this uploaded video to the main live playlist.",
+    )
+    auto_playlist_enabled = models.BooleanField(
+        default=False,
+        help_text="Use this record as the main synchronized auto live channel.",
+    )
+    loop_enabled = models.BooleanField(default=True)
+    target_playlist_duration_seconds = models.PositiveIntegerField(
+        default=10800,
+        help_text="Target live playlist duration. 10800 seconds = 3 hours.",
+    )
+    playback_started_at = models.DateTimeField(blank=True, null=True)
+    playlist_version = models.PositiveBigIntegerField(default=1)
+    last_playlist_update = models.DateTimeField(blank=True, null=True)
     poster_image = models.ImageField(upload_to="live-tv/posters/%Y/%m/", blank=True, null=True)
     category = models.ForeignKey(LiveTVCategory, on_delete=models.SET_NULL, blank=True, null=True, related_name="channels")
     state = models.ForeignKey(LiveTVState, on_delete=models.SET_NULL, blank=True, null=True, related_name="channels")
@@ -169,12 +188,12 @@ class LiveTVChannel(models.Model):
 
     def clean(self):
         errors = {}
-        if not self.state_id:
-            errors["state"] = "State is required."
-        if not self.city_id:
-            errors["city"] = "City is required."
-        elif self.state_id and self.city and self.city.state_id != self.state_id:
+        if self.city_id and not self.state_id:
+            errors["state"] = "State is required when a city is selected."
+        elif self.city_id and self.state_id and self.city and self.city.state_id != self.state_id:
             errors["city"] = "City must belong to selected state."
+        if self.auto_playlist_enabled and self.source_type != self.SourceType.PLAYLIST:
+            errors["source_type"] = "Main auto playlist channel must use Auto Live Playlist source."
         if errors:
             raise ValidationError(errors)
 
@@ -200,19 +219,51 @@ class LiveTVChannel(models.Model):
 
     @property
     def player_source_type(self):
+        if (
+            self.source_type == self.SourceType.PLAYLIST
+            and self.auto_playlist_enabled
+            and self.playlist_items.filter(is_active=True).exists()
+        ):
+            return self.SourceType.PLAYLIST
         if self.source_type == self.SourceType.YOUTUBE and self.youtube_embed_url:
             return self.SourceType.YOUTUBE
         if self.source_type == self.SourceType.DIRECT and self.video_file:
             return self.SourceType.DIRECT
-        if self.source_type == self.SourceType.HLS and self.stream_url:
+        if self.source_type == self.SourceType.HLS and (self.hls_master_url or self.stream_url):
             return self.SourceType.HLS
         if self.video_file:
             return self.SourceType.DIRECT
-        if self.stream_url:
+        if self.hls_master_url or self.stream_url:
             return self.SourceType.HLS
         if self.youtube_embed_url:
             return self.SourceType.YOUTUBE
         return ""
+
+    @property
+    def effective_duration_seconds(self):
+        try:
+            value = int(self.duration_seconds or 0)
+            if value > 0:
+                return value
+            fallback = int(float(self.duration or 0))
+            return fallback if fallback > 0 else 0
+        except (TypeError, ValueError, OverflowError):
+            return 0
+
+    @property
+    def playlist_duration_seconds(self):
+        return sum(
+            max(0, int(value or 0))
+            for value in self.playlist_items.filter(is_active=True).values_list("duration_seconds", flat=True)
+        )
+
+    @property
+    def playlist_duration_minutes(self):
+        return round(self.playlist_duration_seconds / 60, 2)
+
+    @property
+    def playlist_target_reached(self):
+        return self.playlist_duration_seconds >= self.target_playlist_duration_seconds
 
     @property
     def video_mime_type(self):
@@ -256,6 +307,83 @@ class LiveTVChannel(models.Model):
             "origin": settings.SITE_DOMAIN,
         }
         return f"https://www.youtube-nocookie.com/embed/{video_id}?{urlencode(params)}"
+
+
+class LiveTVPlaylistItem(models.Model):
+    class Priority(models.TextChoices):
+        NORMAL = "normal", "Add to End"
+        NEXT = "next", "Play Next"
+        IMMEDIATE = "immediate", "Play Immediately"
+
+    channel = models.ForeignKey(LiveTVChannel, on_delete=models.CASCADE, related_name="playlist_items")
+    video = models.ForeignKey(LiveTVChannel, on_delete=models.PROTECT, related_name="included_in_playlists")
+    position = models.PositiveIntegerField(default=0)
+    duration_seconds = models.PositiveIntegerField(default=0)
+    priority = models.CharField(max_length=20, choices=Priority.choices, default=Priority.NORMAL)
+    is_active = models.BooleanField(default=True)
+    added_at = models.DateTimeField(auto_now_add=True)
+    removed_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["position", "pk"]
+        indexes = [models.Index(fields=["channel", "is_active", "position"], name="live_playlist_order_idx")]
+        constraints = [
+            models.UniqueConstraint(fields=["channel", "video"], name="unique_live_playlist_video"),
+            models.CheckConstraint(condition=~Q(channel=models.F("video")), name="live_playlist_no_self_ref"),
+        ]
+
+    def __str__(self):
+        return f"{self.channel}: {self.position + 1}. {self.video}"
+
+    def clean(self):
+        errors = {}
+        if self.channel_id and self.video_id and self.channel_id == self.video_id:
+            errors["video"] = "Main channel cannot reference itself."
+        if self.video_id:
+            if self.video.source_type != LiveTVChannel.SourceType.DIRECT or not self.video.video_file:
+                errors["video"] = "Only a direct uploaded video can be added to the live playlist."
+            elif not self.video.is_active:
+                errors["video"] = "Inactive video cannot be added to the live playlist."
+            elif self.video.hls_status != LiveTVChannel.HLSStatus.COMPLETED:
+                errors["video"] = "Video processing must complete before playlist insertion."
+            elif self.video.effective_duration_seconds <= 0:
+                errors["duration_seconds"] = "A positive video duration is required."
+        if errors:
+            raise ValidationError(errors)
+
+
+class LiveTVPlaylistCycle(models.Model):
+    channel = models.ForeignKey(LiveTVChannel, on_delete=models.CASCADE, related_name="playlist_cycles")
+    version = models.PositiveBigIntegerField()
+    starts_at = models.DateTimeField()
+    total_duration_seconds = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-starts_at", "-version"]
+        constraints = [models.UniqueConstraint(fields=["channel", "version"], name="unique_live_playlist_cycle_version")]
+        indexes = [models.Index(fields=["channel", "starts_at"], name="live_cycle_start_idx")]
+
+    def __str__(self):
+        return f"{self.channel} v{self.version}"
+
+
+class LiveTVPlaylistCycleItem(models.Model):
+    cycle = models.ForeignKey(LiveTVPlaylistCycle, on_delete=models.CASCADE, related_name="items")
+    playlist_item = models.ForeignKey(LiveTVPlaylistItem, on_delete=models.CASCADE, related_name="cycle_items")
+    video = models.ForeignKey(LiveTVChannel, on_delete=models.PROTECT, related_name="playlist_cycle_entries")
+    position = models.PositiveIntegerField(default=0)
+    duration_seconds = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["position", "pk"]
+        constraints = [models.UniqueConstraint(fields=["cycle", "position"], name="unique_live_cycle_position")]
+        indexes = [models.Index(fields=["cycle", "position"], name="live_cycle_item_order_idx")]
+
+    def __str__(self):
+        return f"{self.cycle} item {self.position + 1}"
 
 
 class AppMenu(models.Model):

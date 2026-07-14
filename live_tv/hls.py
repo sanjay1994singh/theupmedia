@@ -1,4 +1,5 @@
 import json
+import logging
 import shutil
 import subprocess
 import tempfile
@@ -9,6 +10,9 @@ from django.utils import timezone
 
 from .models import ShortsVideo
 from .models import LiveTVChannel
+
+
+logger = logging.getLogger(__name__)
 
 
 ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm", ".mkv"}
@@ -294,7 +298,24 @@ def convert_live_channel_to_hls(channel_id):
         channel.hls_status = LiveTVChannel.HLSStatus.COMPLETED
         channel.processing_error = ""
         channel.duration = metadata.get("duration")
-        channel.save(update_fields=["hls_master_url", "hls_status", "processing_error", "duration", "updated_at"])
+        channel.duration_seconds = max(0, int(round(metadata.get("duration") or 0)))
+        channel.save(
+            update_fields=[
+                "hls_master_url",
+                "hls_status",
+                "processing_error",
+                "duration",
+                "duration_seconds",
+                "updated_at",
+            ]
+        )
+        if channel.auto_add_to_live and not channel.auto_playlist_enabled and channel.duration_seconds > 0:
+            try:
+                from .services import add_uploaded_video_to_live_playlist
+
+                add_uploaded_video_to_live_playlist(channel)
+            except Exception:
+                logger.exception("Live playlist auto-add failed for channel %s", channel.pk)
         return channel.hls_master_url
     except Exception as exc:
         if tmp_dir.exists():

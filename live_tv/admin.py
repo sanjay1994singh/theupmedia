@@ -1,10 +1,13 @@
 from django.contrib import admin
 from django.contrib import messages
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from .models import AppHomeSetting, AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
+from .models import AppHomeSetting, AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistCycle, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
+from .services import calculate_current_playback, update_playlist_item
 
 
 @admin.register(AppMenu)
@@ -76,20 +79,35 @@ class LiveTVCityAdmin(admin.ModelAdmin):
 
 @admin.register(LiveTVChannel)
 class LiveTVChannelAdmin(admin.ModelAdmin):
-    list_display = ("title", "source_type", "hls_status", "safe_category", "safe_state", "safe_city", "is_live", "is_active", "display_order", "updated_at")
-    list_filter = ("source_type", "hls_status", "is_live", "is_active")
+    list_display = ("title", "channel_role", "source_type", "hls_status", "playlist_duration_display", "is_live", "is_active", "display_order", "updated_at")
+    list_filter = ("source_type", "auto_playlist_enabled", "auto_add_to_live", "hls_status", "is_live", "is_active")
     search_fields = ("title", "headline", "ticker_text", "city__name", "state__name", "category__name")
     prepopulated_fields = {"slug": ("title",)}
     list_editable = ("is_live", "is_active", "display_order")
-    readonly_fields = ("hls_master_url", "hls_status", "processing_error", "duration")
+    readonly_fields = ("hls_master_url", "hls_status", "processing_error", "duration", "duration_seconds", "current_playback_display", "playlist_duration_display", "playlist_target_progress", "playlist_version", "playback_started_at", "last_playlist_update", "processing_failures")
     fieldsets = (
         ("Basic", {"fields": ("title", "slug", "description", "is_active", "is_live", "display_order")}),
         ("Video Source", {"fields": ("source_type", "youtube_url", "stream_url", "video_file", "poster_image")}),
-        ("HLS Processing", {"fields": ("hls_master_url", "hls_status", "processing_error", "duration")}),
+        ("HLS Processing", {"fields": ("hls_master_url", "hls_status", "processing_error", "duration", "duration_seconds")}),
+        ("24x7 Auto Playlist", {"fields": ("auto_playlist_enabled", "auto_add_to_live", "loop_enabled", "target_playlist_duration_seconds", "current_playback_display", "playlist_duration_display", "playlist_target_progress", "playlist_version", "playback_started_at", "last_playlist_update", "processing_failures")}),
         ("Category / Location", {"fields": ("category", "state", "city")}),
         ("Video Text", {"fields": ("lower_third_label", "headline")}),
         ("SEO", {"fields": ("meta_title", "meta_description")}),
     )
+
+    def save_model(self, request, obj, form, change):
+        video_changed = "video_file" in form.changed_data
+        if obj.source_type == LiveTVChannel.SourceType.DIRECT and obj.video_file and video_changed:
+            obj.hls_master_url = ""
+            obj.hls_status = LiveTVChannel.HLSStatus.PENDING
+            obj.processing_error = ""
+            obj.duration = None
+            obj.duration_seconds = 0
+        super().save_model(request, obj, form, change)
+        if obj.source_type == LiveTVChannel.SourceType.DIRECT and obj.video_file and video_changed:
+            from .views import enqueue_live_channel_hls_job
+
+            transaction.on_commit(lambda: enqueue_live_channel_hls_job(obj.pk))
 
     def _safe_related_name(self, obj, field_name, id_field_name):
         raw_id = getattr(obj, id_field_name, None)
@@ -115,6 +133,106 @@ class LiveTVChannelAdmin(admin.ModelAdmin):
         return self._safe_related_name(obj, "city", "city_id")
 
     safe_city.short_description = "City"
+
+    @admin.display(description="Role")
+    def channel_role(self, obj):
+        return "Main playlist channel" if obj.auto_playlist_enabled else "Uploaded video/source"
+
+    @admin.display(description="Playlist duration")
+    def playlist_duration_display(self, obj):
+        if not obj.auto_playlist_enabled:
+            return "-"
+        return f"{obj.playlist_duration_minutes:.2f} min ({obj.playlist_duration_seconds} sec)"
+
+    @admin.display(description="Target progress")
+    def playlist_target_progress(self, obj):
+        target = max(1, obj.target_playlist_duration_seconds)
+        return f"{min(100, (obj.playlist_duration_seconds / target) * 100):.1f}% of {target // 60} min"
+
+    @admin.display(description="Current / next")
+    def current_playback_display(self, obj):
+        if not obj.auto_playlist_enabled:
+            return "-"
+        state = calculate_current_playback(obj)
+        if not state:
+            return "Playlist is empty"
+        current = state["video"].title
+        next_title = state["next_entry"].video.title if state.get("next_entry") else "-"
+        return f"{current} at {state['seek_position']:.1f}s; next: {next_title}"
+
+    @admin.display(description="Processing failures")
+    def processing_failures(self, obj):
+        if not obj.auto_playlist_enabled:
+            return "-"
+        return LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.FAILED, auto_add_to_live=True).count()
+
+
+@admin.register(LiveTVPlaylistItem)
+class LiveTVPlaylistItemAdmin(admin.ModelAdmin):
+    list_display = ("position_display", "channel", "video", "duration_seconds", "priority", "source_status", "is_active", "playlist_controls")
+    list_filter = ("channel", "priority", "is_active", "video__hls_status")
+    search_fields = ("channel__title", "video__title", "video__headline")
+    readonly_fields = ("added_at", "removed_at", "created_at", "updated_at")
+    autocomplete_fields = ("channel", "video")
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "<int:object_id>/playlist-action/<str:action>/",
+                self.admin_site.admin_view(self.playlist_action),
+                name="live_tv_playlist_action",
+            )
+        ]
+        return custom + urls
+
+    def playlist_action(self, request, object_id, action):
+        item = self.get_object(request, object_id)
+        if not item:
+            messages.error(request, "Playlist item not found.")
+            return redirect("admin:live_tv_livetvplaylistitem_changelist")
+        try:
+            update_playlist_item(item, action)
+            messages.success(request, f"Playlist action completed: {action.replace('_', ' ')}")
+        except ValidationError as exc:
+            messages.error(request, "; ".join(exc.messages))
+        return redirect("admin:live_tv_livetvplaylistitem_changelist")
+
+    @admin.display(description="#", ordering="position")
+    def position_display(self, obj):
+        return obj.position + 1
+
+    @admin.display(description="Video status")
+    def source_status(self, obj):
+        return f"{obj.video.get_hls_status_display()} / {'active' if obj.video.is_active else 'inactive'}"
+
+    @admin.display(description="Controls")
+    def playlist_controls(self, obj):
+        actions = [("move_up", "Up"), ("move_down", "Down")]
+        actions.append(("remove", "Remove") if obj.is_active else ("restore", "Restore"))
+        if obj.is_active:
+            actions.extend([("next", "Play next"), ("immediate", "Play now")])
+        links = []
+        for action, label in actions:
+            url = reverse("admin:live_tv_playlist_action", args=[obj.pk, action])
+            links.append(format_html('<a href="{}">{}</a>', url, label))
+        return format_html(" &nbsp; ".join("{}" for _ in links), *links)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(LiveTVPlaylistCycle)
+class LiveTVPlaylistCycleAdmin(admin.ModelAdmin):
+    list_display = ("channel", "version", "starts_at", "total_duration_seconds", "created_at")
+    list_filter = ("channel",)
+    readonly_fields = ("channel", "version", "starts_at", "total_duration_seconds", "created_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 

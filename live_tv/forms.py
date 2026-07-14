@@ -20,6 +20,10 @@ class LiveTVChannelForm(forms.ModelForm):
             "city",
             "is_active",
             "is_live",
+            "auto_add_to_live",
+            "auto_playlist_enabled",
+            "loop_enabled",
+            "target_playlist_duration_seconds",
             "lower_third_label",
             "headline",
             "display_order",
@@ -36,10 +40,8 @@ class LiveTVChannelForm(forms.ModelForm):
         cleaned_data = super().clean()
         state = cleaned_data.get("state")
         city = cleaned_data.get("city")
-        if not state:
-            self.add_error("state", "State is required.")
-        if not city:
-            self.add_error("city", "City is required.")
-        elif state and city.state_id != state.pk:
+        if city and not state:
+            self.add_error("state", "State is required when a city is selected.")
+        elif state and city and city.state_id != state.pk:
             self.add_error("city", "City must belong to selected state.")
         return cleaned_data

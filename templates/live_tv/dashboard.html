@@ -70,6 +70,16 @@
           </div>
         </div>
 
+        <div class="tv-form-section">
+          <h2>4. 24x7 Auto Playlist</h2>
+          <div class="tv-toggle-grid">
+            <label>{{ form.auto_add_to_live }} Auto-add uploaded video</label>
+            <label>{{ form.auto_playlist_enabled }} Main playlist channel</label>
+            <label>{{ form.loop_enabled }} Loop continuously</label>
+          </div>
+          <label>Target duration (seconds) {{ form.target_playlist_duration_seconds }}</label>
+        </div>
+
         <div class="tv-form-section tv-form-two">
           <label>Lower Third Label {{ form.lower_third_label }}</label>
           <label>Headline Text {{ form.headline }}</label>
@@ -142,6 +152,37 @@
         </div>
       </aside>
     </div>
+
+    {% if main_playlist_channel %}
+      <section class="tv-management">
+        <div class="section-heading compact">
+          <h2>24x7 Playlist Status</h2>
+          <a href="{% url 'admin:live_tv_livetvplaylistitem_changelist' %}">Open playlist controls</a>
+        </div>
+        <div class="tv-table">
+          <div class="tv-table-row tv-table-head">
+            <span>Current</span><span>Next</span><span>Duration</span><span>Version</span><span>Loop</span>
+          </div>
+          <div class="tv-table-row">
+            <span>{% if playlist_state %}{{ playlist_state.video.title }} at {{ playlist_state.seek_position|floatformat:1 }}s{% else %}Empty{% endif %}</span>
+            <span>{% if playlist_state.next_entry %}{{ playlist_state.next_entry.video.title }}{% else %}-{% endif %}</span>
+            <span>{{ main_playlist_channel.playlist_duration_minutes|floatformat:2 }} min / {{ main_playlist_channel.target_playlist_duration_seconds }} sec</span>
+            <span>{{ main_playlist_channel.playlist_version }}</span>
+            <span>{{ main_playlist_channel.loop_enabled|yesno:"On,Off" }}</span>
+          </div>
+        </div>
+        <div class="tv-table">
+          <div class="tv-table-row tv-table-head"><span>#</span><span>Video</span><span>Status</span><span>Duration</span><span>Priority</span></div>
+          {% for item in playlist_items %}
+            <div class="tv-table-row">
+              <span>{{ forloop.counter }}</span><span>{{ item.video.title }}</span>
+              <span>{{ item.is_active|yesno:"Active,Removed" }} / {{ item.video.get_hls_status_display }}</span>
+              <span>{{ item.duration_seconds }} sec</span><span>{{ item.get_priority_display }}</span>
+            </div>
+          {% empty %}<p>No playlist items yet.</p>{% endfor %}
+        </div>
+      </section>
+    {% endif %}
 
     <section class="tv-management">
       <div class="section-heading compact">

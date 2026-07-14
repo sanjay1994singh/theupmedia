@@ -1,4 +1,5 @@
 import ipaddress
+import logging
 import os
 import socket
 import re
@@ -19,19 +20,25 @@ from django.contrib.auth import get_user_model
 from django.core.files import File
 from django.core.files.base import ContentFile
 from django.db import close_old_connections, transaction
+from django.db.models.deletion import ProtectedError
 from django.db.models import F, Q
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_POST
 
 from .forms import LiveTVChannelForm
 from .hls import validate_uploaded_video
-from .models import AppHomeSetting, AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
+from .models import AppHomeSetting, AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
+from .services import calculate_current_playback, get_main_live_channel, update_playlist_item
 from news.models import Article
+
+
+logger = logging.getLogger(__name__)
 
 RESTRICTED_DOWNLOAD_HOSTS = {
     "youtube.com",
@@ -144,6 +151,10 @@ def next_live_tv_channel(active_channel, channels):
 
 def live_tv_context(active_channel, channels, force_autoplay=False):
     channels = list(channels)
+    if active_channel and active_channel.source_type == LiveTVChannel.SourceType.PLAYLIST:
+        playlist_state = calculate_current_playback(active_channel)
+        if playlist_state:
+            active_channel = playlist_state["video"]
     next_channel = next_live_tv_channel(active_channel, channels)
     latest_news = Article.published.select_related("category", "state", "city")[:6]
     return {
@@ -493,6 +504,96 @@ def serialize_channel_for_mobile(request, channel):
     }
 
 
+def serialize_synced_live_state(request, channel, server_time=None):
+    server_time = server_time or timezone.now()
+    state = calculate_current_playback(channel, at=server_time)
+    if not state:
+        return None
+    video = state["video"]
+    setting = live_tv_setting()
+    ticker_setting = news_ticker_setting()
+    hls_url = absolute_media_path_url(request, video.hls_master_url)
+    video_url = absolute_media_url(request, video.video_file)
+    stream_url = hls_url or video_url
+    next_video = state["next_entry"].video if state.get("next_entry") else None
+    ticker = ticker_items_from_text(ticker_setting.text)
+    return {
+        "is_live": True,
+        "is_live_synced": True,
+        "channel_id": channel.pk,
+        "channel_slug": channel.slug,
+        "channel_title": channel.title,
+        "channel": {"id": channel.pk, "slug": channel.slug, "title": channel.title},
+        "source_type": LiveTVChannel.SourceType.PLAYLIST,
+        "player_type": LiveTVChannel.SourceType.HLS if hls_url else LiveTVChannel.SourceType.DIRECT,
+        "video_id": video.pk,
+        "title": video.title,
+        "headline": video.headline or "",
+        "description": video.description or "",
+        "video_url": video_url,
+        "mp4_url": video_url,
+        "hls_url": hls_url,
+        "stream_url": stream_url,
+        "poster_url": absolute_media_url(request, video.poster_image),
+        "poster_image": absolute_media_url(request, video.poster_image),
+        "video_duration": state["entry"].duration_seconds,
+        "duration": state["entry"].duration_seconds,
+        "seek_position": round(state["seek_position"], 3),
+        "video_started_at": state["video_started_at"].isoformat(),
+        "server_time": server_time.isoformat(),
+        "playlist_total_duration": state["playlist_total_duration"],
+        "playlist_version": state["playlist_version"],
+        "loop_enabled": channel.loop_enabled,
+        "next_video_id": next_video.pk if next_video else None,
+        "next_video": {"id": next_video.pk, "title": next_video.title} if next_video else None,
+        "ticker_label": ticker_setting.label or setting.default_ticker_label,
+        "default_ticker_label": ticker_setting.label or setting.default_ticker_label,
+        "ticker_text": ticker_setting.text or setting.default_ticker_text,
+        "default_ticker_text": ticker_setting.text or setting.default_ticker_text,
+        "ticker": ticker,
+        "lower_third_label": video.lower_third_label or "",
+        "show_lower_third": setting.show_lower_third and bool((video.lower_third_label or "").strip() or (video.headline or "").strip()),
+        "show_live_badge": setting.show_live_badge,
+        "show_channel_logo": setting.show_channel_logo,
+        "show_ticker": setting.show_ticker,
+        "channel_logo": absolute_media_url(request, setting.channel_logo),
+        "live_label": setting.live_label,
+        "autoplay": setting.autoplay,
+        "ticker_speed_seconds": ticker_setting.speed_seconds,
+        "mobile_ticker_speed_seconds": ticker_setting.mobile_speed_seconds,
+        "ticker_style": ticker_setting.style,
+        "settings": serialize_live_tv_setting(request, setting),
+        "ads": mobile_live_tv_ads(),
+    }
+
+
+def serialize_live_fallback(request, channel, server_time=None):
+    server_time = server_time or timezone.now()
+    data = serialize_channel_for_mobile(request, channel)
+    data.update(
+        {
+            "is_live": bool(data.get("stream_url") or data.get("youtube_embed_url")),
+            "is_live_synced": False,
+            "channel_id": channel.pk,
+            "channel_slug": channel.slug,
+            "channel_title": channel.title,
+            "video_id": channel.pk if data.get("stream_url") else None,
+            "video_url": data.get("mp4_url") or data.get("stream_url") or "",
+            "poster_url": data.get("poster_image") or "",
+            "video_duration": channel.effective_duration_seconds,
+            "seek_position": 0,
+            "video_started_at": server_time.isoformat(),
+            "server_time": server_time.isoformat(),
+            "playlist_total_duration": 0,
+            "playlist_version": channel.playlist_version,
+            "loop_enabled": channel.loop_enabled,
+            "next_video_id": None,
+            "ticker_text": news_ticker_setting().text,
+        }
+    )
+    return data
+
+
 def serialize_home_content(request, content):
     thumbnail_url = absolute_media_url(request, content.thumbnail) or content.image_url
     stream_url = content.video_url
@@ -728,6 +829,13 @@ def serialize_channel_for_admin(request, channel):
             "video_file_url": channel_file_url(request, channel, "video_file"),
             "poster_image_url": channel_file_url(request, channel, "poster_image"),
             "global_channel_logo_url": absolute_media_url(request, live_tv_setting().channel_logo),
+            "auto_add_to_live": channel.auto_add_to_live,
+            "auto_playlist_enabled": channel.auto_playlist_enabled,
+            "loop_enabled": channel.loop_enabled,
+            "duration_seconds": channel.effective_duration_seconds,
+            "playlist_duration_seconds": channel.playlist_duration_seconds,
+            "target_playlist_duration_seconds": channel.target_playlist_duration_seconds,
+            "playlist_version": channel.playlist_version,
             "updated_at": channel.updated_at.isoformat(),
         }
     )
@@ -1287,23 +1395,61 @@ def live_tv_detail(request, slug):
     return render(request, "live_tv/live_tv_home.html", live_tv_context(active_channel, channels, force_autoplay))
 
 
+@never_cache
+@require_GET
+def current_live_api(request, slug=None):
+    server_time = timezone.now()
+    channels = LiveTVChannel.objects.filter(is_active=True).order_by("display_order", "pk")
+    if slug:
+        channel = get_object_or_404(channels, slug=slug)
+    else:
+        channel = get_main_live_channel(create=False) or channels.filter(is_live=True).first() or channels.first()
+
+    if channel and channel.source_type == LiveTVChannel.SourceType.PLAYLIST and channel.auto_playlist_enabled:
+        try:
+            synced = serialize_synced_live_state(request, channel, server_time=server_time)
+        except Exception:
+            logger.exception("Current live playlist calculation failed for channel %s", channel.pk)
+            synced = None
+        if synced:
+            return JsonResponse(synced)
+
+    fallback_candidates = []
+    if channel:
+        fallback_candidates.append(channel)
+    if not slug:
+        fallback_candidates.extend(list(channels.exclude(pk=getattr(channel, "pk", None))))
+    for fallback in fallback_candidates:
+        if fallback.source_type == LiveTVChannel.SourceType.PLAYLIST:
+            continue
+        if fallback.player_source_type:
+            return JsonResponse(serialize_live_fallback(request, fallback, server_time=server_time))
+
+    data = serialize_empty_live_tv(request)
+    data.update(
+        {
+            "is_live": False,
+            "is_live_synced": False,
+            "message": "अभी कोई लाइव प्रसारण उपलब्ध नहीं है",
+            "server_time": server_time.isoformat(),
+        }
+    )
+    return JsonResponse(data)
+
+
 @require_GET
 def current_live_tv_api(request):
-    channels = LiveTVChannel.objects.filter(is_active=True)
-    active_channel = channels.filter(is_live=True).first() or channels.first()
-    if not active_channel:
-        return JsonResponse(serialize_empty_live_tv(request))
-    data = serialize_channel_for_mobile(request, active_channel)
-    data["playlist"] = [serialize_channel_for_mobile(request, channel) for channel in channels]
-    return JsonResponse(data)
+    return current_live_api(request)
 
 
 @require_GET
 def app_home_api(request):
     channels = LiveTVChannel.objects.filter(is_active=True).select_related("category", "state", "city")
-    active_channel = channels.filter(is_live=True).first() or channels.first()
-    main_live_tv = serialize_channel_for_mobile(request, active_channel) if active_channel else serialize_empty_live_tv(request)
-    main_live_tv["playlist"] = [serialize_channel_for_mobile(request, channel) for channel in channels[:20]]
+    active_channel = get_main_live_channel(create=False) or channels.filter(is_live=True).first() or channels.first()
+    if active_channel and active_channel.source_type == LiveTVChannel.SourceType.PLAYLIST:
+        main_live_tv = serialize_synced_live_state(request, active_channel) or serialize_empty_live_tv(request)
+    else:
+        main_live_tv = serialize_channel_for_mobile(request, active_channel) if active_channel else serialize_empty_live_tv(request)
 
     ticker_setting = news_ticker_setting()
     content = HomeContent.objects.filter(is_active=True)
@@ -1529,6 +1675,8 @@ def mobile_admin_dashboard_api(request):
     rendered_videos = manageable_render_jobs_for(user)[:50]
     media_downloads = manageable_media_downloads_for(user)[:50]
     settings_obj = live_tv_setting()
+    main_channel = get_main_live_channel(create=False)
+    playlist_state = calculate_current_playback(main_channel) if main_channel else None
     return JsonResponse(
         {
             "user": {"id": user.pk, "username": user.get_username(), "name": user.get_full_name() or user.get_username()},
@@ -1539,6 +1687,19 @@ def mobile_admin_dashboard_api(request):
             "rendered_videos": [serialize_render_job(request, job) for job in rendered_videos],
             "media_downloads": [serialize_media_download(request, job) for job in media_downloads],
             "source_types": list(LiveTVChannel.SourceType.values),
+            "live_playlist": {
+                "channel_id": main_channel.pk if main_channel else None,
+                "active_items": main_channel.playlist_items.filter(is_active=True).count() if main_channel else 0,
+                "total_duration_seconds": main_channel.playlist_duration_seconds if main_channel else 0,
+                "target_duration_seconds": main_channel.target_playlist_duration_seconds if main_channel else 10800,
+                "playlist_version": main_channel.playlist_version if main_channel else 0,
+                "playback_started_at": main_channel.playback_started_at.isoformat() if main_channel and main_channel.playback_started_at else "",
+                "loop_enabled": main_channel.loop_enabled if main_channel else True,
+                "current_video_id": playlist_state["video"].pk if playlist_state else None,
+                "current_seek_position": round(playlist_state["seek_position"], 3) if playlist_state else 0,
+                "next_video_id": playlist_state["next_entry"].video_id if playlist_state and playlist_state.get("next_entry") else None,
+                "processing_failures": LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.FAILED, auto_add_to_live=True).count(),
+            },
         }
     )
 
@@ -1609,6 +1770,8 @@ def mobile_admin_channel_save_api(request):
     channel.title = title[:180] or "The Up Media Live TV"
     channel.description = request.POST.get("description", "").strip()
     channel.source_type = source_type
+    channel.auto_playlist_enabled = False
+    channel.auto_add_to_live = source_type == LiveTVChannel.SourceType.DIRECT
     channel.youtube_url = youtube_url if source_type == LiveTVChannel.SourceType.YOUTUBE else ""
     channel.stream_url = stream_url if source_type == LiveTVChannel.SourceType.HLS else ""
     state_id, city_id, location_errors = parse_required_location(request.POST)
@@ -1663,7 +1826,10 @@ def mobile_admin_channel_delete_api(request, pk):
         return error
 
     channel = get_object_or_404(LiveTVChannel, pk=pk)
-    channel.delete()
+    try:
+        channel.delete()
+    except ProtectedError:
+        return JsonResponse({"detail": "Video active ya historical live playlist me use ho rahi hai; pehle playlist se remove kare."}, status=409)
     return JsonResponse({"ok": True})
 
 
@@ -1931,12 +2097,21 @@ def dashboard(request):
         form = LiveTVChannelForm(request.POST, request.FILES, instance=instance)
         if form.is_valid():
             channel = form.save()
+            if channel.source_type == LiveTVChannel.SourceType.DIRECT and channel.video_file and channel.hls_status != LiveTVChannel.HLSStatus.COMPLETED:
+                enqueue_live_channel_hls_job(channel.pk)
             messages.success(request, "Live TV channel saved.")
             return redirect(f"{request.path}?edit={channel.pk}")
     else:
         form = LiveTVChannelForm(instance=instance)
 
-    preview_channel = instance or channels.first()
+    main_playlist_channel = get_main_live_channel(create=False)
+    playlist_state = calculate_current_playback(main_playlist_channel) if main_playlist_channel else None
+    playlist_items = (
+        main_playlist_channel.playlist_items.select_related("video").order_by("position", "pk")
+        if main_playlist_channel
+        else LiveTVPlaylistItem.objects.none()
+    )
+    preview_channel = instance or main_playlist_channel or channels.first()
     return render(
         request,
         "live_tv/dashboard.html",
@@ -1946,6 +2121,9 @@ def dashboard(request):
             "selected_channel": instance,
             "preview_channel": preview_channel,
             "news_ticker": news_ticker_setting(),
+            "main_playlist_channel": main_playlist_channel,
+            "playlist_state": playlist_state,
+            "playlist_items": playlist_items,
         },
     )
 
@@ -1954,8 +2132,11 @@ def dashboard(request):
 @require_POST
 def delete_channel(request, pk):
     channel = get_object_or_404(LiveTVChannel, pk=pk)
-    channel.delete()
-    messages.success(request, "Live TV channel deleted.")
+    try:
+        channel.delete()
+        messages.success(request, "Live TV channel deleted.")
+    except ProtectedError:
+        messages.error(request, "Channel playlist history me use ho raha hai; playlist references remove kiye bina delete nahi hoga.")
     return redirect("live_tv:dashboard")
 @csrf_exempt
 @require_POST
