@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-label="E-Paper Website and App Development">
+  <rect width="1200" height="675" fill="#fff7ed"/>
+  <rect x="54" y="54" width="1092" height="567" rx="30" fill="#ffffff" stroke="#991b1b" stroke-width="5"/>
+  <rect x="88" y="92" width="238" height="62" rx="31" fill="#991b1b"/>
+  <text x="207" y="132" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="900" fill="#ffffff">EPAPER</text>
+  <circle cx="976" cy="178" r="96" fill="#991b1b" opacity="0.13"/>
+  <rect x="900" y="122" width="152" height="112" rx="16" fill="#991b1b"/>
+  <rect x="924" y="148" width="104" height="12" fill="#ffffff"/>
+  <rect x="924" y="174" width="104" height="12" fill="#ffffff"/>
+  <rect x="924" y="200" width="70" height="12" fill="#ffffff"/>
+  <text y="228" font-family="Georgia, serif" font-size="44" font-weight="900" fill="#111827">
+    <tspan x="88" dy="0">E-Paper Website and App</tspan>
+    <tspan x="88" dy="54">Development</tspan>
+  </text>
+  <text x="88" y="410" font-family="Arial, sans-serif" font-size="34" font-weight="800" fill="#991b1b">Digital Newspaper Solution</text>
+  <text x="88" y="468" font-family="Arial, sans-serif" font-size="27" font-weight="700" fill="#374151">PDF Upload | Archive | SEO URLs | Mobile App</text>
+  <text x="88" y="516" font-family="Arial, sans-serif" font-size="25" fill="#4b5563">Newspaper, Magazine and Local Media Growth</text>
+  <rect x="88" y="544" width="360" height="54" rx="12" fill="#991b1b"/>
+  <text x="268" y="579" text-anchor="middle" font-family="Arial, sans-serif" font-size="23" font-weight="800" fill="#ffffff">WHATSAPP: 6397712918</text>
+</svg>
