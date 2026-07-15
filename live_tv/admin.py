@@ -6,7 +6,7 @@ from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from .models import AppHomeSetting, AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistCycle, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
+from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistCycle, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
 from .services import calculate_current_playback, update_playlist_item
 
 
@@ -35,21 +35,6 @@ class HomeUtilityAdmin(admin.ModelAdmin):
     list_display = ("title", "icon", "action", "display_order", "is_active")
     list_editable = ("display_order", "is_active")
     search_fields = ("title", "subtitle", "action")
-
-
-@admin.register(AppHomeSetting)
-class AppHomeSettingAdmin(admin.ModelAdmin):
-    list_display = ("title", "hero_badge", "hero_button_text", "updated_at")
-    fieldsets = (
-        ("Home Header", {"fields": ("title", "subtitle", "logo")}),
-        ("Live TV Hero", {"fields": ("hero_badge", "hero_button_text")}),
-    )
-
-    def has_add_permission(self, request):
-        return not AppHomeSetting.objects.exists()
-
-    def has_delete_permission(self, request, obj=None):
-        return False
 
 
 @admin.register(LiveTVCategory)
@@ -243,6 +228,7 @@ class LiveTVSettingAdmin(admin.ModelAdmin):
         ("Branding", {"fields": ("name", "live_label", "channel_logo", "autoplay")}),
         ("Frame Visibility", {"fields": ("show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker")}),
         ("Default Video Text", {"fields": ("default_lower_third_label", "default_headline")}),
+        ("Ticker", {"fields": ("default_ticker_label", "default_ticker_text", "ticker_speed_seconds", "mobile_ticker_speed_seconds")}),
     )
 
     def has_add_permission(self, request):
@@ -327,21 +313,6 @@ class FacebookLiveSettingAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
-
-@admin.register(NewsTickerSetting)
-class NewsTickerSettingAdmin(admin.ModelAdmin):
-    list_display = ("label", "speed_seconds", "mobile_speed_seconds", "style", "updated_at")
-    fieldsets = (
-        ("Ticker", {"fields": ("label", "text", "style")}),
-        ("Speed", {"fields": ("speed_seconds", "mobile_speed_seconds")}),
-    )
-
-    def has_add_permission(self, request):
-        return not NewsTickerSetting.objects.exists()
-
-    def has_delete_permission(self, request, obj=None):
-        return False
-
 
 @admin.register(ShortsVideo)
 class ShortsVideoAdmin(admin.ModelAdmin):

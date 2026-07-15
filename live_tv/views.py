@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from uuid import uuid4
@@ -33,7 +34,7 @@ from django.views.decorators.http import require_POST
 
 from .forms import LiveTVChannelForm
 from .hls import validate_uploaded_video
-from .models import AppHomeSetting, AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
+from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
 from .services import calculate_current_playback, enqueue_completed_broadcast_renders, get_main_live_channel, update_playlist_item
 from news.models import Article
 
@@ -406,11 +407,18 @@ def live_tv_setting():
 
 
 def news_ticker_setting():
-    return NewsTickerSetting.get_solo()
+    setting = live_tv_setting()
+    return SimpleNamespace(
+        label=setting.default_ticker_label,
+        text=setting.default_ticker_text,
+        speed_seconds=setting.ticker_speed_seconds,
+        mobile_speed_seconds=setting.mobile_ticker_speed_seconds,
+        style="red_white_slant",
+        updated_at=setting.updated_at,
+    )
 
 
 def serialize_live_tv_setting(request, setting):
-    ticker = news_ticker_setting()
     return {
         "id": setting.pk,
         "name": setting.name,
@@ -423,11 +431,11 @@ def serialize_live_tv_setting(request, setting):
         "autoplay": setting.autoplay,
         "default_lower_third_label": setting.default_lower_third_label,
         "default_headline": setting.default_headline,
-        "default_ticker_label": ticker.label,
-        "default_ticker_text": ticker.text,
-        "ticker_speed_seconds": ticker.speed_seconds,
-        "mobile_ticker_speed_seconds": ticker.mobile_speed_seconds,
-        "ticker_style": ticker.style,
+        "default_ticker_label": setting.default_ticker_label,
+        "default_ticker_text": setting.default_ticker_text,
+        "ticker_speed_seconds": setting.ticker_speed_seconds,
+        "mobile_ticker_speed_seconds": setting.mobile_ticker_speed_seconds,
+        "ticker_style": "red_white_slant",
         "updated_at": setting.updated_at.isoformat(),
     }
 
@@ -647,18 +655,6 @@ def serialize_app_menu(menu):
         "target_type": menu.target_type,
         "target_value": menu.target_value,
         "display_order": menu.display_order,
-    }
-
-
-def serialize_app_home_setting(request, setting):
-    return {
-        "id": setting.pk,
-        "title": setting.title,
-        "subtitle": setting.subtitle,
-        "hero_badge": setting.hero_badge,
-        "hero_button_text": setting.hero_button_text,
-        "logo": absolute_media_url(request, setting.logo),
-        "updated_at": setting.updated_at.isoformat(),
     }
 
 
@@ -1195,6 +1191,97 @@ RENDER_TEMPLATE_ACCENTS = {
 }
 
 
+def bool_snapshot(snapshot, key, default=False):
+    value = snapshot.get(key, default)
+    if isinstance(value, str):
+        return value.lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def media_storage_path(name):
+    if not name:
+        return None
+    path = Path(settings.MEDIA_ROOT) / str(name)
+    try:
+        resolved = path.resolve()
+        if Path(settings.MEDIA_ROOT).resolve() in resolved.parents and resolved.exists():
+            return resolved
+    except OSError:
+        return None
+    return None
+
+
+def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, input_height=1080):
+    devanagari_font = ffmpeg_font_file()
+    latin_font = ffmpeg_latin_font_file()
+    filters = [f"[0:v]scale={input_width}:{input_height}:force_original_aspect_ratio=decrease,pad={input_width}:{input_height}:(ow-iw)/2:(oh-ih)/2:black,setsar=1[v0]"]
+    current = "v0"
+    overlay_index = 1
+
+    def add_text_file(text, prefix):
+        path = ffmpeg_text_file(text, prefix)
+        text_files.append(path)
+        return path
+
+    def add_filter(expr):
+        nonlocal current, overlay_index
+        next_label = f"v{overlay_index}"
+        filters.append(f"[{current}]{expr}[{next_label}]")
+        current = next_label
+        overlay_index += 1
+
+    live_label = snapshot.get("live_label") or "LIVE"
+    lower_label = snapshot.get("lower_third_label") or snapshot.get("headline_label") or ""
+    headline = snapshot.get("headline") or ""
+    ticker_label = snapshot.get("ticker_label") or ""
+    ticker_text = snapshot.get("ticker_text") or ""
+
+    if bool_snapshot(snapshot, "show_live_badge"):
+        live_file = add_text_file(live_label, "broadcast-live")
+        live_font_arg = ffmpeg_font_arg_for_text(live_label, devanagari_font, latin_font)
+        add_filter(
+            "drawbox=x=38:y=38:w=150:h=60:color=#d71920@0.96:t=fill,"
+            f"drawtext=textfile='{ffmpeg_path(live_file)}'{live_font_arg}:x=72:y=53:fontsize=34:fontcolor=white"
+        )
+
+    show_logo = bool_snapshot(snapshot, "show_channel_logo")
+    logo_path = media_storage_path(snapshot.get("channel_logo"))
+    if show_logo and logo_path:
+        next_label = f"v{overlay_index}"
+        filters.append(f"[1:v]scale=230:-1[logo];[{current}][logo]overlay=x={input_width}-270:y=38[{next_label}]")
+        current = next_label
+        overlay_index += 1
+
+    if bool_snapshot(snapshot, "show_lower_third") and (lower_label or headline):
+        label_file = add_text_file(lower_label, "broadcast-label")
+        headline_file = add_text_file(headline, "broadcast-headline")
+        label_font_arg = ffmpeg_font_arg_for_text(lower_label, devanagari_font, latin_font)
+        headline_font_arg = ffmpeg_font_arg_for_text(headline, devanagari_font, latin_font)
+        add_filter(
+            f"drawbox=x=0:y={input_height - 158}:w={input_width}:h=78:color=white@0.94:t=fill,"
+            f"drawbox=x=0:y={input_height - 158}:w=300:h=78:color=#d71920@1:t=fill,"
+            f"drawtext=textfile='{ffmpeg_path(label_file)}'{label_font_arg}:x=34:y={input_height - 132}:fontsize=38:fontcolor=white,"
+            f"drawtext=textfile='{ffmpeg_path(headline_file)}'{headline_font_arg}:x=330:y={input_height - 136}:fontsize=42:fontcolor=#111827"
+        )
+
+    if bool_snapshot(snapshot, "show_ticker") and (ticker_label or ticker_text):
+        ticker_label_file = add_text_file(ticker_label, "broadcast-ticker-label")
+        ticker_file = add_text_file("    |    ".join([ticker_text] * 3), "broadcast-ticker")
+        ticker_label_font_arg = ffmpeg_font_arg_for_text(ticker_label, devanagari_font, latin_font)
+        ticker_font_arg = f":fontfile='{devanagari_font}'" if devanagari_font else ffmpeg_font_arg_for_text(ticker_text, devanagari_font, latin_font)
+        add_filter(
+            f"drawbox=x=0:y={input_height - 80}:w={input_width}:h=80:color=white@0.96:t=fill,"
+            f"drawbox=x=0:y={input_height - 80}:w=300:h=80:color=#c80d13@1:t=fill,"
+            f"drawbox=x=300:y={input_height - 80}:w=30:h=80:color=#111111@1:t=fill,"
+            f"drawbox=x=330:y={input_height - 80}:w=26:h=80:color=#ef1717@1:t=fill,"
+            f"drawtext=textfile='{ffmpeg_path(ticker_label_file)}'{ticker_label_font_arg}:x=44:y={input_height - 52}:fontsize=38:fontcolor=white,"
+            f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x=410+w-mod(t*220\\,w+tw):y={input_height - 50}:fontsize=38:fontcolor=#111111"
+        )
+
+    filters.append(f"[{current}]format=yuv420p[vout]")
+    return ";".join(filters), logo_path
+
+
 def render_social_video_file(job):
     if not shutil.which(ffmpeg_binary()):
         raise RuntimeError("FFmpeg is not installed on server.")
@@ -1228,7 +1315,10 @@ def render_social_video_file(job):
     title_font_arg = ffmpeg_font_arg_for_text(title_text, devanagari_font, latin_font)
 
     try:
-        if job.render_format == "9:16":
+        logo_path = None
+        if job.frame_template == "broadcast_live_tv" or job.frame_category == "live_broadcast":
+            filter_complex, logo_path = build_broadcast_live_tv_filter(job, snapshot, text_files)
+        elif job.render_format == "9:16":
             filter_complex = (
                 "[0:v]scale=1080:607:force_original_aspect_ratio=increase,crop=1080:607,setsar=1[main];"
                 "color=c=#08111f:s=1080x1920:d=999[bg];"
@@ -1319,6 +1409,10 @@ def render_social_video_file(job):
             "-y",
             "-i",
             input_file.path,
+        ]
+        if logo_path:
+            command.extend(["-i", str(logo_path)])
+        command.extend([
             "-filter_complex",
             filter_complex,
             "-map",
@@ -1332,7 +1426,7 @@ def render_social_video_file(job):
             "-movflags",
             "+faststart",
             str(output_path),
-        ]
+        ])
         SocialRenderedVideo.objects.filter(pk=job.pk).update(
             status=SocialRenderedVideo.Status.PROCESSING,
             progress_percent=1,
@@ -1624,6 +1718,7 @@ def app_home_api(request):
         main_live_tv = serialize_channel_for_mobile(request, active_channel) if active_channel else serialize_empty_live_tv(request)
 
     ticker_setting = news_ticker_setting()
+    live_setting = live_tv_setting()
     content = HomeContent.objects.filter(is_active=True)
     featured = content.filter(section=HomeContent.Section.FEATURED)[:12]
     top_videos = content.filter(section=HomeContent.Section.TOP_VIDEO)[:12]
@@ -1647,7 +1742,7 @@ def app_home_api(request):
         "top_videos": [serialize_home_content(request, item) for item in top_videos],
         "utilities": [serialize_home_utility(utility) for utility in HomeUtility.objects.filter(is_active=True)[:12]],
         "districts": [serialize_home_district(city) for city in districts],
-        "settings": serialize_app_home_setting(request, AppHomeSetting.get_solo()),
+        "settings": serialize_live_tv_setting(request, live_setting),
     }
     return JsonResponse(data)
 
@@ -1889,27 +1984,32 @@ def mobile_admin_settings_save_api(request):
     setting.live_label = request.POST.get("live_label", setting.live_label).strip()[:40] or setting.live_label
     setting.default_lower_third_label = request.POST.get("default_lower_third_label", setting.default_lower_third_label).strip()[:60] or setting.default_lower_third_label
     setting.default_headline = request.POST.get("default_headline", setting.default_headline).strip()[:180] or setting.default_headline
-    ticker = news_ticker_setting()
-    ticker.label = request.POST.get("default_ticker_label", ticker.label).strip()[:60] or ticker.label
-    ticker.text = request.POST.get("default_ticker_text", ticker.text).strip() or ticker.text
+    setting.default_ticker_label = (
+        request.POST.get("default_ticker_label")
+        or request.POST.get("ticker_label")
+        or setting.default_ticker_label
+    ).strip()[:60] or setting.default_ticker_label
+    setting.default_ticker_text = (
+        request.POST.get("default_ticker_text")
+        or request.POST.get("ticker_text")
+        or setting.default_ticker_text
+    ).strip() or setting.default_ticker_text
     if "ticker_speed_seconds" in request.POST:
         try:
-            ticker.speed_seconds = max(6, min(120, int(request.POST.get("ticker_speed_seconds") or ticker.speed_seconds)))
+            setting.ticker_speed_seconds = max(6, min(120, int(request.POST.get("ticker_speed_seconds") or setting.ticker_speed_seconds)))
         except (TypeError, ValueError):
             pass
     if "mobile_ticker_speed_seconds" in request.POST:
         try:
-            ticker.mobile_speed_seconds = max(6, min(120, int(request.POST.get("mobile_ticker_speed_seconds") or ticker.mobile_speed_seconds)))
+            setting.mobile_ticker_speed_seconds = max(6, min(120, int(request.POST.get("mobile_ticker_speed_seconds") or setting.mobile_ticker_speed_seconds)))
         except (TypeError, ValueError):
             pass
-    ticker.style = request.POST.get("ticker_style", ticker.style).strip()[:60] or ticker.style
     for field in ["show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker", "autoplay"]:
         if field in request.POST:
             setattr(setting, field, request.POST.get(field) in {"1", "true", "on", "yes"})
     if request.FILES.get("channel_logo"):
         delete_file_field(setting.channel_logo)
         setting.channel_logo = request.FILES["channel_logo"]
-    ticker.save()
     setting.save()
     return JsonResponse({"settings": serialize_live_tv_setting(request, setting)})
 

@@ -5,6 +5,7 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.utils.html import escape
 from django.utils import timezone
+from types import SimpleNamespace
 
 from news.feeds import LatestNewsFeed
 from news.models import Article, Category
@@ -14,7 +15,7 @@ from blog.sitemaps import BlogPostSitemap
 from services.models import Service
 from services.sitemaps import ServiceSitemap
 from subscriptions.models import SubscriptionPlan
-from live_tv.models import LiveTVChannel, LiveTVSetting, NewsTickerSetting
+from live_tv.models import LiveTVChannel, LiveTVSetting
 from .sitemaps import StaticPageSitemap
 
 
@@ -31,7 +32,14 @@ def home(request):
     home_live_tv = home_live_tv_channels[0] if home_live_tv_channels else None
     home_live_tv_next = None
     home_live_settings = LiveTVSetting.get_solo()
-    home_news_ticker = NewsTickerSetting.get_solo()
+    home_news_ticker = SimpleNamespace(
+        label=home_live_settings.default_ticker_label,
+        text=home_live_settings.default_ticker_text,
+        speed_seconds=home_live_settings.ticker_speed_seconds,
+        mobile_speed_seconds=home_live_settings.mobile_ticker_speed_seconds,
+        style="red_white_slant",
+        updated_at=home_live_settings.updated_at,
+    )
     if home_live_tv_channels:
         home_live_tv_next = home_live_tv_channels[1] if len(home_live_tv_channels) > 1 else home_live_tv
     return render(

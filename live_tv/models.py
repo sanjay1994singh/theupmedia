@@ -494,31 +494,6 @@ class HomeUtility(models.Model):
         return self.title
 
 
-class AppHomeSetting(models.Model):
-    title = models.CharField(max_length=120, default="THE UP MEDIA")
-    subtitle = models.CharField(max_length=180, default="Live TV and videos")
-    hero_badge = models.CharField(max_length=40, default="LIVE TV")
-    hero_button_text = models.CharField(max_length=40, default="Live dekhein")
-    logo = models.ImageField(upload_to="live-tv/home-settings/", blank=True, null=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "App Home Setting"
-        verbose_name_plural = "App Home Settings"
-
-    def __str__(self):
-        return self.title
-
-    @classmethod
-    def get_solo(cls):
-        setting, _created = cls.objects.get_or_create(pk=1)
-        return setting
-
-    def save(self, *args, **kwargs):
-        self.pk = 1
-        super().save(*args, **kwargs)
-
-
 class LiveTVSetting(models.Model):
     name = models.CharField(max_length=120, default="The Up Media Live TV")
     live_label = models.CharField(max_length=40, default="LIVE")

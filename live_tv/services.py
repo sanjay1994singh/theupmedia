@@ -12,7 +12,6 @@ from .models import (
     LiveTVPlaylistCycleItem,
     LiveTVPlaylistItem,
     LiveTVSetting,
-    NewsTickerSetting,
     SocialRenderedVideo,
 )
 
@@ -108,7 +107,6 @@ def _create_cycle(channel, items, starts_at, version):
 
 def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
     setting = LiveTVSetting.get_solo()
-    ticker = NewsTickerSetting.get_solo()
     headline = video.headline or ""
     lower_label = video.lower_third_label or ""
     title = headline or video.title or f"{channel.title} {timezone.localtime().strftime('%Y-%m-%d %H:%M')}"
@@ -117,17 +115,17 @@ def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
         "headline": headline,
         "headline_label": lower_label,
         "lower_third_label": lower_label,
-        "ticker_label": ticker.label or setting.default_ticker_label,
-        "ticker_text": ticker.text or setting.default_ticker_text,
-        "ticker_speed_seconds": ticker.speed_seconds,
-        "mobile_ticker_speed_seconds": ticker.mobile_speed_seconds,
-        "ticker_style": ticker.style,
+        "ticker_label": setting.default_ticker_label,
+        "ticker_text": setting.default_ticker_text,
+        "ticker_speed_seconds": setting.ticker_speed_seconds,
+        "mobile_ticker_speed_seconds": setting.mobile_ticker_speed_seconds,
+        "ticker_style": "red_white_slant",
         "channel_name": setting.name,
         "channel_logo": setting.channel_logo.name if setting.channel_logo else "",
         "live_label": setting.live_label,
         "show_channel_logo": setting.show_channel_logo,
         "show_live_badge": setting.show_live_badge,
-        "show_lower_third": setting.show_lower_third,
+        "show_lower_third": setting.show_lower_third and bool(lower_label or headline),
         "show_ticker": setting.show_ticker,
         "render_format": "16:9",
         "frame_template": "broadcast_live_tv",
