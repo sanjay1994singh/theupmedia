@@ -32,6 +32,11 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_POST
 
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:  # pragma: no cover - server requirements include Pillow
+    Image = ImageDraw = ImageFont = None
+
 from .forms import LiveTVChannelForm
 from .hls import validate_uploaded_video
 from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
@@ -951,7 +956,98 @@ def ffmpeg_path(path):
     return str(path).replace("\\", "/").replace(":", "\\:")
 
 
+def devanagari_font_candidates():
+    return [
+        getattr(settings, "FFMPEG_FONT_FILE", ""),
+        "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansDevanagari-Bold.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansDevanagari-Regular.ttf",
+        "/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf",
+        "/usr/share/fonts/truetype/deva/lohit_hi.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "C:/Windows/Fonts/arialbd.ttf",
+        "C:/Windows/Fonts/arial.ttf",
+    ]
+
+
+def latin_font_candidates():
+    return [
+        getattr(settings, "FFMPEG_LATIN_FONT_FILE", ""),
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "C:/Windows/Fonts/arialbd.ttf",
+        "C:/Windows/Fonts/arial.ttf",
+    ]
+
+
+def resolve_existing_font(candidates):
+    for candidate in candidates:
+        if candidate and Path(candidate).exists():
+            return str(Path(candidate))
+    return ""
+
+
 def ffmpeg_font_file():
+    path = resolve_existing_font(devanagari_font_candidates())
+    return ffmpeg_path(path) if path else ""
+
+
+def ffmpeg_latin_font_file():
+    path = resolve_existing_font(latin_font_candidates()) or resolve_existing_font(devanagari_font_candidates())
+    return ffmpeg_path(path) if path else ""
+
+
+def pil_font(size):
+    if not ImageFont:
+        return None
+    path = resolve_existing_font(devanagari_font_candidates())
+    try:
+        layout_engine = getattr(getattr(ImageFont, "Layout", None), "RAQM", None)
+        if layout_engine is not None:
+            return ImageFont.truetype(path, size, layout_engine=layout_engine)
+    except Exception:
+        pass
+    try:
+        return ImageFont.truetype(path, size)
+    except Exception:
+        return ImageFont.load_default()
+
+
+def text_bbox_size(draw, text, font):
+    bbox = draw.textbbox((0, 0), text or " ", font=font)
+    return max(1, bbox[2] - bbox[0]), max(1, bbox[3] - bbox[1])
+
+
+def make_text_png(text, prefix, font_size, fill, height, padding_x=24, min_width=1, max_width=12000):
+    if not Image or not ImageDraw:
+        return None, 0
+    font = pil_font(font_size)
+    probe = Image.new("RGBA", (10, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(probe)
+    text_width, text_height = text_bbox_size(draw, text, font)
+    width = max(min_width, min(max_width, text_width + padding_x * 2))
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    y = max(0, int((height - text_height) / 2) - 2)
+    draw.text((padding_x, y), text or " ", font=font, fill=fill)
+    text_dir = Path(tempfile.gettempdir()) / "theupmedia-render-text"
+    text_dir.mkdir(parents=True, exist_ok=True)
+    image_path = text_dir / f"{prefix}-{uuid4().hex}.png"
+    image.save(image_path)
+    return image_path, width
+
+
+def make_broadcast_ticker_assets(ticker_label, ticker_text, height=72):
+    separator = "     |     "
+    unit_text = f"{ticker_text or ''}{separator}"
+    text_path, unit_width = make_text_png(unit_text * 4, "broadcast-ticker-strip", 34, (17, 17, 17, 255), height, padding_x=0)
+    label_path, _ = make_text_png(ticker_label or "", "broadcast-ticker-label", 34, (255, 255, 255, 255), height, padding_x=18, min_width=270, max_width=270)
+    return text_path, label_path, max(1, unit_width // 4)
+
+
+def legacy_ffmpeg_font_file():
     candidates = [
         getattr(settings, "FFMPEG_FONT_FILE", ""),
         "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
@@ -971,7 +1067,7 @@ def ffmpeg_font_file():
     return ""
 
 
-def ffmpeg_latin_font_file():
+def legacy_ffmpeg_latin_font_file():
     candidates = [
         getattr(settings, "FFMPEG_LATIN_FONT_FILE", ""),
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -1215,6 +1311,7 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
     devanagari_font = ffmpeg_font_file()
     latin_font = ffmpeg_latin_font_file()
     filters = [f"[0:v]scale={input_width}:{input_height}:force_original_aspect_ratio=decrease,pad={input_width}:{input_height}:(ow-iw)/2:(oh-ih)/2:black,setsar=1[v0]"]
+    overlay_paths = []
     current = "v0"
     overlay_index = 1
 
@@ -1229,6 +1326,10 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
         filters.append(f"[{current}]{expr}[{next_label}]")
         current = next_label
         overlay_index += 1
+
+    def add_overlay_input(path):
+        overlay_paths.append(Path(path))
+        return len(overlay_paths)
 
     live_label = snapshot.get("live_label") or "LIVE"
     lower_label = snapshot.get("lower_third_label") or snapshot.get("headline_label") or ""
@@ -1247,8 +1348,9 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
     show_logo = bool_snapshot(snapshot, "show_channel_logo")
     logo_path = media_storage_path(snapshot.get("channel_logo"))
     if show_logo and logo_path:
+        input_index = add_overlay_input(logo_path)
         next_label = f"v{overlay_index}"
-        filters.append(f"[1:v]scale=230:-1[logo];[{current}][logo]overlay=x={input_width}-270:y=38[{next_label}]")
+        filters.append(f"[{input_index}:v]scale=230:-1[logo];[{current}][logo]overlay=x={input_width}-270:y=38[{next_label}]")
         current = next_label
         overlay_index += 1
 
@@ -1265,23 +1367,40 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
         )
 
     if bool_snapshot(snapshot, "show_ticker") and (ticker_label or ticker_text):
-        ticker_label_file = add_text_file(ticker_label, "broadcast-ticker-label")
-        ticker_file = add_text_file("    |    ".join([ticker_text] * 4), "broadcast-ticker")
-        ticker_label_font_arg = ffmpeg_font_arg_for_text(ticker_label, devanagari_font, latin_font)
-        ticker_font_arg = ffmpeg_font_arg_for_text(ticker_text, devanagari_font, latin_font)
         ticker_top = input_height - 72
         ticker_start = 356
-        add_filter(
-            f"drawbox=x=0:y={ticker_top}:w={input_width}:h=72:color=white@0.96:t=fill,"
-            f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x={ticker_start}-mod(t*205\\,tw/4):y={ticker_top + 22}:fontsize=34:fontcolor=#111111,"
-            f"drawbox=x=0:y={ticker_top}:w=300:h=72:color=#c80d13@1:t=fill,"
-            f"drawbox=x=300:y={ticker_top}:w=30:h=72:color=#111111@1:t=fill,"
-            f"drawbox=x=330:y={ticker_top}:w=26:h=72:color=#ef1717@1:t=fill,"
-            f"drawtext=textfile='{ffmpeg_path(ticker_label_file)}'{ticker_label_font_arg}:x=42:y={ticker_top + 23}:fontsize=34:fontcolor=white"
-        )
+        ticker_text_image, ticker_label_image, ticker_loop_width = make_broadcast_ticker_assets(ticker_label, ticker_text, height=72)
+        if ticker_text_image and ticker_label_image:
+            text_files.extend([ticker_text_image, ticker_label_image])
+            ticker_input = add_overlay_input(ticker_text_image)
+            label_input = add_overlay_input(ticker_label_image)
+            next_label = f"v{overlay_index}"
+            filters.append(
+                f"[{current}]drawbox=x=0:y={ticker_top}:w={input_width}:h=72:color=white@0.96:t=fill[vtickerbg];"
+                f"[vtickerbg][{ticker_input}:v]overlay=x={ticker_start}-mod(t*205\\,{ticker_loop_width}):y={ticker_top}:shortest=0:repeatlast=1[vtickertext];"
+                f"[vtickertext]drawbox=x=0:y={ticker_top}:w=300:h=72:color=#c80d13@1:t=fill,"
+                f"drawbox=x=300:y={ticker_top}:w=30:h=72:color=#111111@1:t=fill,"
+                f"drawbox=x=330:y={ticker_top}:w=26:h=72:color=#ef1717@1:t=fill[vlabelbg];"
+                f"[vlabelbg][{label_input}:v]overlay=x=20:y={ticker_top}:shortest=0:repeatlast=1[{next_label}]"
+            )
+            current = next_label
+            overlay_index += 1
+        else:
+            ticker_label_file = add_text_file(ticker_label, "broadcast-ticker-label")
+            ticker_file = add_text_file("    |    ".join([ticker_text] * 4), "broadcast-ticker")
+            ticker_label_font_arg = ffmpeg_font_arg_for_text(ticker_label, devanagari_font, latin_font)
+            ticker_font_arg = ffmpeg_font_arg_for_text(ticker_text, devanagari_font, latin_font)
+            add_filter(
+                f"drawbox=x=0:y={ticker_top}:w={input_width}:h=72:color=white@0.96:t=fill,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x={ticker_start}-mod(t*205\\,tw/4):y={ticker_top + 22}:fontsize=34:fontcolor=#111111,"
+                f"drawbox=x=0:y={ticker_top}:w=300:h=72:color=#c80d13@1:t=fill,"
+                f"drawbox=x=300:y={ticker_top}:w=30:h=72:color=#111111@1:t=fill,"
+                f"drawbox=x=330:y={ticker_top}:w=26:h=72:color=#ef1717@1:t=fill,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_label_file)}'{ticker_label_font_arg}:x=42:y={ticker_top + 23}:fontsize=34:fontcolor=white"
+            )
 
     filters.append(f"[{current}]format=yuv420p[vout]")
-    return ";".join(filters), logo_path
+    return ";".join(filters), overlay_paths
 
 
 def render_social_video_file(job):
@@ -1317,9 +1436,9 @@ def render_social_video_file(job):
     title_font_arg = ffmpeg_font_arg_for_text(title_text, devanagari_font, latin_font)
 
     try:
-        logo_path = None
+        overlay_paths = []
         if job.frame_template == "broadcast_live_tv" or job.frame_category == "live_broadcast":
-            filter_complex, logo_path = build_broadcast_live_tv_filter(job, snapshot, text_files)
+            filter_complex, overlay_paths = build_broadcast_live_tv_filter(job, snapshot, text_files)
         elif job.render_format == "9:16":
             filter_complex = (
                 "[0:v]scale=1080:607:force_original_aspect_ratio=increase,crop=1080:607,setsar=1[main];"
@@ -1412,8 +1531,8 @@ def render_social_video_file(job):
             "-i",
             input_file.path,
         ]
-        if logo_path:
-            command.extend(["-i", str(logo_path)])
+        for overlay_path in overlay_paths:
+            command.extend(["-loop", "1", "-i", str(overlay_path)])
         command.extend([
             "-filter_complex",
             filter_complex,
