@@ -970,6 +970,9 @@ def devanagari_font_candidates():
         "/usr/share/fonts/opentype/noto/NotoSansDevanagari-Regular.ttf",
         "/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf",
         "/usr/share/fonts/truetype/deva/lohit_hi.ttf",
+        "C:/Windows/Fonts/Nirmala.ttc",
+        "C:/Windows/Fonts/mangal.ttf",
+        "C:/Windows/Fonts/mangalb.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "C:/Windows/Fonts/arialbd.ttf",
@@ -980,6 +983,7 @@ def devanagari_font_candidates():
 def latin_font_candidates():
     return [
         getattr(settings, "FFMPEG_LATIN_FONT_FILE", ""),
+        "C:/Windows/Fonts/Nirmala.ttc",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "C:/Windows/Fonts/arialbd.ttf",
@@ -1035,7 +1039,7 @@ def make_text_png(text, prefix, font_size, fill, height, padding_x=24, min_width
     width = max(min_width, min(max_width, text_width + padding_x * 2))
     image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    y = max(0, int((height - text_height) / 2) - 2)
+    y = max(0, int((height - text_height) / 2) - 1)
     draw.text((padding_x, y), text or " ", font=font, fill=fill)
     text_dir = Path(tempfile.gettempdir()) / "theupmedia-render-text"
     text_dir.mkdir(parents=True, exist_ok=True)
@@ -1044,11 +1048,11 @@ def make_text_png(text, prefix, font_size, fill, height, padding_x=24, min_width
     return image_path, width
 
 
-def make_broadcast_ticker_assets(ticker_label, ticker_text, height=72):
-    separator = "     |     "
+def make_broadcast_ticker_assets(ticker_label, ticker_text, height=64):
+    separator = "    |    "
     unit_text = f"{ticker_text or ''}{separator}"
-    text_path, unit_width = make_text_png(unit_text * 4, "broadcast-ticker-strip", 34, (17, 17, 17, 255), height, padding_x=0)
-    label_path, _ = make_text_png(ticker_label or "", "broadcast-ticker-label", 34, (255, 255, 255, 255), height, padding_x=18, min_width=270, max_width=270)
+    text_path, unit_width = make_text_png(unit_text * 4, "broadcast-ticker-strip", 30, (17, 17, 17, 255), height, padding_x=0)
+    label_path, _ = make_text_png(ticker_label or "", "broadcast-ticker-label", 30, (255, 255, 255, 255), height, padding_x=14, min_width=240, max_width=240)
     return text_path, label_path, max(1, unit_width // 4)
 
 
@@ -1061,6 +1065,9 @@ def legacy_ffmpeg_font_file():
         "/usr/share/fonts/opentype/noto/NotoSansDevanagari-Regular.ttf",
         "/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf",
         "/usr/share/fonts/truetype/deva/lohit_hi.ttf",
+        "C:/Windows/Fonts/Nirmala.ttc",
+        "C:/Windows/Fonts/mangal.ttf",
+        "C:/Windows/Fonts/mangalb.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "C:/Windows/Fonts/arialbd.ttf",
@@ -1075,6 +1082,7 @@ def legacy_ffmpeg_font_file():
 def legacy_ffmpeg_latin_font_file():
     candidates = [
         getattr(settings, "FFMPEG_LATIN_FONT_FILE", ""),
+        "C:/Windows/Fonts/Nirmala.ttc",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "C:/Windows/Fonts/arialbd.ttf",
@@ -1372,21 +1380,27 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
         )
 
     if bool_snapshot(snapshot, "show_ticker") and (ticker_label or ticker_text):
-        ticker_top = input_height - 72
-        ticker_start = 356
-        ticker_text_image, ticker_label_image, ticker_loop_width = make_broadcast_ticker_assets(ticker_label, ticker_text, height=72)
+        ticker_height = 64
+        label_width = 300
+        black_bar_width = 28
+        red_bar_width = 24
+        mask_width = label_width + black_bar_width + red_bar_width
+        ticker_top = input_height - ticker_height
+        ticker_start = mask_width + 42
+        ticker_speed = 180
+        ticker_text_image, ticker_label_image, ticker_loop_width = make_broadcast_ticker_assets(ticker_label, ticker_text, height=ticker_height)
         if ticker_text_image and ticker_label_image:
             text_files.extend([ticker_text_image, ticker_label_image])
             ticker_input = add_overlay_input(ticker_text_image)
             label_input = add_overlay_input(ticker_label_image)
             next_label = f"v{overlay_index}"
             filters.append(
-                f"[{current}]drawbox=x=0:y={ticker_top}:w={input_width}:h=72:color=white@0.96:t=fill[vtickerbg];"
-                f"[vtickerbg][{ticker_input}:v]overlay=x={ticker_start}-mod(t*205\\,{ticker_loop_width}):y={ticker_top}:shortest=0:repeatlast=1[vtickertext];"
-                f"[vtickertext]drawbox=x=0:y={ticker_top}:w=300:h=72:color=#c80d13@1:t=fill,"
-                f"drawbox=x=300:y={ticker_top}:w=30:h=72:color=#111111@1:t=fill,"
-                f"drawbox=x=330:y={ticker_top}:w=26:h=72:color=#ef1717@1:t=fill[vlabelbg];"
-                f"[vlabelbg][{label_input}:v]overlay=x=20:y={ticker_top}:shortest=0:repeatlast=1[{next_label}]"
+                f"[{current}]drawbox=x=0:y={ticker_top}:w={input_width}:h={ticker_height}:color=white@0.97:t=fill[vtickerbg];"
+                f"[vtickerbg][{ticker_input}:v]overlay=x={ticker_start}-mod(t*{ticker_speed}\\,{ticker_loop_width}):y={ticker_top}:shortest=0:repeatlast=1[vtickertext];"
+                f"[vtickertext]drawbox=x=0:y={ticker_top}:w={label_width}:h={ticker_height}:color=#c80d13@1:t=fill,"
+                f"drawbox=x={label_width}:y={ticker_top}:w={black_bar_width}:h={ticker_height}:color=#111111@1:t=fill,"
+                f"drawbox=x={label_width + black_bar_width}:y={ticker_top}:w={red_bar_width}:h={ticker_height}:color=#ef1717@1:t=fill[vlabelbg];"
+                f"[vlabelbg][{label_input}:v]overlay=x=24:y={ticker_top}:shortest=0:repeatlast=1[{next_label}]"
             )
             current = next_label
             overlay_index += 1
@@ -1396,12 +1410,12 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
             ticker_label_font_arg = ffmpeg_font_arg_for_text(ticker_label, devanagari_font, latin_font)
             ticker_font_arg = ffmpeg_font_arg_for_text(ticker_text, devanagari_font, latin_font)
             add_filter(
-                f"drawbox=x=0:y={ticker_top}:w={input_width}:h=72:color=white@0.96:t=fill,"
-                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x={ticker_start}-mod(t*205\\,tw/4):y={ticker_top + 22}:fontsize=34:fontcolor=#111111,"
-                f"drawbox=x=0:y={ticker_top}:w=300:h=72:color=#c80d13@1:t=fill,"
-                f"drawbox=x=300:y={ticker_top}:w=30:h=72:color=#111111@1:t=fill,"
-                f"drawbox=x=330:y={ticker_top}:w=26:h=72:color=#ef1717@1:t=fill,"
-                f"drawtext=textfile='{ffmpeg_path(ticker_label_file)}'{ticker_label_font_arg}:x=42:y={ticker_top + 23}:fontsize=34:fontcolor=white"
+                f"drawbox=x=0:y={ticker_top}:w={input_width}:h={ticker_height}:color=white@0.97:t=fill,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x={ticker_start}-mod(t*{ticker_speed}\\,tw/4):y={ticker_top + 18}:fontsize=30:fontcolor=#111111,"
+                f"drawbox=x=0:y={ticker_top}:w={label_width}:h={ticker_height}:color=#c80d13@1:t=fill,"
+                f"drawbox=x={label_width}:y={ticker_top}:w={black_bar_width}:h={ticker_height}:color=#111111@1:t=fill,"
+                f"drawbox=x={label_width + black_bar_width}:y={ticker_top}:w={red_bar_width}:h={ticker_height}:color=#ef1717@1:t=fill,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_label_file)}'{ticker_label_font_arg}:x=42:y={ticker_top + 18}:fontsize=30:fontcolor=white"
             )
 
     filters.append(f"[{current}]format=yuv420p[vout]")
