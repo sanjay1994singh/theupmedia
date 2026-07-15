@@ -964,8 +964,12 @@ def ffmpeg_path(path):
 def devanagari_font_candidates():
     return [
         getattr(settings, "FFMPEG_FONT_FILE", ""),
+        "/usr/share/fonts/truetype/noto/NotoSansDevanagariUI-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansDevanagariUI-Regular.ttf",
         "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
         "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansDevanagariUI-Bold.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansDevanagariUI-Regular.ttf",
         "/usr/share/fonts/opentype/noto/NotoSansDevanagari-Bold.ttf",
         "/usr/share/fonts/opentype/noto/NotoSansDevanagari-Regular.ttf",
         "/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf",
@@ -998,20 +1002,61 @@ def resolve_existing_font(candidates):
     return ""
 
 
+def resolve_fontconfig_font(patterns):
+    for pattern in patterns:
+        try:
+            result = subprocess.run(
+                ["fc-match", "-f", "%{file}", pattern],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+        except Exception:
+            continue
+        path = (result.stdout or "").strip()
+        if result.returncode == 0 and path and Path(path).exists():
+            return str(Path(path))
+    return ""
+
+
+def resolve_devanagari_font_path():
+    return resolve_existing_font(devanagari_font_candidates()) or resolve_fontconfig_font(
+        [
+            "Noto Sans Devanagari:style=Bold",
+            "Noto Sans Devanagari UI:style=Bold",
+            "Lohit Devanagari:style=Regular",
+            "Nirmala UI:style=Bold",
+            "Mangal:style=Bold",
+        ]
+    )
+
+
+def resolve_latin_font_path():
+    return resolve_existing_font(latin_font_candidates()) or resolve_fontconfig_font(
+        [
+            "DejaVu Sans:style=Bold",
+            "Arial:style=Bold",
+            "Noto Sans:style=Bold",
+        ]
+    )
+
+
 def ffmpeg_font_file():
-    path = resolve_existing_font(devanagari_font_candidates())
+    path = resolve_devanagari_font_path()
     return ffmpeg_path(path) if path else ""
 
 
 def ffmpeg_latin_font_file():
-    path = resolve_existing_font(latin_font_candidates()) or resolve_existing_font(devanagari_font_candidates())
+    path = resolve_latin_font_path() or resolve_devanagari_font_path()
     return ffmpeg_path(path) if path else ""
 
 
 def pil_font(size):
     if not ImageFont:
         return None
-    path = resolve_existing_font(devanagari_font_candidates())
+    path = resolve_devanagari_font_path()
+    if not path:
+        return ImageFont.load_default()
     try:
         layout_engine = getattr(getattr(ImageFont, "Layout", None), "RAQM", None)
         if layout_engine is not None:
@@ -1029,18 +1074,24 @@ def text_bbox_size(draw, text, font):
     return max(1, bbox[2] - bbox[0]), max(1, bbox[3] - bbox[1])
 
 
-def make_text_png(text, prefix, font_size, fill, height, padding_x=24, min_width=1, max_width=12000):
+def make_text_png(text, prefix, font_size, fill, height, padding_x=24, min_width=1, max_width=12000, align="left"):
     if not Image or not ImageDraw:
         return None, 0
     font = pil_font(font_size)
     probe = Image.new("RGBA", (10, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(probe)
-    text_width, text_height = text_bbox_size(draw, text, font)
+    bbox = draw.textbbox((0, 0), text or " ", font=font)
+    text_width = max(1, bbox[2] - bbox[0])
+    text_height = max(1, bbox[3] - bbox[1])
     width = max(min_width, min(max_width, text_width + padding_x * 2))
     image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    y = max(0, int((height - text_height) / 2) - 1)
-    draw.text((padding_x, y), text or " ", font=font, fill=fill)
+    y = max(0, int((height - text_height) / 2)) - bbox[1]
+    if align == "center":
+        x = max(0, int((width - text_width) / 2)) - bbox[0]
+    else:
+        x = padding_x - bbox[0]
+    draw.text((x, y), text or " ", font=font, fill=fill)
     text_dir = Path(tempfile.gettempdir()) / "theupmedia-render-text"
     text_dir.mkdir(parents=True, exist_ok=True)
     image_path = text_dir / f"{prefix}-{uuid4().hex}.png"
@@ -1048,11 +1099,32 @@ def make_text_png(text, prefix, font_size, fill, height, padding_x=24, min_width
     return image_path, width
 
 
-def make_broadcast_ticker_assets(ticker_label, ticker_text, height=64):
+def make_broadcast_ticker_assets(ticker_label, ticker_text, height=64, label_width=300, font_size=28):
     separator = "    |    "
-    unit_text = f"{ticker_text or ''}{separator}"
-    text_path, unit_width = make_text_png(unit_text * 4, "broadcast-ticker-strip", 30, (17, 17, 17, 255), height, padding_x=0)
-    label_path, _ = make_text_png(ticker_label or "", "broadcast-ticker-label", 30, (255, 255, 255, 255), height, padding_x=14, min_width=240, max_width=240)
+    clean_text = " ".join((ticker_text or "").split())
+    clean_label = " ".join((ticker_label or "").split())
+    unit_text = f"{clean_text}{separator}" if clean_text else separator
+    text_path, unit_width = make_text_png(
+        unit_text * 4,
+        "broadcast-ticker-strip",
+        font_size,
+        (17, 17, 17, 255),
+        height,
+        padding_x=0,
+        max_width=60000,
+    )
+    label_inner_width = max(1, label_width - 48)
+    label_path, _ = make_text_png(
+        clean_label,
+        "broadcast-ticker-label",
+        font_size,
+        (255, 255, 255, 255),
+        height,
+        padding_x=0,
+        min_width=label_inner_width,
+        max_width=label_inner_width,
+        align="center",
+    )
     return text_path, label_path, max(1, unit_width // 4)
 
 
@@ -1386,9 +1458,15 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
         red_bar_width = 24
         mask_width = label_width + black_bar_width + red_bar_width
         ticker_top = input_height - ticker_height
-        ticker_start = mask_width + 42
+        ticker_start = mask_width + 18
         ticker_speed = 180
-        ticker_text_image, ticker_label_image, ticker_loop_width = make_broadcast_ticker_assets(ticker_label, ticker_text, height=ticker_height)
+        ticker_text_image, ticker_label_image, ticker_loop_width = make_broadcast_ticker_assets(
+            ticker_label,
+            ticker_text,
+            height=ticker_height,
+            label_width=label_width,
+            font_size=28,
+        )
         if ticker_text_image and ticker_label_image:
             text_files.extend([ticker_text_image, ticker_label_image])
             ticker_input = add_overlay_input(ticker_text_image)
@@ -1411,11 +1489,11 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
             ticker_font_arg = ffmpeg_font_arg_for_text(ticker_text, devanagari_font, latin_font)
             add_filter(
                 f"drawbox=x=0:y={ticker_top}:w={input_width}:h={ticker_height}:color=white@0.97:t=fill,"
-                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x={ticker_start}-mod(t*{ticker_speed}\\,tw/4):y={ticker_top + 18}:fontsize=30:fontcolor=#111111,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x={ticker_start}-mod(t*{ticker_speed}\\,tw/4):y={ticker_top + 16}:fontsize=28:fontcolor=#111111,"
                 f"drawbox=x=0:y={ticker_top}:w={label_width}:h={ticker_height}:color=#c80d13@1:t=fill,"
                 f"drawbox=x={label_width}:y={ticker_top}:w={black_bar_width}:h={ticker_height}:color=#111111@1:t=fill,"
                 f"drawbox=x={label_width + black_bar_width}:y={ticker_top}:w={red_bar_width}:h={ticker_height}:color=#ef1717@1:t=fill,"
-                f"drawtext=textfile='{ffmpeg_path(ticker_label_file)}'{ticker_label_font_arg}:x=42:y={ticker_top + 18}:fontsize=30:fontcolor=white"
+                f"drawtext=textfile='{ffmpeg_path(ticker_label_file)}'{ticker_label_font_arg}:x=42:y={ticker_top + 16}:fontsize=28:fontcolor=white"
             )
 
     filters.append(f"[{current}]format=yuv420p[vout]")
