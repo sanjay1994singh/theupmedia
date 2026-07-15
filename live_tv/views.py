@@ -994,7 +994,7 @@ def has_latin(text):
 
 
 def ffmpeg_font_arg_for_text(text, devanagari_font, latin_font):
-    font = devanagari_font if has_devanagari(text) and not has_latin(text) else latin_font
+    font = devanagari_font if has_devanagari(text) else latin_font
     return f":fontfile='{font}'" if font else ""
 
 
@@ -1266,16 +1266,18 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
 
     if bool_snapshot(snapshot, "show_ticker") and (ticker_label or ticker_text):
         ticker_label_file = add_text_file(ticker_label, "broadcast-ticker-label")
-        ticker_file = add_text_file("    |    ".join([ticker_text] * 3), "broadcast-ticker")
+        ticker_file = add_text_file("    |    ".join([ticker_text] * 4), "broadcast-ticker")
         ticker_label_font_arg = ffmpeg_font_arg_for_text(ticker_label, devanagari_font, latin_font)
-        ticker_font_arg = f":fontfile='{devanagari_font}'" if devanagari_font else ffmpeg_font_arg_for_text(ticker_text, devanagari_font, latin_font)
+        ticker_font_arg = ffmpeg_font_arg_for_text(ticker_text, devanagari_font, latin_font)
+        ticker_top = input_height - 72
+        ticker_start = 356
         add_filter(
-            f"drawbox=x=0:y={input_height - 80}:w={input_width}:h=80:color=white@0.96:t=fill,"
-            f"drawbox=x=0:y={input_height - 80}:w=300:h=80:color=#c80d13@1:t=fill,"
-            f"drawbox=x=300:y={input_height - 80}:w=30:h=80:color=#111111@1:t=fill,"
-            f"drawbox=x=330:y={input_height - 80}:w=26:h=80:color=#ef1717@1:t=fill,"
-            f"drawtext=textfile='{ffmpeg_path(ticker_label_file)}'{ticker_label_font_arg}:x=44:y={input_height - 52}:fontsize=38:fontcolor=white,"
-            f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x=410+w-mod(t*220\\,w+tw):y={input_height - 50}:fontsize=38:fontcolor=#111111"
+            f"drawbox=x=0:y={ticker_top}:w={input_width}:h=72:color=white@0.96:t=fill,"
+            f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x={ticker_start}-mod(t*205\\,tw/4):y={ticker_top + 22}:fontsize=34:fontcolor=#111111,"
+            f"drawbox=x=0:y={ticker_top}:w=300:h=72:color=#c80d13@1:t=fill,"
+            f"drawbox=x=300:y={ticker_top}:w=30:h=72:color=#111111@1:t=fill,"
+            f"drawbox=x=330:y={ticker_top}:w=26:h=72:color=#ef1717@1:t=fill,"
+            f"drawtext=textfile='{ffmpeg_path(ticker_label_file)}'{ticker_label_font_arg}:x=42:y={ticker_top + 23}:fontsize=34:fontcolor=white"
         )
 
     filters.append(f"[{current}]format=yuv420p[vout]")
