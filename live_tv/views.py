@@ -537,6 +537,9 @@ def serialize_synced_live_state(request, channel, server_time=None):
     stream_url = hls_url or video_url
     next_video = state["next_entry"].video if state.get("next_entry") else None
     ticker = ticker_items_from_text(ticker_setting.text)
+    ticker_started_at = channel.playback_started_at or (state["cycle"].starts_at if state.get("cycle") else state["video_started_at"])
+    ticker_offset_seconds = max(0.0, (server_time - ticker_started_at).total_seconds())
+    ticker_clock_key = f"live-tv-setting-{setting.pk}-{setting.updated_at.isoformat() if setting.updated_at else ''}"
     return {
         "is_live": True,
         "is_live_synced": True,
@@ -561,6 +564,10 @@ def serialize_synced_live_state(request, channel, server_time=None):
         "seek_position": round(state["seek_position"], 3),
         "video_started_at": state["video_started_at"].isoformat(),
         "server_time": server_time.isoformat(),
+        "ticker_started_at": ticker_started_at.isoformat(),
+        "ticker_server_time": server_time.isoformat(),
+        "ticker_offset_seconds": round(ticker_offset_seconds, 3),
+        "ticker_clock_key": ticker_clock_key,
         "playlist_total_duration": state["playlist_total_duration"],
         "playlist_version": state["playlist_version"],
         "loop_enabled": channel.loop_enabled,
@@ -590,6 +597,9 @@ def serialize_synced_live_state(request, channel, server_time=None):
 def serialize_live_fallback(request, channel, server_time=None):
     server_time = server_time or timezone.now()
     data = serialize_channel_for_mobile(request, channel)
+    setting = live_tv_setting()
+    ticker_started_at = setting.updated_at or server_time
+    ticker_offset_seconds = max(0.0, (server_time - ticker_started_at).total_seconds())
     data.update(
         {
             "is_live": bool(data.get("stream_url") or data.get("youtube_embed_url")),
@@ -604,6 +614,10 @@ def serialize_live_fallback(request, channel, server_time=None):
             "seek_position": 0,
             "video_started_at": server_time.isoformat(),
             "server_time": server_time.isoformat(),
+            "ticker_started_at": ticker_started_at.isoformat(),
+            "ticker_server_time": server_time.isoformat(),
+            "ticker_offset_seconds": round(ticker_offset_seconds, 3),
+            "ticker_clock_key": f"live-tv-setting-{setting.pk}-{setting.updated_at.isoformat() if setting.updated_at else ''}",
             "playlist_total_duration": 0,
             "playlist_version": channel.playlist_version,
             "loop_enabled": channel.loop_enabled,
@@ -1936,12 +1950,17 @@ def current_live_api(request, slug=None):
             return JsonResponse(serialize_live_fallback(request, fallback, server_time=server_time))
 
     data = serialize_empty_live_tv(request)
+    setting = live_tv_setting()
     data.update(
         {
             "is_live": False,
             "is_live_synced": False,
             "message": "अभी कोई लाइव प्रसारण उपलब्ध नहीं है",
             "server_time": server_time.isoformat(),
+            "ticker_started_at": (setting.updated_at or server_time).isoformat(),
+            "ticker_server_time": server_time.isoformat(),
+            "ticker_offset_seconds": round(max(0.0, (server_time - (setting.updated_at or server_time)).total_seconds()), 3),
+            "ticker_clock_key": f"live-tv-setting-{setting.pk}-{setting.updated_at.isoformat() if setting.updated_at else ''}",
         }
     )
     return JsonResponse(data)

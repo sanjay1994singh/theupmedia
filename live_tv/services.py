@@ -135,12 +135,18 @@ def _create_cycle(channel, items, starts_at, version):
 def playlist_item_start_offset_seconds(cycle_item):
     if not cycle_item or not cycle_item.cycle_id:
         return 0.0
+    cycle = getattr(cycle_item, "cycle", None)
+    channel = getattr(cycle, "channel", None)
+    broadcast_offset = 0.0
+    if cycle and channel and cycle.starts_at and channel.playback_started_at:
+        broadcast_offset = max(0.0, (cycle.starts_at - channel.playback_started_at).total_seconds())
     previous_items = (
         LiveTVPlaylistCycleItem.objects.filter(cycle_id=cycle_item.cycle_id)
         .filter(position__lt=cycle_item.position)
         .only("duration_seconds")
     )
-    return float(sum(max(0, item.duration_seconds or 0) for item in previous_items))
+    item_offset = float(sum(max(0, item.duration_seconds or 0) for item in previous_items))
+    return broadcast_offset + item_offset
 
 
 def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
