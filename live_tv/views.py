@@ -1,4 +1,5 @@
 import ipaddress
+import contextlib
 import logging
 import os
 import socket
@@ -1360,6 +1361,48 @@ def update_render_progress(job_id, percent):
     SocialRenderedVideo.objects.filter(pk=job_id).update(progress_percent=percent)
 
 
+@contextlib.contextmanager
+def single_live_render_lock(timeout_seconds=7200):
+    lock_path = Path(tempfile.gettempdir()) / "theupmedia-live-render.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = lock_path.open("a+")
+    start = time.monotonic()
+    locked = False
+    try:
+        while not locked:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+
+                    lock_file.seek(0)
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                locked = True
+            except OSError:
+                if time.monotonic() - start >= timeout_seconds:
+                    raise RuntimeError("Another rendered video is still processing. Please retry later.")
+                time.sleep(1)
+        yield
+    finally:
+        if locked:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+
+                    lock_file.seek(0)
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
+        lock_file.close()
+
+
 RENDER_TEMPLATE_ACCENTS = {
     "breaking-red": "#d71920",
     "live-report": "#e11d48",
@@ -1421,6 +1464,11 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
     headline = snapshot.get("headline") or ""
     ticker_label = snapshot.get("ticker_label") or ""
     ticker_text = snapshot.get("ticker_text") or ""
+    try:
+        ticker_time_offset = max(0.0, float(snapshot.get("ticker_time_offset_seconds") or 0))
+    except (TypeError, ValueError):
+        ticker_time_offset = 0.0
+    ticker_time_expr = f"(t+{ticker_time_offset:.3f})" if ticker_time_offset else "t"
 
     if bool_snapshot(snapshot, "show_live_badge"):
         live_file = add_text_file(live_label, "broadcast-live")
@@ -1474,7 +1522,7 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
             next_label = f"v{overlay_index}"
             filters.append(
                 f"[{current}]drawbox=x=0:y={ticker_top}:w={input_width}:h={ticker_height}:color=white@0.97:t=fill[vtickerbg];"
-                f"[vtickerbg][{ticker_input}:v]overlay=x={ticker_start}-mod(t*{ticker_speed}\\,{ticker_loop_width}):y={ticker_top}:shortest=0:repeatlast=1[vtickertext];"
+                f"[vtickerbg][{ticker_input}:v]overlay=x={ticker_start}-mod({ticker_time_expr}*{ticker_speed}\\,{ticker_loop_width}):y={ticker_top}:shortest=0:repeatlast=1[vtickertext];"
                 f"[vtickertext]drawbox=x=0:y={ticker_top}:w={label_width}:h={ticker_height}:color=#c80d13@1:t=fill,"
                 f"drawbox=x={label_width}:y={ticker_top}:w={black_bar_width}:h={ticker_height}:color=#111111@1:t=fill,"
                 f"drawbox=x={label_width + black_bar_width}:y={ticker_top}:w={red_bar_width}:h={ticker_height}:color=#ef1717@1:t=fill[vlabelbg];"
@@ -1489,7 +1537,7 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
             ticker_font_arg = ffmpeg_font_arg_for_text(ticker_text, devanagari_font, latin_font)
             add_filter(
                 f"drawbox=x=0:y={ticker_top}:w={input_width}:h={ticker_height}:color=white@0.97:t=fill,"
-                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x={ticker_start}-mod(t*{ticker_speed}\\,tw/4):y={ticker_top + 16}:fontsize=28:fontcolor=#111111,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x={ticker_start}-mod({ticker_time_expr}*{ticker_speed}\\,tw/4):y={ticker_top + 16}:fontsize=28:fontcolor=#111111,"
                 f"drawbox=x=0:y={ticker_top}:w={label_width}:h={ticker_height}:color=#c80d13@1:t=fill,"
                 f"drawbox=x={label_width}:y={ticker_top}:w={black_bar_width}:h={ticker_height}:color=#111111@1:t=fill,"
                 f"drawbox=x={label_width + black_bar_width}:y={ticker_top}:w={red_bar_width}:h={ticker_height}:color=#ef1717@1:t=fill,"
@@ -1703,8 +1751,12 @@ def run_social_render_job(job_id, raise_errors=False):
         close_old_connections()
         return
     try:
-        update_render_progress(job.pk, 1)
-        render_social_video_file(job)
+        with single_live_render_lock():
+            job.refresh_from_db()
+            if job.status in {SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE} and job.rendered_video:
+                return
+            update_render_progress(job.pk, 1)
+            render_social_video_file(job)
     except Exception as exc:
         SocialRenderedVideo.objects.filter(pk=job_id).update(
             status=SocialRenderedVideo.Status.FAILED,

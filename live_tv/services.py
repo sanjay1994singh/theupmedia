@@ -132,11 +132,23 @@ def _create_cycle(channel, items, starts_at, version):
     return cycle
 
 
+def playlist_item_start_offset_seconds(cycle_item):
+    if not cycle_item or not cycle_item.cycle_id:
+        return 0.0
+    previous_items = (
+        LiveTVPlaylistCycleItem.objects.filter(cycle_id=cycle_item.cycle_id)
+        .filter(position__lt=cycle_item.position)
+        .only("duration_seconds")
+    )
+    return float(sum(max(0, item.duration_seconds or 0) for item in previous_items))
+
+
 def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
     setting = LiveTVSetting.get_solo()
     headline = video.headline or ""
     lower_label = video.lower_third_label or ""
     title = headline or video.title or f"{channel.title} {timezone.localtime().strftime('%Y-%m-%d %H:%M')}"
+    ticker_time_offset = playlist_item_start_offset_seconds(cycle_item)
     return {
         "title": title,
         "headline": headline,
@@ -146,6 +158,7 @@ def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
         "ticker_text": setting.default_ticker_text,
         "ticker_speed_seconds": setting.ticker_speed_seconds,
         "mobile_ticker_speed_seconds": setting.mobile_ticker_speed_seconds,
+        "ticker_time_offset_seconds": ticker_time_offset,
         "ticker_style": "red_white_slant",
         "channel_name": setting.name,
         "channel_logo": setting.channel_logo.name if setting.channel_logo else "",
