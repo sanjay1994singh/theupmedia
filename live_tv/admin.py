@@ -371,22 +371,22 @@ class SocialRenderedVideoAdmin(admin.ModelAdmin):
     list_filter = ("status", "render_format", "frame_category", "live_channel", "is_active", "is_downloadable", "created_at")
     search_fields = ("title", "headline", "ticker_label", "ticker_text", "frame_template", "broadcast_session_id", "render_key")
     readonly_fields = ("progress_percent", "render_key", "broadcast_session_id", "snapshot", "file_size", "resolution", "duration_seconds", "started_at", "completed_at", "created_at", "updated_at", "error_message")
-    actions = ("retry_failed_render", "regenerate_thumbnail", "mark_active", "mark_inactive")
+    actions = ("retry_render_jobs", "regenerate_thumbnail", "mark_active", "mark_inactive")
 
-    @admin.action(description="Retry failed render")
-    def retry_failed_render(self, request, queryset):
-        from .tasks import render_live_broadcast_video_task
+    @admin.action(description="Retry / queue selected render jobs")
+    def retry_render_jobs(self, request, queryset):
+        from .services import queue_broadcast_render_task
 
         count = 0
-        for job in queryset.filter(status=SocialRenderedVideo.Status.FAILED):
+        for job in queryset.exclude(status__in=[SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE]):
             job.status = SocialRenderedVideo.Status.PENDING
             job.progress_percent = 0
             job.error_message = ""
             job.retry_count += 1
             job.save(update_fields=["status", "progress_percent", "error_message", "retry_count", "updated_at"])
-            render_live_broadcast_video_task.delay(job.pk)
+            queue_broadcast_render_task(job.pk)
             count += 1
-        self.message_user(request, f"{count} failed render jobs queued.")
+        self.message_user(request, f"{count} render jobs queued.")
 
     @admin.action(description="Regenerate thumbnail")
     def regenerate_thumbnail(self, request, queryset):

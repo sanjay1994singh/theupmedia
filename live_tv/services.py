@@ -1,6 +1,8 @@
 import logging
+import threading
 from datetime import timedelta
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Max
@@ -16,6 +18,31 @@ from .models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def queue_broadcast_render_task(job_id):
+    queued_with_celery = False
+    if getattr(settings, "LIVE_TV_RENDER_USE_CELERY", True):
+        try:
+            from .tasks import render_live_broadcast_video_task
+
+            render_live_broadcast_video_task.delay(job_id)
+            queued_with_celery = True
+        except Exception as exc:
+            SocialRenderedVideo.objects.filter(pk=job_id).update(
+                error_message=f"Celery enqueue failed, fallback thread started: {exc}",
+            )
+
+    if queued_with_celery and getattr(settings, "LIVE_TV_RENDER_THREAD_FALLBACK", True):
+        from .views import run_social_render_job_if_stale
+
+        threading.Thread(target=run_social_render_job_if_stale, args=(job_id, 45), daemon=True).start()
+        return "celery+fallback"
+
+    from .views import run_social_render_job
+
+    threading.Thread(target=run_social_render_job, args=(job_id,), daemon=True).start()
+    return "thread"
 
 
 def get_main_live_channel(create=False):
@@ -184,6 +211,30 @@ def create_broadcast_render_job(cycle_item):
         job.retry_count += 1
         job.save()
         should_enqueue = True
+    elif (
+        not created
+        and job.status == SocialRenderedVideo.Status.PENDING
+        and not job.rendered_video
+        and job.updated_at < timezone.now() - timedelta(seconds=30)
+    ):
+        job.snapshot = snapshot
+        job.error_message = ""
+        job.progress_percent = 0
+        job.save(update_fields=["snapshot", "error_message", "progress_percent", "updated_at"])
+        should_enqueue = True
+    elif (
+        not created
+        and job.status == SocialRenderedVideo.Status.PROCESSING
+        and not job.rendered_video
+        and (not job.started_at or job.updated_at < timezone.now() - timedelta(minutes=10))
+    ):
+        job.status = SocialRenderedVideo.Status.PENDING
+        job.snapshot = snapshot
+        job.error_message = "Render was stale and has been re-queued."
+        job.progress_percent = 0
+        job.retry_count += 1
+        job.save(update_fields=["status", "snapshot", "error_message", "progress_percent", "retry_count", "updated_at"])
+        should_enqueue = True
     job._render_should_enqueue = should_enqueue
     return job, created
 
@@ -194,9 +245,7 @@ def enqueue_broadcast_render_job_for_cycle_item(cycle_item):
         if not job:
             return None
         if getattr(job, "_render_should_enqueue", created):
-            from .tasks import render_live_broadcast_video_task
-
-            render_live_broadcast_video_task.delay(job.pk)
+            queue_broadcast_render_task(job.pk)
         return job.pk
     except Exception:
         logger.exception("Failed to enqueue live broadcast render job for cycle item %s", getattr(cycle_item, "pk", None))
@@ -213,10 +262,8 @@ def enqueue_broadcast_render_jobs_for_cycle(cycle_id):
                 job_ids.append(job.pk)
         if not job_ids:
             return []
-        from .tasks import render_live_broadcast_video_task
-
         for job_id in job_ids:
-            render_live_broadcast_video_task.delay(job_id)
+            queue_broadcast_render_task(job_id)
         return job_ids
     except Exception:
         logger.exception("Failed to enqueue live broadcast render jobs for cycle %s", cycle_id)

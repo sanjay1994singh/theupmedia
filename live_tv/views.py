@@ -88,18 +88,23 @@ def enqueue_media_download_job(job_id):
     return "thread"
 
 def enqueue_social_render_job(job_id):
+    queued_with_celery = False
     if getattr(settings, "LIVE_TV_RENDER_USE_CELERY", True):
         try:
             from .tasks import render_social_video_task
 
             render_social_video_task.delay(job_id)
-            return "celery"
+            queued_with_celery = True
         except Exception as exc:
             SocialRenderedVideo.objects.filter(pk=job_id).update(
                 error_message=f"Celery enqueue failed, fallback thread started: {exc}",
             )
 
     import threading
+
+    if queued_with_celery and getattr(settings, "LIVE_TV_RENDER_THREAD_FALLBACK", True):
+        threading.Thread(target=run_social_render_job_if_stale, args=(job_id, 45), daemon=True).start()
+        return "celery+fallback"
 
     threading.Thread(target=run_social_render_job, args=(job_id,), daemon=True).start()
     return "thread"
@@ -1602,6 +1607,9 @@ def render_social_video_file(job):
 def run_social_render_job(job_id, raise_errors=False):
     close_old_connections()
     job = SocialRenderedVideo.objects.get(pk=job_id)
+    if job.status in {SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE} and job.rendered_video:
+        close_old_connections()
+        return
     try:
         update_render_progress(job.pk, 1)
         render_social_video_file(job)
@@ -1616,6 +1624,22 @@ def run_social_render_job(job_id, raise_errors=False):
             raise
     finally:
         close_old_connections()
+
+
+def run_social_render_job_if_stale(job_id, delay_seconds=45):
+    time.sleep(max(1, int(delay_seconds)))
+    close_old_connections()
+    try:
+        job = SocialRenderedVideo.objects.only("id", "status", "progress_percent", "rendered_video", "started_at").get(pk=job_id)
+        if job.status in {SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE} and job.rendered_video:
+            return
+        if job.started_at and job.progress_percent > 1:
+            return
+    except SocialRenderedVideo.DoesNotExist:
+        return
+    finally:
+        close_old_connections()
+    run_social_render_job(job_id)
 
 
 
@@ -2420,6 +2444,8 @@ def mobile_admin_render_social_video_api(request):
         frame_template=frame_template[:60],
         original_video=video,
         created_by=user,
+        status=SocialRenderedVideo.Status.PENDING,
+        progress_percent=0,
     )
 
     queue_backend = enqueue_social_render_job(job.pk)
