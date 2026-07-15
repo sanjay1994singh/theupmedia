@@ -103,7 +103,6 @@ def _create_cycle(channel, items, starts_at, version):
             for position, item in enumerate(items)
         ]
     )
-    transaction.on_commit(lambda: enqueue_broadcast_render_jobs_for_cycle(cycle.pk))
     return cycle
 
 
@@ -180,12 +179,30 @@ def create_broadcast_render_job(cycle_item):
         "is_downloadable": True,
     }
     job, created = SocialRenderedVideo.objects.get_or_create(render_key=render_key, defaults=defaults)
+    should_enqueue = created
     if not created and job.status == SocialRenderedVideo.Status.FAILED:
         for field, value in defaults.items():
             setattr(job, field, value)
         job.retry_count += 1
         job.save()
+        should_enqueue = True
+    job._render_should_enqueue = should_enqueue
     return job, created
+
+
+def enqueue_broadcast_render_job_for_cycle_item(cycle_item):
+    try:
+        job, created = create_broadcast_render_job(cycle_item)
+        if not job:
+            return None
+        if getattr(job, "_render_should_enqueue", created):
+            from .tasks import render_live_broadcast_video_task
+
+            render_live_broadcast_video_task.delay(job.pk)
+        return job.pk
+    except Exception:
+        logger.exception("Failed to enqueue live broadcast render job for cycle item %s", getattr(cycle_item, "pk", None))
+        return None
 
 
 def enqueue_broadcast_render_jobs_for_cycle(cycle_id):
@@ -194,7 +211,7 @@ def enqueue_broadcast_render_jobs_for_cycle(cycle_id):
         job_ids = []
         for cycle_item in items:
             job, created = create_broadcast_render_job(cycle_item)
-            if job and (created or job.status in {SocialRenderedVideo.Status.PENDING, SocialRenderedVideo.Status.FAILED}):
+            if job and getattr(job, "_render_should_enqueue", created):
                 job_ids.append(job.pk)
         if not job_ids:
             return []
@@ -206,6 +223,41 @@ def enqueue_broadcast_render_jobs_for_cycle(cycle_id):
     except Exception:
         logger.exception("Failed to enqueue live broadcast render jobs for cycle %s", cycle_id)
         return []
+
+
+def enqueue_completed_broadcast_renders(channel, at=None, state=None):
+    at = at or timezone.now()
+    state = state or calculate_current_playback(channel, at=at)
+    if not state:
+        return []
+    cycle = state["cycle"]
+    if not cycle or cycle.total_duration_seconds <= 0:
+        return []
+
+    elapsed = max(0.0, (at - cycle.starts_at).total_seconds())
+    if elapsed <= 0:
+        return []
+
+    completed_window = cycle.total_duration_seconds if channel.loop_enabled and elapsed >= cycle.total_duration_seconds else elapsed
+    entries = list(cycle.items.select_related("video", "playlist_item").order_by("position", "pk"))
+    completed_ids = []
+    cursor = 0.0
+    for entry in entries:
+        cursor += entry.duration_seconds
+        if cursor <= completed_window:
+            completed_ids.append(entry.pk)
+
+    if not completed_ids:
+        return []
+
+    jobs = []
+    for entry in entries:
+        if entry.pk not in completed_ids:
+            continue
+        job_id = enqueue_broadcast_render_job_for_cycle_item(entry)
+        if job_id:
+            jobs.append(job_id)
+    return jobs
 
 
 def ensure_current_cycle(channel, at=None):

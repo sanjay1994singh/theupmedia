@@ -34,7 +34,7 @@ from django.views.decorators.http import require_POST
 from .forms import LiveTVChannelForm
 from .hls import validate_uploaded_video
 from .models import AppHomeSetting, AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, NewsTickerSetting, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
-from .services import calculate_current_playback, get_main_live_channel, update_playlist_item
+from .services import calculate_current_playback, enqueue_completed_broadcast_renders, get_main_live_channel, update_playlist_item
 from news.models import Article
 
 
@@ -509,6 +509,7 @@ def serialize_synced_live_state(request, channel, server_time=None):
     state = calculate_current_playback(channel, at=server_time)
     if not state:
         return None
+    enqueue_completed_broadcast_renders(channel, at=server_time, state=state)
     video = state["video"]
     setting = live_tv_setting()
     ticker_setting = news_ticker_setting()

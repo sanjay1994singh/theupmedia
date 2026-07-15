@@ -8,8 +8,8 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import LiveTVChannel, LiveTVPlaylistItem
-from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, rebuild_live_playlist
+from .models import LiveTVChannel, LiveTVPlaylistItem, SocialRenderedVideo
+from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, enqueue_completed_broadcast_renders, rebuild_live_playlist
 
 
 class AutoLivePlaylistTests(TestCase):
@@ -82,6 +82,36 @@ class AutoLivePlaylistTests(TestCase):
         state = calculate_current_playback(self.main, at=started_at + timedelta(seconds=45))
         self.assertEqual(state["video"].pk, second.pk)
         self.assertAlmostEqual(state["seek_position"], 5, places=2)
+
+    @patch("live_tv.tasks.render_live_broadcast_video_task.delay")
+    @patch("django.core.files.storage.FileSystemStorage.exists", return_value=True)
+    def test_render_job_is_created_only_after_playlist_item_streamed(self, _exists, delay):
+        first = self.make_video("Rendered One", 10)
+        second = self.make_video("Rendered Two", 20)
+        rebuild_live_playlist([first, second], self.main)
+        self.main.refresh_from_db()
+        cycle = self.main.playlist_cycles.get()
+        started_at = timezone.now() - timedelta(seconds=1)
+        cycle.starts_at = started_at
+        cycle.save(update_fields=["starts_at"])
+
+        self.assertEqual(SocialRenderedVideo.objects.count(), 0)
+        before_finished = calculate_current_playback(self.main, at=started_at + timedelta(seconds=5))
+        enqueue_completed_broadcast_renders(self.main, at=started_at + timedelta(seconds=5), state=before_finished)
+        self.assertEqual(SocialRenderedVideo.objects.count(), 0)
+        delay.assert_not_called()
+
+        after_first = calculate_current_playback(self.main, at=started_at + timedelta(seconds=11))
+        enqueue_completed_broadcast_renders(self.main, at=started_at + timedelta(seconds=11), state=after_first)
+        self.assertEqual(SocialRenderedVideo.objects.count(), 1)
+        job = SocialRenderedVideo.objects.get()
+        self.assertEqual(job.source_video_id, first.pk)
+        self.assertEqual(job.status, SocialRenderedVideo.Status.PENDING)
+        delay.assert_called_once_with(job.pk)
+
+        enqueue_completed_broadcast_renders(self.main, at=started_at + timedelta(seconds=12), state=after_first)
+        self.assertEqual(SocialRenderedVideo.objects.count(), 1)
+        delay.assert_called_once_with(job.pk)
 
     @patch("django.core.files.storage.FileSystemStorage.exists", return_value=True)
     def test_normal_upload_does_not_interrupt_current_cycle(self, _exists):
