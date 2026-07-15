@@ -23,7 +23,7 @@ from django.db import close_old_connections, transaction
 from django.db.models.deletion import ProtectedError
 from django.db.models import F, Q
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.http import JsonResponse
+from django.http import FileResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -1125,6 +1125,50 @@ def video_duration_seconds(video_path):
         return 1.0
 
 
+def video_resolution(video_path):
+    command = [
+        ffmpeg_binary().replace("ffmpeg", "ffprobe"),
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height",
+        "-of",
+        "csv=s=x:p=0",
+        video_path,
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+    return (result.stdout or "").strip()
+
+
+def generate_render_thumbnail(job):
+    if not job.rendered_video:
+        return
+    thumb_dir = Path(tempfile.mkdtemp(prefix=f"render-thumb-{job.pk}-"))
+    thumb_path = thumb_dir / f"render-thumb-{job.pk}.jpg"
+    try:
+        command = [
+            ffmpeg_binary(),
+            "-y",
+            "-ss",
+            "00:00:01",
+            "-i",
+            job.rendered_video.path,
+            "-frames:v",
+            "1",
+            "-q:v",
+            "3",
+            str(thumb_path),
+        ]
+        subprocess.run(command, capture_output=True, text=True, timeout=120, check=True)
+        if thumb_path.exists():
+            with thumb_path.open("rb") as image_file:
+                job.thumbnail.save(thumb_path.name, File(image_file), save=False)
+    finally:
+        shutil.rmtree(thumb_dir, ignore_errors=True)
+
+
 def parse_ffmpeg_time(line):
     match = re.search(r"time=(\d+):(\d+):(\d+(?:\.\d+)?)", line)
     if not match:
@@ -1154,18 +1198,21 @@ def render_social_video_file(job):
     if not shutil.which(ffmpeg_binary()):
         raise RuntimeError("FFmpeg is not installed on server.")
 
-    output_dir = Path(settings.MEDIA_ROOT) / "social-render" / "rendered"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"live-tv-render-{job.pk}-{uuid4().hex[:8]}.mp4"
+    input_file = job.original_video or (job.source_video.video_file if job.source_video_id and job.source_video else None)
+    if not input_file:
+        raise RuntimeError("Render source video is missing.")
+    tmp_dir = Path(tempfile.mkdtemp(prefix=f"live-render-{job.pk}-"))
+    output_path = tmp_dir / f"live-tv-render-{job.pk}-{uuid4().hex[:8]}.mp4"
     devanagari_font = ffmpeg_font_file()
     latin_font = ffmpeg_latin_font_file()
 
     text_files = []
-    label_text = job.lower_third_label or "BREAKING NEWS"
-    headline_text = job.headline or job.title
-    ticker_label_text = job.ticker_label or "BREAKING NEWS"
-    ticker_text = job.ticker_text or "The Up Media"
-    title_text = job.title
+    snapshot = job.snapshot or {}
+    label_text = job.lower_third_label or snapshot.get("lower_third_label") or snapshot.get("headline_label") or ""
+    headline_text = job.headline or snapshot.get("headline") or job.title
+    ticker_label_text = job.ticker_label or snapshot.get("ticker_label") or ""
+    ticker_text = job.ticker_text or snapshot.get("ticker_text") or "The Up Media"
+    title_text = job.title or snapshot.get("title") or "The Up Media"
     accent_color = RENDER_TEMPLATE_ACCENTS.get(job.frame_template, "#d71920")
     label_file = ffmpeg_text_file(label_text, "label")
     headline_file = ffmpeg_text_file(headline_text, "headline")
@@ -1270,7 +1317,7 @@ def render_social_video_file(job):
             ffmpeg_binary(),
             "-y",
             "-i",
-            job.original_video.path,
+            input_file.path,
             "-filter_complex",
             filter_complex,
             "-map",
@@ -1285,14 +1332,20 @@ def render_social_video_file(job):
             "+faststart",
             str(output_path),
         ]
-        duration = video_duration_seconds(job.original_video.path)
+        SocialRenderedVideo.objects.filter(pk=job.pk).update(
+            status=SocialRenderedVideo.Status.PROCESSING,
+            progress_percent=1,
+            started_at=timezone.now(),
+            error_message="",
+        )
+        duration = video_duration_seconds(input_file.path)
         process = subprocess.Popen(command, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         stderr_tail = []
         for line in process.stderr:
             stderr_tail.append(line)
             stderr_tail = stderr_tail[-30:]
             current_time = parse_ffmpeg_time(line)
-            if current_time is not None:
+            if current_time is not None and duration > 0:
                 update_render_progress(job.pk, min(99, (current_time / duration) * 100))
 
         process.wait(timeout=900)
@@ -1301,17 +1354,36 @@ def render_social_video_file(job):
 
         with output_path.open("rb") as rendered_file:
             job.rendered_video.save(output_path.name, File(rendered_file), save=False)
-        job.status = SocialRenderedVideo.Status.DONE
+        job.status = SocialRenderedVideo.Status.COMPLETED
         job.progress_percent = 100
         job.error_message = ""
-        job.save(update_fields=["rendered_video", "status", "progress_percent", "error_message", "updated_at"])
+        job.duration_seconds = max(1, int(round(video_duration_seconds(job.rendered_video.path))))
+        job.file_size = Path(job.rendered_video.path).stat().st_size
+        job.resolution = video_resolution(job.rendered_video.path)[:40]
+        job.completed_at = timezone.now()
+        generate_render_thumbnail(job)
+        job.save(
+            update_fields=[
+                "rendered_video",
+                "thumbnail",
+                "status",
+                "progress_percent",
+                "error_message",
+                "duration_seconds",
+                "file_size",
+                "resolution",
+                "completed_at",
+                "updated_at",
+            ]
+        )
         return job
     finally:
         for text_file in text_files:
             text_file.unlink(missing_ok=True)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def run_social_render_job(job_id):
+def run_social_render_job(job_id, raise_errors=False):
     close_old_connections()
     job = SocialRenderedVideo.objects.get(pk=job_id)
     try:
@@ -1322,7 +1394,10 @@ def run_social_render_job(job_id):
             status=SocialRenderedVideo.Status.FAILED,
             error_message=str(exc),
             progress_percent=0,
+            retry_count=F("retry_count") + 1,
         )
+        if raise_errors:
+            raise
     finally:
         close_old_connections()
 
@@ -1345,10 +1420,12 @@ def serialize_media_download(request, job):
 def serialize_render_job(request, job):
     rendered_url = request.build_absolute_uri(job.rendered_video.url) if job.rendered_video else ""
     original_url = request.build_absolute_uri(job.original_video.url) if job.original_video else ""
+    thumbnail_url = request.build_absolute_uri(job.thumbnail.url) if job.thumbnail else ""
     return {
         "id": job.pk,
         "status": job.status,
         "progress_percent": job.progress_percent,
+        "progress_percentage": job.progress_percent,
         "title": job.title,
         "headline": job.headline,
         "ticker_label": job.ticker_label,
@@ -1359,9 +1436,58 @@ def serialize_render_job(request, job):
         "frame_template": job.frame_template,
         "original_video_url": original_url,
         "rendered_video_url": rendered_url,
+        "thumbnail": thumbnail_url,
+        "thumbnail_url": thumbnail_url,
+        "duration_seconds": job.duration_seconds,
+        "file_size": job.file_size,
+        "resolution": job.resolution,
         "error": job.error_message,
         "created_at": job.created_at.isoformat(),
     }
+
+
+def completed_rendered_videos():
+    return SocialRenderedVideo.objects.filter(
+        status__in=[SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE],
+        is_active=True,
+        is_downloadable=True,
+        rendered_video__isnull=False,
+    ).exclude(rendered_video="")
+
+
+def serialize_public_rendered_video(request, job, include_detail=False):
+    stream_url = request.build_absolute_uri(job.rendered_video.url) if job.rendered_video else ""
+    thumbnail_url = request.build_absolute_uri(job.thumbnail.url) if job.thumbnail else ""
+    download_url = request.build_absolute_uri(f"/api/live-tv/rendered-videos/{job.pk}/download/")
+    data = {
+        "id": job.pk,
+        "title": job.title,
+        "headline": job.headline,
+        "thumbnail": thumbnail_url,
+        "thumbnail_url": thumbnail_url,
+        "duration": job.duration_seconds,
+        "duration_seconds": job.duration_seconds,
+        "file_size": job.file_size,
+        "resolution": job.resolution,
+        "created_at": job.created_at.isoformat(),
+        "completed_at": job.completed_at.isoformat() if job.completed_at else "",
+        "stream_url": stream_url,
+        "video_url": stream_url,
+        "download_url": download_url,
+        "status": "completed",
+    }
+    if include_detail:
+        data.update(
+            {
+                "ticker_label": job.ticker_label,
+                "ticker_text": job.ticker_text,
+                "lower_third_label": job.lower_third_label,
+                "broadcast_session_id": job.broadcast_session_id,
+                "source_video_id": job.source_video_id,
+                "live_channel_id": job.live_channel_id,
+            }
+        )
+    return data
 
 
 def delete_file_field(file_field):
@@ -1440,6 +1566,51 @@ def current_live_api(request, slug=None):
 @require_GET
 def current_live_tv_api(request):
     return current_live_api(request)
+
+
+@require_GET
+def rendered_videos_list_api(request):
+    try:
+        page = max(int(request.GET.get("page", "1")), 1)
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = min(max(int(request.GET.get("page_size", "12")), 1), 30)
+    except (TypeError, ValueError):
+        page_size = 12
+    offset = (page - 1) * page_size
+    queryset = completed_rendered_videos().select_related("source_video", "live_channel").order_by("-completed_at", "-created_at", "-pk")
+    total = queryset.count()
+    items = list(queryset[offset : offset + page_size])
+    return JsonResponse(
+        {
+            "success": True,
+            "count": total,
+            "page": page,
+            "page_size": page_size,
+            "next_page": page + 1 if offset + page_size < total else None,
+            "results": [serialize_public_rendered_video(request, job) for job in items],
+        }
+    )
+
+
+@require_GET
+def rendered_video_detail_api(request, pk):
+    job = get_object_or_404(completed_rendered_videos(), pk=pk)
+    return JsonResponse({"success": True, "video": serialize_public_rendered_video(request, job, include_detail=True)})
+
+
+@require_GET
+def rendered_video_download_api(request, pk):
+    job = get_object_or_404(completed_rendered_videos(), pk=pk)
+    if not job.rendered_video or not job.rendered_video.name:
+        return JsonResponse({"success": False, "detail": "Rendered file not found."}, status=404)
+    file_path = Path(job.rendered_video.path).resolve()
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    if media_root not in file_path.parents:
+        return JsonResponse({"success": False, "detail": "Invalid media path."}, status=400)
+    filename = f"the-up-media-{job.pk}.mp4"
+    return FileResponse(open(file_path, "rb"), as_attachment=True, filename=filename, content_type="video/mp4")
 
 
 @require_GET

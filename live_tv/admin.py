@@ -396,7 +396,42 @@ class MediaDownloadAdmin(admin.ModelAdmin):
     readonly_fields = ("progress_percent", "created_at", "updated_at", "error_message")
 @admin.register(SocialRenderedVideo)
 class SocialRenderedVideoAdmin(admin.ModelAdmin):
-    list_display = ("title", "frame_template", "render_format", "status", "progress_percent", "created_by", "created_at")
-    list_filter = ("status", "render_format", "frame_category")
-    search_fields = ("title", "headline", "ticker_label", "ticker_text", "frame_template")
-    readonly_fields = ("progress_percent", "created_at", "updated_at", "error_message")
+    list_display = ("title", "live_channel", "source_video", "frame_template", "render_format", "status", "progress_percent", "is_active", "is_downloadable", "created_at")
+    list_filter = ("status", "render_format", "frame_category", "live_channel", "is_active", "is_downloadable", "created_at")
+    search_fields = ("title", "headline", "ticker_label", "ticker_text", "frame_template", "broadcast_session_id", "render_key")
+    readonly_fields = ("progress_percent", "render_key", "broadcast_session_id", "snapshot", "file_size", "resolution", "duration_seconds", "started_at", "completed_at", "created_at", "updated_at", "error_message")
+    actions = ("retry_failed_render", "regenerate_thumbnail", "mark_active", "mark_inactive")
+
+    @admin.action(description="Retry failed render")
+    def retry_failed_render(self, request, queryset):
+        from .tasks import render_live_broadcast_video_task
+
+        count = 0
+        for job in queryset.filter(status=SocialRenderedVideo.Status.FAILED):
+            job.status = SocialRenderedVideo.Status.PENDING
+            job.progress_percent = 0
+            job.error_message = ""
+            job.retry_count += 1
+            job.save(update_fields=["status", "progress_percent", "error_message", "retry_count", "updated_at"])
+            render_live_broadcast_video_task.delay(job.pk)
+            count += 1
+        self.message_user(request, f"{count} failed render jobs queued.")
+
+    @admin.action(description="Regenerate thumbnail")
+    def regenerate_thumbnail(self, request, queryset):
+        from .views import generate_render_thumbnail
+
+        count = 0
+        for job in queryset.exclude(rendered_video=""):
+            generate_render_thumbnail(job)
+            job.save(update_fields=["thumbnail", "updated_at"])
+            count += 1
+        self.message_user(request, f"{count} thumbnails regenerated.")
+
+    @admin.action(description="Mark selected active")
+    def mark_active(self, request, queryset):
+        self.message_user(request, f"{queryset.update(is_active=True)} rendered videos marked active.")
+
+    @admin.action(description="Mark selected inactive")
+    def mark_inactive(self, request, queryset):
+        self.message_user(request, f"{queryset.update(is_active=False)} rendered videos marked inactive.")

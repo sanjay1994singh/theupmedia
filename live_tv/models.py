@@ -785,7 +785,9 @@ class MediaDownload(models.Model):
 
 class SocialRenderedVideo(models.Model):
     class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
         PROCESSING = "processing", "Processing"
+        COMPLETED = "completed", "Completed"
         DONE = "done", "Done"
         FAILED = "failed", "Failed"
 
@@ -797,17 +799,62 @@ class SocialRenderedVideo(models.Model):
     render_format = models.CharField(max_length=10, default="16:9", db_default="16:9")
     frame_category = models.CharField(max_length=40, blank=True)
     frame_template = models.CharField(max_length=60, blank=True)
-    original_video = models.FileField(upload_to="social-render/original/%Y/%m/")
+    source_video = models.ForeignKey(
+        LiveTVChannel,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="broadcast_rendered_videos",
+    )
+    live_channel = models.ForeignKey(
+        LiveTVChannel,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="live_broadcast_renders",
+    )
+    playlist_item = models.ForeignKey(
+        LiveTVPlaylistItem,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="rendered_broadcasts",
+    )
+    broadcast_session_id = models.CharField(max_length=120, blank=True)
+    render_key = models.CharField(max_length=180, blank=True, unique=True, null=True)
+    snapshot = models.JSONField(default=dict, blank=True)
+    original_video = models.FileField(upload_to="social-render/original/%Y/%m/", blank=True, null=True)
     rendered_video = models.FileField(upload_to="social-render/rendered/%Y/%m/", blank=True, null=True)
+    thumbnail = models.ImageField(upload_to="social-render/thumbnails/%Y/%m/", blank=True, null=True)
+    duration_seconds = models.PositiveIntegerField(default=0)
+    file_size = models.PositiveBigIntegerField(default=0)
+    resolution = models.CharField(max_length=40, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PROCESSING)
     progress_percent = models.PositiveSmallIntegerField(default=0)
     error_message = models.TextField(blank=True)
+    retry_count = models.PositiveSmallIntegerField(default=0)
+    started_at = models.DateTimeField(blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    is_downloadable = models.BooleanField(default=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, blank=True, null=True, related_name="social_rendered_videos")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "-created_at"], name="rendered_status_created_idx"),
+            models.Index(fields=["live_channel", "broadcast_session_id"], name="rendered_session_idx"),
+        ]
 
     def __str__(self):
         return self.title
+
+    @property
+    def progress_percentage(self):
+        return self.progress_percent
+
+    @property
+    def is_completed(self):
+        return self.status in {self.Status.COMPLETED, self.Status.DONE}

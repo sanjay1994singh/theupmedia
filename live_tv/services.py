@@ -11,6 +11,9 @@ from .models import (
     LiveTVPlaylistCycle,
     LiveTVPlaylistCycleItem,
     LiveTVPlaylistItem,
+    LiveTVSetting,
+    NewsTickerSetting,
+    SocialRenderedVideo,
 )
 
 logger = logging.getLogger(__name__)
@@ -100,7 +103,109 @@ def _create_cycle(channel, items, starts_at, version):
             for position, item in enumerate(items)
         ]
     )
+    transaction.on_commit(lambda: enqueue_broadcast_render_jobs_for_cycle(cycle.pk))
     return cycle
+
+
+def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
+    setting = LiveTVSetting.get_solo()
+    ticker = NewsTickerSetting.get_solo()
+    headline = video.headline or ""
+    lower_label = video.lower_third_label or ""
+    title = headline or video.title or f"{channel.title} {timezone.localtime().strftime('%Y-%m-%d %H:%M')}"
+    return {
+        "title": title,
+        "headline": headline,
+        "headline_label": lower_label,
+        "lower_third_label": lower_label,
+        "ticker_label": ticker.label or setting.default_ticker_label,
+        "ticker_text": ticker.text or setting.default_ticker_text,
+        "ticker_speed_seconds": ticker.speed_seconds,
+        "mobile_ticker_speed_seconds": ticker.mobile_speed_seconds,
+        "ticker_style": ticker.style,
+        "channel_name": setting.name,
+        "channel_logo": setting.channel_logo.name if setting.channel_logo else "",
+        "live_label": setting.live_label,
+        "show_channel_logo": setting.show_channel_logo,
+        "show_live_badge": setting.show_live_badge,
+        "show_lower_third": setting.show_lower_third,
+        "show_ticker": setting.show_ticker,
+        "render_format": "16:9",
+        "frame_template": "broadcast_live_tv",
+        "frame_category": "live_broadcast",
+        "source_video_id": video.pk,
+        "live_channel_id": channel.pk,
+        "playlist_item_id": playlist_item.pk if playlist_item else None,
+        "cycle_id": cycle_item.cycle_id if cycle_item else None,
+        "cycle_item_id": cycle_item.pk if cycle_item else None,
+        "duration_seconds": video.effective_duration_seconds,
+    }
+
+
+def create_broadcast_render_job(cycle_item):
+    cycle_item = (
+        LiveTVPlaylistCycleItem.objects.select_related(
+            "cycle__channel",
+            "playlist_item",
+            "video",
+        )
+        .get(pk=cycle_item.pk)
+    )
+    channel = cycle_item.cycle.channel
+    video = cycle_item.video
+    if not video.video_file:
+        return None, False
+    broadcast_session_id = f"cycle-{cycle_item.cycle_id}-v{cycle_item.cycle.version}-item-{cycle_item.pk}"
+    render_key = f"live:{channel.pk}:{cycle_item.playlist_item_id}:{video.pk}:{broadcast_session_id}"
+    snapshot = broadcast_snapshot_for(video, channel, cycle_item.playlist_item, cycle_item)
+    defaults = {
+        "title": snapshot["title"][:180],
+        "headline": snapshot["headline"][:180],
+        "ticker_label": snapshot["ticker_label"][:60],
+        "ticker_text": snapshot["ticker_text"][:260],
+        "lower_third_label": snapshot["lower_third_label"][:60],
+        "render_format": snapshot["render_format"],
+        "frame_category": snapshot["frame_category"],
+        "frame_template": snapshot["frame_template"],
+        "source_video": video,
+        "live_channel": channel,
+        "playlist_item": cycle_item.playlist_item,
+        "broadcast_session_id": broadcast_session_id,
+        "snapshot": snapshot,
+        "duration_seconds": video.effective_duration_seconds,
+        "status": SocialRenderedVideo.Status.PENDING,
+        "progress_percent": 0,
+        "error_message": "",
+        "is_active": True,
+        "is_downloadable": True,
+    }
+    job, created = SocialRenderedVideo.objects.get_or_create(render_key=render_key, defaults=defaults)
+    if not created and job.status == SocialRenderedVideo.Status.FAILED:
+        for field, value in defaults.items():
+            setattr(job, field, value)
+        job.retry_count += 1
+        job.save()
+    return job, created
+
+
+def enqueue_broadcast_render_jobs_for_cycle(cycle_id):
+    try:
+        items = list(LiveTVPlaylistCycleItem.objects.filter(cycle_id=cycle_id).order_by("position", "pk"))
+        job_ids = []
+        for cycle_item in items:
+            job, created = create_broadcast_render_job(cycle_item)
+            if job and (created or job.status in {SocialRenderedVideo.Status.PENDING, SocialRenderedVideo.Status.FAILED}):
+                job_ids.append(job.pk)
+        if not job_ids:
+            return []
+        from .tasks import render_live_broadcast_video_task
+
+        for job_id in job_ids:
+            render_live_broadcast_video_task.delay(job_id)
+        return job_ids
+    except Exception:
+        logger.exception("Failed to enqueue live broadcast render jobs for cycle %s", cycle_id)
+        return []
 
 
 def ensure_current_cycle(channel, at=None):

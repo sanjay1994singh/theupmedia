@@ -18,6 +18,7 @@ Weekly structure:
 
 **Blog Types Jo Sale Laayenge**
 1. Service page style blogs  
+
 Example: `News TV App Development Company in India`
 
 2. Problem-solution blogs  
