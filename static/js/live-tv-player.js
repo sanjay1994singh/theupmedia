@@ -1,5 +1,16 @@
 (function () {
+  function getLiveFrame(element) {
+    return element ? element.closest(".web-live-frame, .live-player-frame") : null;
+  }
+
   function setFrameControlState(frame, active) {
+    if (frame.classList.contains("web-live-frame")) {
+      const video = frame.querySelector("video");
+      if (video) {
+        video.controls = false;
+      }
+      return;
+    }
     frame.classList.toggle("is-controlling", active);
     const video = frame.querySelector("video");
     if (frame.dataset.hideNativeControls === "true") {
@@ -12,16 +23,6 @@
       return;
     }
     video.controls = active;
-  }
-
-  function scheduleMobileHide(frame) {
-    clearTimeout(frame.liveTvControlTimer);
-    frame.liveTvControlTimer = setTimeout(function () {
-      if (document.fullscreenElement && frame.contains(document.fullscreenElement)) {
-        return;
-      }
-      setFrameControlState(frame, false);
-    }, 4500);
   }
 
   function restartNativeVideo(frame) {
@@ -94,7 +95,7 @@
       src.searchParams.set("modestbranding", "1");
       src.searchParams.set("origin", window.location.origin);
 
-      const frame = iframe.closest(".live-player-frame");
+      const frame = getLiveFrame(iframe);
       if (frame && frame.dataset.forceAutoplay === "true") {
         src.searchParams.set("autoplay", "1");
         src.searchParams.set("mute", "1");
@@ -128,7 +129,7 @@
         events: {
           onStateChange: function (event) {
             if (event.data === window.YT.PlayerState.ENDED) {
-              handlePlaybackEnded(iframe.closest(".live-player-frame"), event.target);
+              handlePlaybackEnded(getLiveFrame(iframe), event.target);
             }
           },
         },
@@ -141,7 +142,7 @@
         try {
           if (player.getPlayerState() === window.YT.PlayerState.ENDED) {
             clearInterval(iframe.liveTvEndedPoll);
-            handlePlaybackEnded(iframe.closest(".live-player-frame"), player);
+            handlePlaybackEnded(getLiveFrame(iframe), player);
           }
         } catch (error) {
           clearInterval(iframe.liveTvEndedPoll);
@@ -225,7 +226,7 @@
 
   function syncMuteButton(frame) {
     const video = frame.querySelector("video");
-    const button = frame.querySelector(".live-mute-toggle");
+    const button = frame.querySelector(".live-mute-toggle, .web-live-mute");
     if (!video || !button) {
       return;
     }
@@ -236,7 +237,7 @@
 
   function initMuteToggle(frame) {
     const video = frame.querySelector("video");
-    const button = frame.querySelector(".live-mute-toggle");
+    const button = frame.querySelector(".live-mute-toggle, .web-live-mute");
     if (!video || !button || button.dataset.ready === "true") {
       return;
     }
@@ -260,9 +261,9 @@
   }
 
   function initLiveTvFrames() {
-    document.querySelectorAll(".live-player-frame").forEach(function (frame) {
+    document.querySelectorAll(".web-live-frame, .live-player-frame").forEach(function (frame) {
       const video = frame.querySelector("video");
-      if (video && frame.classList.contains("live-player-frame--native-controls")) {
+      if (video && (frame.classList.contains("web-live-frame--native") || frame.classList.contains("live-player-frame--native-controls"))) {
         video.controls = false;
         video.preload = frame.dataset.forceAutoplay === "true" ? "auto" : "metadata";
         if (frame.dataset.forceAutoplay === "true") {
@@ -279,40 +280,15 @@
       }
       initMuteToggle(frame);
 
-      frame.addEventListener("mouseenter", function () {
-        setFrameControlState(frame, true);
-      });
-
-      frame.addEventListener("mouseleave", function () {
-        if (document.fullscreenElement && frame.contains(document.fullscreenElement)) {
-          return;
-        }
-        setFrameControlState(frame, false);
-      });
-
-      frame.addEventListener("focusin", function () {
-        setFrameControlState(frame, true);
-      });
-
-      frame.addEventListener("focusout", function () {
-        setFrameControlState(frame, false);
-      });
-
-      frame.addEventListener("touchstart", function () {
-        setFrameControlState(frame, true);
-        scheduleMobileHide(frame);
-      }, { passive: true });
-
-      frame.addEventListener("click", function () {
-        setFrameControlState(frame, true);
-        scheduleMobileHide(frame);
-      });
-
       if (video) {
         video.addEventListener("play", function () {
-          scheduleMobileHide(frame);
+          setFrameControlState(frame, false);
         });
         video.addEventListener("pause", function () {
+          if (frame.classList.contains("web-live-frame")) {
+            video.controls = false;
+            return;
+          }
           setFrameControlState(frame, true);
         });
         video.addEventListener("ended", function () {

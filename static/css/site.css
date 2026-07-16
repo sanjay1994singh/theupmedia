@@ -266,13 +266,15 @@ img {
   padding: 0;
 }
 
-.home-showcase-main .live-player-card {
+.home-showcase-main .live-player-card,
+.home-showcase-main .web-live-card {
   border: 0;
   border-radius: 0;
   box-shadow: none;
 }
 
-.home-showcase-main .live-player-frame {
+.home-showcase-main .live-player-frame,
+.home-showcase-main .web-live-frame {
   border-radius: 0;
 }
 
@@ -2256,6 +2258,360 @@ time {
 @media (prefers-reduced-motion: reduce) {
   .ticker-track p {
     animation: none;
+  }
+}
+
+.web-live-card {
+  background: #000;
+  border: 0;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(21, 21, 21, 0.08);
+  overflow: hidden;
+}
+
+.web-live-frame {
+  background: #000;
+  color: #fff;
+  overflow: hidden;
+  position: relative;
+}
+
+.web-live-frame::before {
+  content: "";
+  display: block;
+  padding-top: 56.25%;
+}
+
+.web-live-frame iframe,
+.web-live-frame video,
+.web-live-poster,
+.web-live-empty {
+  border: 0;
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+}
+
+.web-live-frame video {
+  pointer-events: none;
+}
+
+.web-live-frame video::-webkit-media-controls,
+.web-live-frame video::-webkit-media-controls-enclosure,
+.web-live-frame video::-webkit-media-controls-panel,
+.web-live-frame video::-webkit-media-controls-play-button,
+.web-live-frame video::-webkit-media-controls-timeline,
+.web-live-frame video::-webkit-media-controls-current-time-display,
+.web-live-frame video::-webkit-media-controls-time-remaining-display,
+.web-live-frame video::-webkit-media-controls-mute-button,
+.web-live-frame video::-webkit-media-controls-fullscreen-button,
+.web-live-frame video::-webkit-media-controls-overflow-button {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.web-live-empty {
+  align-items: center;
+  display: grid;
+  justify-items: center;
+  padding: 18px;
+  text-align: center;
+}
+
+.web-live-empty strong {
+  color: #fff;
+  font-size: clamp(20px, 4vw, 34px);
+  font-weight: 900;
+}
+
+.web-live-badge {
+  align-items: center;
+  background: #ef1717;
+  border-radius: 6px;
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 900;
+  gap: 8px;
+  left: 16px;
+  line-height: 1;
+  padding: 9px 12px;
+  pointer-events: none;
+  position: absolute;
+  text-transform: uppercase;
+  top: 16px;
+  z-index: 4;
+}
+
+.web-live-badge span {
+  background: #fff;
+  border-radius: 999px;
+  height: 9px;
+  width: 9px;
+}
+
+.web-live-logo {
+  align-items: center;
+  display: grid;
+  justify-items: center;
+  pointer-events: none;
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  z-index: 4;
+}
+
+.web-live-logo img {
+  max-height: 62px;
+  max-width: 96px;
+  object-fit: contain;
+}
+
+.web-live-mute {
+  bottom: 52px;
+  right: 16px;
+}
+
+.web-live-ticker {
+  align-items: stretch;
+  background: #000;
+  bottom: 0;
+  display: flex;
+  height: 38px;
+  left: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  z-index: 4;
+}
+
+.web-live-ticker-label {
+  align-items: center;
+  background: linear-gradient(180deg, #d71920 0%, #990407 100%);
+  display: flex;
+  flex: 0 0 116px;
+  justify-content: center;
+  overflow: hidden;
+  padding: 0 10px;
+  position: relative;
+}
+
+.web-live-ticker-label i {
+  background: rgba(255, 255, 255, 0.16);
+  height: 46%;
+  left: -22px;
+  position: absolute;
+  right: -16px;
+  top: 0;
+  transform: skewX(-18deg);
+}
+
+.web-live-ticker-label span {
+  color: #fff;
+  display: block;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.05;
+  max-width: 100%;
+  overflow: hidden;
+  position: relative;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.web-live-ticker-chevrons {
+  background: #fff;
+  display: flex;
+  flex: 0 0 46px;
+  margin-left: -4px;
+}
+
+.web-live-ticker-chevrons i {
+  display: block;
+  height: 100%;
+  transform: skewX(-18deg);
+  width: 15px;
+}
+
+.web-live-ticker-chevrons .is-dark {
+  background: #111;
+}
+
+.web-live-ticker-chevrons .is-red {
+  background: #d71920;
+}
+
+.web-live-ticker-chevrons .is-white {
+  background: #fff;
+}
+
+.web-live-ticker-marquee {
+  align-items: center;
+  background: #fff;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex: 1 1 auto;
+  gap: 42px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.web-live-ticker-marquee p {
+  animation: web-live-ticker-scroll var(--ticker-speed, 22s) linear infinite;
+  color: #151515;
+  flex: 0 0 auto;
+  font-family: "Noto Sans Devanagari", "Noto Sans", Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
+  margin: 0;
+  min-width: 100%;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+.web-live-ticker-cap {
+  background: #fff;
+  flex: 0 0 18px;
+  overflow: hidden;
+  position: relative;
+}
+
+.web-live-ticker-cap i {
+  background: #c10008;
+  bottom: 0;
+  position: absolute;
+  right: -10px;
+  top: 0;
+  transform: skewX(-12deg);
+  width: 22px;
+}
+
+@keyframes web-live-ticker-scroll {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(calc(-100% - 42px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .web-live-ticker-marquee p {
+    animation: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .web-live-badge {
+    font-size: 12px;
+    left: 12px;
+    padding: 8px 10px;
+    top: 12px;
+  }
+
+  .web-live-logo {
+    right: 12px;
+    top: 12px;
+  }
+
+  .web-live-logo img {
+    max-height: 46px;
+    max-width: 74px;
+  }
+
+  .web-live-ticker {
+    height: 32px;
+  }
+
+  .web-live-ticker-label {
+    flex-basis: 92px;
+    padding: 0 7px;
+  }
+
+  .web-live-ticker-label span {
+    font-size: 12px;
+  }
+
+  .web-live-ticker-chevrons {
+    flex-basis: 34px;
+  }
+
+  .web-live-ticker-chevrons i {
+    width: 11px;
+  }
+
+  .web-live-ticker-marquee {
+    gap: 34px;
+  }
+
+  .web-live-ticker-marquee p {
+    font-size: 13px;
+    padding: 0 9px;
+  }
+
+  .web-live-ticker-cap {
+    flex-basis: 12px;
+  }
+
+  .web-live-mute {
+    bottom: 44px;
+    height: 38px;
+    right: 12px;
+    width: 38px;
+  }
+}
+
+@media (max-width: 520px) {
+  .web-live-card {
+    border-radius: 0;
+  }
+
+  .web-live-ticker {
+    height: 28px;
+  }
+
+  .web-live-ticker-label {
+    flex-basis: 82px;
+  }
+
+  .web-live-ticker-label span {
+    font-size: 11px;
+  }
+
+  .web-live-ticker-chevrons {
+    flex-basis: 30px;
+  }
+
+  .web-live-ticker-chevrons i {
+    width: 10px;
+  }
+
+  .web-live-ticker-marquee p {
+    font-size: 12px;
+    padding: 0 8px;
+  }
+
+  .web-live-badge {
+    font-size: 11px;
+    gap: 6px;
+    padding: 7px 9px;
+  }
+
+  .web-live-badge span {
+    height: 7px;
+    width: 7px;
+  }
+
+  .web-live-logo img {
+    max-height: 38px;
+    max-width: 62px;
   }
 }
 

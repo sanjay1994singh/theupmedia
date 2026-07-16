@@ -8,77 +8,7 @@
   <div class="home-showcase">
     <div class="home-showcase-main">
       {% if home_live_tv %}
-        <div class="live-player-card">
-          <div class="live-player-frame live-player-frame--broadcast {% if home_live_tv.player_source_type == 'direct' or home_live_tv.player_source_type == 'hls' %}live-player-frame--native-controls{% endif %}" data-next-url="{% if home_live_tv_next %}{{ home_live_tv_next.get_absolute_url }}{% endif %}" data-loop-same="{% if home_live_tv_loop_same %}true{% else %}false{% endif %}" data-force-autoplay="true" data-sync-reload="true" data-hide-native-controls="true" data-seek-position="{{ home_live_seek_position|default:0 }}" data-video-duration="{{ home_live_video_duration|default:0 }}" data-server-time="{{ home_live_server_time }}">
-            {% if home_live_tv.is_live and home_live_settings.show_live_badge %}
-              <span class="live-badge"><span></span>{{ home_live_settings.live_label }}</span>
-            {% endif %}
-
-            {% if home_live_settings.show_channel_logo %}
-              <div class="live-channel-logo">
-                {% if home_live_settings.channel_logo %}
-                  <img src="{{ home_live_settings.channel_logo.url }}" alt="{{ SITE_NAME }} logo" loading="eager" decoding="async">
-                {% else %}
-                  <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="{{ SITE_NAME }} logo" loading="eager" decoding="async">
-                {% endif %}
-                <strong>{{ home_live_settings.live_label }}</strong>
-              </div>
-            {% endif %}
-
-            {% if home_live_tv.player_source_type == "youtube" %}
-              <iframe
-                class="youtube-live-iframe"
-                src="{{ home_live_tv.youtube_embed_url }}"
-                title="{{ home_live_tv.title }}"
-                loading="lazy"
-                referrerpolicy="strict-origin-when-cross-origin"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowfullscreen></iframe>
-            {% elif home_live_tv.player_source_type == "direct" %}
-              <video preload="auto" autoplay muted playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
-                <source src="{{ home_live_tv.video_file.url }}" type="{{ home_live_tv.video_mime_type }}">
-                Your browser does not support video playback.
-              </video>
-            {% elif home_live_tv.player_source_type == "hls" %}
-              <video preload="auto" autoplay muted playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
-                <source src="{{ home_live_tv.stream_url }}" type="application/x-mpegURL">
-                Your browser does not support this live stream.
-              </video>
-            {% elif home_live_tv.poster_image %}
-              <img class="live-fallback-poster" src="{{ home_live_tv.poster_image.url }}" alt="{{ home_live_tv.title }}" loading="eager" decoding="async" fetchpriority="high">
-            {% else %}
-              <div class="live-empty-player">
-                <strong>{{ home_live_tv.title }}</strong>
-                <span>Live TV source will appear here.</span>
-              </div>
-            {% endif %}
-
-            {% if home_live_settings.show_lower_third %}
-              <div class="lower-third">
-                <span>{{ home_live_tv.lower_third_label|default:home_live_settings.default_lower_third_label }}</span>
-                <strong>{{ home_live_tv.headline|default:home_live_settings.default_headline }}</strong>
-                <em>News</em>
-              </div>
-            {% endif %}
-
-            {% if home_live_settings.show_ticker %}
-              <div class="news-ticker">
-                <span>{{ home_news_ticker.label }}</span>
-                <div class="ticker-track" style="--ticker-speed: {{ home_news_ticker.speed_seconds }}s" aria-label="{{ home_news_ticker.text }}">
-                  <p>{{ home_news_ticker.text }}</p>
-                  <p aria-hidden="true">{{ home_news_ticker.text }}</p>
-                </div>
-              </div>
-            {% endif %}
-
-            {% if home_live_tv.player_source_type == "direct" or home_live_tv.player_source_type == "hls" %}
-              <button class="live-mute-toggle" type="button" aria-label="Unmute live TV" data-muted="true">
-                <span class="live-mute-toggle__off" aria-hidden="true"></span>
-                <span class="live-mute-toggle__on" aria-hidden="true"></span>
-              </button>
-            {% endif %}
-          </div>
-        </div>
+        {% include "live_tv/partials/web_live_broadcast.html" with live_channel=home_live_tv live_settings=home_live_settings live_ticker=home_news_ticker live_next_channel=home_live_tv_next live_loop_same=home_live_tv_loop_same live_seek_position=home_live_seek_position live_video_duration=home_live_video_duration live_server_time=home_live_server_time %}
       {% else %}
         <div class="hero-copy">
           <p class="eyebrow">Latest Updates</p>

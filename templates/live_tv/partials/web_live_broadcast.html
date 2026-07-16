@@ -1,0 +1,81 @@
+{% load static %}
+<div class="web-live-card">
+  <div
+    class="web-live-frame {% if live_channel.player_source_type == 'direct' or live_channel.player_source_type == 'hls' %}web-live-frame--native{% endif %}"
+    data-next-url="{% if live_next_channel %}{{ live_next_channel.get_absolute_url }}{% endif %}"
+    data-loop-same="{% if live_loop_same %}true{% else %}false{% endif %}"
+    data-force-autoplay="true"
+    data-sync-reload="true"
+    data-hide-native-controls="true"
+    data-seek-position="{{ live_seek_position|default:0 }}"
+    data-video-duration="{{ live_video_duration|default:0 }}"
+    data-server-time="{{ live_server_time }}"
+  >
+    {% if live_channel and live_channel.is_live and live_settings.show_live_badge %}
+      <span class="web-live-badge"><span></span>{{ live_settings.live_label|default:"LIVE" }}</span>
+    {% endif %}
+
+    {% if live_settings.show_channel_logo %}
+      <div class="web-live-logo">
+        {% if live_settings.channel_logo %}
+          <img src="{{ live_settings.channel_logo.url }}" alt="{{ SITE_NAME }} logo" loading="eager" decoding="async">
+        {% else %}
+          <img src="{% static 'img/site_logo/theup_site_logo.png' %}" alt="{{ SITE_NAME }} logo" loading="eager" decoding="async">
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {% if live_channel.player_source_type == "youtube" %}
+      <iframe
+        class="youtube-live-iframe"
+        src="{{ live_channel.youtube_embed_url }}"
+        title="{{ live_channel.title }}"
+        loading="lazy"
+        referrerpolicy="strict-origin-when-cross-origin"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen></iframe>
+    {% elif live_channel.player_source_type == "direct" %}
+      <video preload="auto" autoplay muted playsinline disablepictureinpicture controlslist="nodownload noplaybackrate noremoteplayback nofullscreen" {% if live_channel.poster_image %}poster="{{ live_channel.poster_image.url }}"{% endif %}>
+        <source src="{{ live_channel.video_file.url }}" type="{{ live_channel.video_mime_type }}">
+        Your browser does not support video playback.
+      </video>
+    {% elif live_channel.player_source_type == "hls" %}
+      <video preload="auto" autoplay muted playsinline disablepictureinpicture controlslist="nodownload noplaybackrate noremoteplayback nofullscreen" {% if live_channel.poster_image %}poster="{{ live_channel.poster_image.url }}"{% endif %}>
+        <source src="{{ live_channel.stream_url }}" type="application/x-mpegURL">
+        Your browser does not support this live stream.
+      </video>
+    {% elif live_channel.poster_image %}
+      <img class="web-live-poster" src="{{ live_channel.poster_image.url }}" alt="{{ live_channel.title }}" loading="eager" decoding="async" fetchpriority="high">
+    {% else %}
+      <div class="web-live-empty">
+        <strong>Live is going soon</strong>
+      </div>
+    {% endif %}
+
+    {% if live_settings.show_ticker %}
+      <div class="web-live-ticker">
+        <div class="web-live-ticker-label">
+          <i aria-hidden="true"></i>
+          <span>{{ live_ticker.label|default:live_settings.default_ticker_label }}</span>
+        </div>
+        <div class="web-live-ticker-chevrons" aria-hidden="true">
+          <i class="is-dark"></i>
+          <i class="is-red"></i>
+          <i class="is-white"></i>
+        </div>
+        <div class="web-live-ticker-marquee" style="--ticker-speed: {{ live_ticker.speed_seconds|default:live_settings.ticker_speed_seconds }}s" aria-label="{{ live_ticker.text|default:live_settings.default_ticker_text }}">
+          <p>{{ live_ticker.text|default:live_settings.default_ticker_text }}</p>
+          <p aria-hidden="true">{{ live_ticker.text|default:live_settings.default_ticker_text }}</p>
+        </div>
+        <div class="web-live-ticker-cap" aria-hidden="true"><i></i></div>
+      </div>
+    {% endif %}
+
+    {% if live_channel.player_source_type == "direct" or live_channel.player_source_type == "hls" %}
+      <button class="web-live-mute live-mute-toggle" type="button" aria-label="Unmute live TV" data-muted="true">
+        <span class="live-mute-toggle__off" aria-hidden="true"></span>
+        <span class="live-mute-toggle__on" aria-hidden="true"></span>
+      </button>
+    {% endif %}
+  </div>
+</div>
