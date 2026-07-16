@@ -2370,8 +2370,75 @@ time {
 }
 
 .web-live-mute {
-  bottom: 52px;
-  right: 16px;
+  background: rgba(0, 0, 0, 0.62);
+  border-color: rgba(255, 255, 255, 0.38);
+  bottom: 58px;
+  box-shadow: none;
+  height: 42px;
+  right: 14px;
+  width: 42px;
+  z-index: 8;
+}
+
+.web-live-mute:hover,
+.web-live-mute:focus-visible {
+  background: rgba(0, 0, 0, 0.72);
+  transform: none;
+}
+
+.web-live-mute .live-mute-toggle__off,
+.web-live-mute .live-mute-toggle__on {
+  display: none;
+  height: 24px;
+  position: relative;
+  width: 24px;
+}
+
+.web-live-mute[data-muted="true"] .live-mute-toggle__off,
+.web-live-mute[data-muted="false"] .live-mute-toggle__on {
+  display: block;
+}
+
+.web-live-mute .live-mute-toggle__off::before,
+.web-live-mute .live-mute-toggle__on::before {
+  background: #fff;
+  border: 0;
+  clip-path: polygon(0 35%, 32% 35%, 78% 5%, 78% 95%, 32% 65%, 0 65%);
+  content: "";
+  height: 18px;
+  left: 3px;
+  position: absolute;
+  top: 3px;
+  width: 16px;
+}
+
+.web-live-mute .live-mute-toggle__off::after {
+  background: #fff;
+  box-shadow: none;
+  content: "";
+  height: 24px;
+  left: 17px;
+  position: absolute;
+  top: 0;
+  transform: rotate(42deg);
+  width: 3px;
+}
+
+.web-live-mute .live-mute-toggle__on::after {
+  background: transparent;
+  border: 2px solid #fff;
+  border-bottom-color: transparent;
+  border-left: 0;
+  border-top-color: transparent;
+  border-radius: 0 999px 999px 0;
+  box-shadow: 4px 0 0 -1px #fff;
+  content: "";
+  height: 16px;
+  left: 16px;
+  position: absolute;
+  top: 4px;
+  transform: none;
+  width: 8px;
 }
 
 .web-live-ticker {
@@ -2562,9 +2629,9 @@ time {
 
   .web-live-mute {
     bottom: 44px;
-    height: 38px;
+    height: 42px;
     right: 12px;
-    width: 38px;
+    width: 42px;
   }
 }
 
