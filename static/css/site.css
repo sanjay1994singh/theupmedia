@@ -1908,6 +1908,18 @@ time {
   width: 100%;
 }
 
+.live-player-frame--broadcast video::-webkit-media-controls,
+.live-player-frame--broadcast video::-webkit-media-controls-enclosure,
+.live-player-frame--broadcast video::-webkit-media-controls-panel {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.live-player-frame--broadcast video {
+  pointer-events: none;
+}
+
 .live-empty-player {
   align-items: center;
   background: radial-gradient(circle at top, #16355e, #061225 62%);
@@ -2058,6 +2070,117 @@ time {
 .live-player-frame.is-controlling .lower-third {
   opacity: 0;
   transform: translateY(6px);
+}
+
+.live-player-frame--broadcast:hover .live-badge,
+.live-player-frame--broadcast:hover .live-channel-logo,
+.live-player-frame--broadcast:hover .lower-third,
+.live-player-frame--broadcast:focus-within .live-badge,
+.live-player-frame--broadcast:focus-within .live-channel-logo,
+.live-player-frame--broadcast:focus-within .lower-third,
+.live-player-frame--broadcast.is-controlling .live-badge,
+.live-player-frame--broadcast.is-controlling .live-channel-logo,
+.live-player-frame--broadcast.is-controlling .lower-third {
+  opacity: 1;
+  transform: none;
+}
+
+.live-mute-toggle {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 999px;
+  bottom: 74px;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  height: 44px;
+  justify-content: center;
+  position: absolute;
+  right: 22px;
+  transition: background 0.18s ease, transform 0.18s ease;
+  width: 44px;
+  z-index: 5;
+}
+
+.live-mute-toggle:hover,
+.live-mute-toggle:focus-visible {
+  background: rgba(227, 0, 0, 0.92);
+  outline: none;
+  transform: scale(1.04);
+}
+
+.live-mute-toggle__off,
+.live-mute-toggle__on {
+  display: none;
+  height: 18px;
+  position: relative;
+  width: 22px;
+}
+
+.live-mute-toggle__off::before,
+.live-mute-toggle__on::before {
+  border-bottom: 7px solid transparent;
+  border-right: 10px solid #fff;
+  border-top: 7px solid transparent;
+  content: "";
+  height: 0;
+  left: 0;
+  position: absolute;
+  top: 2px;
+  width: 0;
+}
+
+.live-mute-toggle__off::after,
+.live-mute-toggle__on::after {
+  background: #fff;
+  content: "";
+  height: 12px;
+  left: 9px;
+  position: absolute;
+  top: 4px;
+  width: 5px;
+}
+
+.live-mute-toggle__off {
+  display: block;
+}
+
+.live-mute-toggle[data-muted="false"] .live-mute-toggle__off {
+  display: none;
+}
+
+.live-mute-toggle[data-muted="false"] .live-mute-toggle__on {
+  display: block;
+}
+
+.live-mute-toggle[data-muted="true"] .live-mute-toggle__off::before {
+  border-right-color: #fff;
+}
+
+.live-mute-toggle[data-muted="true"] .live-mute-toggle__off::after {
+  transform: none;
+}
+
+.live-mute-toggle[data-muted="true"] .live-mute-toggle__off {
+  display: block;
+}
+
+.live-mute-toggle[data-muted="true"] .live-mute-toggle__off::before {
+  box-shadow: 15px 0 0 -7px #fff;
+}
+
+.live-mute-toggle[data-muted="true"] .live-mute-toggle__off::after {
+  background: #fff;
+  height: 24px;
+  left: 17px;
+  top: -2px;
+  transform: rotate(42deg);
+  width: 3px;
+}
+
+.live-mute-toggle[data-muted="false"] .live-mute-toggle__on::after {
+  box-shadow: 8px 0 0 -5px #fff, 13px 0 0 -6px #fff;
 }
 
 .news-ticker span {

@@ -2,6 +2,12 @@
   function setFrameControlState(frame, active) {
     frame.classList.toggle("is-controlling", active);
     const video = frame.querySelector("video");
+    if (frame.dataset.hideNativeControls === "true") {
+      if (video) {
+        video.controls = false;
+      }
+      return;
+    }
     if (!video || !frame.classList.contains("live-player-frame--native-controls")) {
       return;
     }
@@ -81,6 +87,9 @@
       const src = new URL(iframe.src, window.location.origin);
       src.searchParams.set("enablejsapi", "1");
       src.searchParams.set("playsinline", "1");
+      src.searchParams.set("controls", "0");
+      src.searchParams.set("disablekb", "1");
+      src.searchParams.set("fs", "0");
       src.searchParams.set("rel", "0");
       src.searchParams.set("modestbranding", "1");
       src.searchParams.set("origin", window.location.origin);
@@ -214,6 +223,42 @@
     }
   }
 
+  function syncMuteButton(frame) {
+    const video = frame.querySelector("video");
+    const button = frame.querySelector(".live-mute-toggle");
+    if (!video || !button) {
+      return;
+    }
+    const muted = Boolean(video.muted);
+    button.dataset.muted = muted ? "true" : "false";
+    button.setAttribute("aria-label", muted ? "Unmute live TV" : "Mute live TV");
+  }
+
+  function initMuteToggle(frame) {
+    const video = frame.querySelector("video");
+    const button = frame.querySelector(".live-mute-toggle");
+    if (!video || !button || button.dataset.ready === "true") {
+      return;
+    }
+    button.dataset.ready = "true";
+    syncMuteButton(frame);
+    button.addEventListener("click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      video.muted = !video.muted;
+      syncMuteButton(frame);
+      if (video.paused) {
+        const playPromise = video.play();
+        if (playPromise && typeof playPromise.catch === "function") {
+          playPromise.catch(function () {});
+        }
+      }
+    });
+    video.addEventListener("volumechange", function () {
+      syncMuteButton(frame);
+    });
+  }
+
   function initLiveTvFrames() {
     document.querySelectorAll(".live-player-frame").forEach(function (frame) {
       const video = frame.querySelector("video");
@@ -232,6 +277,7 @@
           }, { once: true });
         }
       }
+      initMuteToggle(frame);
 
       frame.addEventListener("mouseenter", function () {
         setFrameControlState(frame, true);

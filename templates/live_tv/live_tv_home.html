@@ -11,7 +11,7 @@
     {% if active_channel %}
       <div class="live-tv-main">
         <div class="live-player-card">
-          <div class="live-player-frame {% if active_channel.player_source_type == 'direct' or active_channel.player_source_type == 'hls' %}live-player-frame--native-controls{% endif %}" data-next-url="{% if next_channel %}{{ next_channel.get_absolute_url }}{% endif %}" data-loop-same="{% if loop_same_channel %}true{% else %}false{% endif %}" data-force-autoplay="true" data-sync-reload="true" data-seek-position="{{ live_seek_position|default:0 }}" data-video-duration="{{ live_video_duration|default:0 }}" data-server-time="{{ live_server_time }}">
+          <div class="live-player-frame live-player-frame--broadcast {% if active_channel.player_source_type == 'direct' or active_channel.player_source_type == 'hls' %}live-player-frame--native-controls{% endif %}" data-next-url="{% if next_channel %}{{ next_channel.get_absolute_url }}{% endif %}" data-loop-same="{% if loop_same_channel %}true{% else %}false{% endif %}" data-force-autoplay="true" data-sync-reload="true" data-hide-native-controls="true" data-seek-position="{{ live_seek_position|default:0 }}" data-video-duration="{{ live_video_duration|default:0 }}" data-server-time="{{ live_server_time }}">
             {% if active_channel.is_live and live_settings.show_live_badge %}
               <span class="live-badge"><span></span>{{ live_settings.live_label }}</span>
             {% endif %}
@@ -37,12 +37,12 @@
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowfullscreen></iframe>
             {% elif active_channel.player_source_type == "direct" %}
-              <video controls preload="auto" autoplay muted playsinline {% if active_channel.poster_image %}poster="{{ active_channel.poster_image.url }}"{% endif %}>
+              <video preload="auto" autoplay muted playsinline {% if active_channel.poster_image %}poster="{{ active_channel.poster_image.url }}"{% endif %}>
                 <source src="{{ active_channel.video_file.url }}" type="{{ active_channel.video_mime_type }}">
                 Your browser does not support video playback.
               </video>
             {% elif active_channel.player_source_type == "hls" %}
-              <video controls preload="auto" autoplay muted playsinline {% if active_channel.poster_image %}poster="{{ active_channel.poster_image.url }}"{% endif %}>
+              <video preload="auto" autoplay muted playsinline {% if active_channel.poster_image %}poster="{{ active_channel.poster_image.url }}"{% endif %}>
                 <source src="{{ active_channel.stream_url }}" type="application/x-mpegURL">
                 Your browser does not support this live stream.
               </video>
@@ -71,6 +71,13 @@
                   <p aria-hidden="true">{{ news_ticker.text }}</p>
                 </div>
               </div>
+            {% endif %}
+
+            {% if active_channel.player_source_type == "direct" or active_channel.player_source_type == "hls" %}
+              <button class="live-mute-toggle" type="button" aria-label="Unmute live TV" data-muted="true">
+                <span class="live-mute-toggle__off" aria-hidden="true"></span>
+                <span class="live-mute-toggle__on" aria-hidden="true"></span>
+              </button>
             {% endif %}
           </div>
             {% include "advertisements/news_portal.html" %}
