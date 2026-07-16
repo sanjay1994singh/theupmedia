@@ -21,7 +21,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
 from django.core.files import File
 from django.core.files.base import ContentFile
-from django.db import close_old_connections, transaction
+from django.db import close_old_connections, connection, transaction
 from django.db.models.deletion import ProtectedError
 from django.db.models import F, Q
 from django.contrib.auth.decorators import login_required, user_passes_test
@@ -1384,7 +1384,46 @@ def update_render_progress(job_id, percent):
 
 
 @contextlib.contextmanager
-def single_live_render_lock(timeout_seconds=7200):
+def single_live_render_db_lock(timeout_seconds=7200):
+    lock_name = "theupmedia_live_social_render"
+    timeout_seconds = max(1, int(timeout_seconds))
+    vendor = connection.vendor
+    acquired = False
+    if vendor not in {"mysql", "postgresql"}:
+        yield
+        return
+
+    with connection.cursor() as cursor:
+        try:
+            if vendor == "mysql":
+                cursor.execute("SELECT GET_LOCK(%s, %s)", [lock_name, timeout_seconds])
+                row = cursor.fetchone()
+                acquired = bool(row and row[0] == 1)
+            else:
+                deadline = time.monotonic() + timeout_seconds
+                while time.monotonic() < deadline:
+                    cursor.execute("SELECT pg_try_advisory_lock(hashtext(%s))", [lock_name])
+                    row = cursor.fetchone()
+                    acquired = bool(row and row[0])
+                    if acquired:
+                        break
+                    time.sleep(1)
+            if not acquired:
+                raise RuntimeError("Another rendered video is still processing. Please retry later.")
+            yield
+        finally:
+            if acquired:
+                try:
+                    if vendor == "mysql":
+                        cursor.execute("SELECT RELEASE_LOCK(%s)", [lock_name])
+                    else:
+                        cursor.execute("SELECT pg_advisory_unlock(hashtext(%s))", [lock_name])
+                except Exception:
+                    logger.exception("Failed to release live render DB lock")
+
+
+@contextlib.contextmanager
+def single_live_render_file_lock(timeout_seconds=7200):
     lock_path = Path(tempfile.gettempdir()) / "theupmedia-live-render.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock_file = lock_path.open("a+")
@@ -1423,6 +1462,27 @@ def single_live_render_lock(timeout_seconds=7200):
             except OSError:
                 pass
         lock_file.close()
+
+
+@contextlib.contextmanager
+def single_live_render_lock(timeout_seconds=7200):
+    with single_live_render_db_lock(timeout_seconds=timeout_seconds):
+        with single_live_render_file_lock(timeout_seconds=timeout_seconds):
+            yield
+
+
+def normalize_duplicate_processing_render_jobs(active_job_id):
+    now = timezone.now()
+    return (
+        SocialRenderedVideo.objects.filter(status=SocialRenderedVideo.Status.PROCESSING)
+        .exclude(pk=active_job_id)
+        .update(
+            status=SocialRenderedVideo.Status.PENDING,
+            progress_percent=0,
+            error_message="Queued behind active single-video render.",
+            updated_at=now,
+        )
+    )
 
 
 RENDER_TEMPLATE_ACCENTS = {
@@ -1778,6 +1838,7 @@ def run_social_render_job(job_id, raise_errors=False):
             job.refresh_from_db()
             if job.status in {SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE} and job.rendered_video:
                 return
+            normalize_duplicate_processing_render_jobs(job.pk)
             update_render_progress(job.pk, 1)
             render_social_video_file(job)
     except Exception as exc:
