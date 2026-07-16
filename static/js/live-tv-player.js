@@ -23,7 +23,7 @@
     if (!video) {
       return false;
     }
-    video.currentTime = 0;
+    syncNativeVideoToLive(frame, video);
     const playPromise = video.play();
     if (playPromise && typeof playPromise.catch === "function") {
       playPromise.catch(function () {
@@ -48,11 +48,17 @@
     }
     const loopSame = frame.dataset.loopSame === "true";
     const nextUrl = frame.dataset.nextUrl;
+    const syncReload = frame.dataset.syncReload === "true";
 
     if (loopSame) {
       if (restartNativeVideo(frame) || restartYouTubeVideo(player)) {
         return;
       }
+    }
+
+    if (syncReload) {
+      window.location.reload();
+      return;
     }
 
     if (nextUrl) {
@@ -160,12 +166,71 @@
     }
   }
 
+  function parseNumber(value, fallback) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  function syncedStartSeconds(frame) {
+    const seekPosition = parseNumber(frame.dataset.seekPosition, 0);
+    const videoDuration = parseNumber(frame.dataset.videoDuration, 0);
+    const serverTime = frame.dataset.serverTime ? new Date(frame.dataset.serverTime).getTime() : NaN;
+    const elapsed = Number.isFinite(serverTime) ? Math.max(0, (Date.now() - serverTime) / 1000) : 0;
+    const target = Math.max(0, seekPosition + elapsed);
+    if (videoDuration > 0) {
+      return Math.min(target, Math.max(0, videoDuration - 0.25));
+    }
+    return target;
+  }
+
+  function syncNativeVideoToLive(frame, video) {
+    const target = syncedStartSeconds(frame);
+    if (!Number.isFinite(target) || target <= 0) {
+      return;
+    }
+    try {
+      if (Math.abs((video.currentTime || 0) - target) > 1.25) {
+        video.currentTime = target;
+      }
+    } catch (error) {
+      return;
+    }
+  }
+
+  function playNativeLiveVideo(frame, video) {
+    if (frame.dataset.forceAutoplay === "true") {
+      video.muted = true;
+      video.autoplay = true;
+      video.preload = "auto";
+    }
+    syncNativeVideoToLive(frame, video);
+    if (frame.dataset.forceAutoplay === "true" || video.autoplay) {
+      const playPromise = video.play();
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(function () {
+          setFrameControlState(frame, true);
+        });
+      }
+    }
+  }
+
   function initLiveTvFrames() {
     document.querySelectorAll(".live-player-frame").forEach(function (frame) {
       const video = frame.querySelector("video");
       if (video && frame.classList.contains("live-player-frame--native-controls")) {
         video.controls = false;
-        video.preload = "none";
+        video.preload = frame.dataset.forceAutoplay === "true" ? "auto" : "metadata";
+        if (frame.dataset.forceAutoplay === "true") {
+          video.muted = true;
+          video.autoplay = true;
+        }
+        if (video.readyState >= 1) {
+          playNativeLiveVideo(frame, video);
+        } else {
+          video.addEventListener("loadedmetadata", function () {
+            playNativeLiveVideo(frame, video);
+          }, { once: true });
+        }
       }
 
       frame.addEventListener("mouseenter", function () {

@@ -9,7 +9,7 @@
     <div class="home-showcase-main">
       {% if home_live_tv %}
         <div class="live-player-card">
-          <div class="live-player-frame {% if home_live_tv.player_source_type == 'direct' or home_live_tv.player_source_type == 'hls' %}live-player-frame--native-controls{% endif %}" data-next-url="{% if home_live_tv_next %}{{ home_live_tv_next.get_absolute_url }}{% endif %}" data-loop-same="{% if home_live_tv_loop_same %}true{% else %}false{% endif %}">
+          <div class="live-player-frame {% if home_live_tv.player_source_type == 'direct' or home_live_tv.player_source_type == 'hls' %}live-player-frame--native-controls{% endif %}" data-next-url="{% if home_live_tv_next %}{{ home_live_tv_next.get_absolute_url }}{% endif %}" data-loop-same="{% if home_live_tv_loop_same %}true{% else %}false{% endif %}" data-force-autoplay="true" data-sync-reload="true" data-seek-position="{{ home_live_seek_position|default:0 }}" data-video-duration="{{ home_live_video_duration|default:0 }}" data-server-time="{{ home_live_server_time }}">
             {% if home_live_tv.is_live and home_live_settings.show_live_badge %}
               <span class="live-badge"><span></span>{{ home_live_settings.live_label }}</span>
             {% endif %}
@@ -35,12 +35,12 @@
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowfullscreen></iframe>
             {% elif home_live_tv.player_source_type == "direct" %}
-              <video controls preload="none" {% if home_live_settings.autoplay %}autoplay muted{% endif %} playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
+              <video controls preload="auto" autoplay muted playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
                 <source src="{{ home_live_tv.video_file.url }}" type="{{ home_live_tv.video_mime_type }}">
                 Your browser does not support video playback.
               </video>
             {% elif home_live_tv.player_source_type == "hls" %}
-              <video controls preload="none" {% if home_live_settings.autoplay %}autoplay muted{% endif %} playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
+              <video controls preload="auto" autoplay muted playsinline {% if home_live_tv.poster_image %}poster="{{ home_live_tv.poster_image.url }}"{% endif %}>
                 <source src="{{ home_live_tv.stream_url }}" type="application/x-mpegURL">
                 Your browser does not support this live stream.
               </video>

@@ -32,6 +32,9 @@ def home(request):
     home_live_tv_channels = list(LiveTVChannel.objects.filter(is_active=True).order_by("display_order", "pk"))
     home_live_tv = get_main_live_channel(create=False) or next((channel for channel in home_live_tv_channels if channel.is_live), None) or (home_live_tv_channels[0] if home_live_tv_channels else None)
     home_live_tv_next = None
+    home_live_seek_position = 0
+    home_live_video_duration = 0
+    home_live_server_time = timezone.now()
     home_live_settings = LiveTVSetting.get_solo()
     home_news_ticker = SimpleNamespace(
         label=home_live_settings.default_ticker_label,
@@ -42,10 +45,12 @@ def home(request):
         updated_at=home_live_settings.updated_at,
     )
     if home_live_tv and home_live_tv.source_type == LiveTVChannel.SourceType.PLAYLIST:
-        playlist_state = calculate_current_playback(home_live_tv)
+        playlist_state = calculate_current_playback(home_live_tv, at=home_live_server_time)
         if playlist_state:
             home_live_tv = playlist_state["video"]
             home_live_tv_next = playlist_state["next_entry"].video if playlist_state.get("next_entry") else home_live_tv
+            home_live_seek_position = round(playlist_state["seek_position"], 3)
+            home_live_video_duration = playlist_state["entry"].duration_seconds
     elif home_live_tv_channels:
         home_live_tv_next = home_live_tv_channels[1] if len(home_live_tv_channels) > 1 else home_live_tv
     return render(
@@ -61,6 +66,9 @@ def home(request):
             "home_live_tv": home_live_tv,
             "home_live_tv_next": home_live_tv_next,
             "home_live_tv_loop_same": bool(home_live_tv and home_live_tv_next and home_live_tv.pk == home_live_tv_next.pk),
+            "home_live_seek_position": home_live_seek_position,
+            "home_live_video_duration": home_live_video_duration,
+            "home_live_server_time": home_live_server_time.isoformat(),
             "home_live_settings": home_live_settings,
             "home_news_ticker": home_news_ticker,
         },

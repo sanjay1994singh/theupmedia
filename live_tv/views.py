@@ -163,10 +163,15 @@ def next_live_tv_channel(active_channel, channels):
 
 def live_tv_context(active_channel, channels, force_autoplay=False):
     channels = list(channels)
+    live_seek_position = 0
+    live_video_duration = 0
+    live_server_time = timezone.now()
     if active_channel and active_channel.source_type == LiveTVChannel.SourceType.PLAYLIST:
-        playlist_state = calculate_current_playback(active_channel)
+        playlist_state = calculate_current_playback(active_channel, at=live_server_time)
         if playlist_state:
             active_channel = playlist_state["video"]
+            live_seek_position = round(playlist_state["seek_position"], 3)
+            live_video_duration = playlist_state["entry"].duration_seconds
     next_channel = next_live_tv_channel(active_channel, channels)
     latest_news = Article.published.select_related("category", "state", "city")[:6]
     return {
@@ -175,6 +180,9 @@ def live_tv_context(active_channel, channels, force_autoplay=False):
         "next_channel": next_channel,
         "loop_same_channel": bool(active_channel and next_channel and active_channel.pk == next_channel.pk),
         "force_autoplay": force_autoplay,
+        "live_seek_position": live_seek_position,
+        "live_video_duration": live_video_duration,
+        "live_server_time": live_server_time.isoformat(),
         "latest_news": latest_news,
         "live_settings": live_tv_setting(),
         "news_ticker": news_ticker_setting(),
