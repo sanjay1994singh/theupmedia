@@ -209,7 +209,9 @@
 
   function playNativeLiveVideo(frame, video) {
     if (frame.dataset.forceAutoplay === "true") {
-      video.muted = true;
+      if (frame.dataset.userMuteTouched !== "true") {
+        video.muted = true;
+      }
       video.autoplay = true;
       video.preload = "auto";
     }
@@ -243,9 +245,17 @@
     }
     button.dataset.ready = "true";
     syncMuteButton(frame);
-    button.addEventListener("click", function (event) {
+    function toggleMute(event) {
+      const now = Date.now();
+      if (button.liveMuteLastToggleAt && now - button.liveMuteLastToggleAt < 320) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      button.liveMuteLastToggleAt = now;
       event.preventDefault();
       event.stopPropagation();
+      frame.dataset.userMuteTouched = "true";
       video.muted = !video.muted;
       syncMuteButton(frame);
       if (video.paused) {
@@ -254,7 +264,9 @@
           playPromise.catch(function () {});
         }
       }
-    });
+    }
+    button.addEventListener("click", toggleMute);
+    button.addEventListener("touchend", toggleMute, { passive: false });
     video.addEventListener("volumechange", function () {
       syncMuteButton(frame);
     });
