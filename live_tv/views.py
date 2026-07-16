@@ -1074,10 +1074,10 @@ def ffmpeg_latin_font_file():
     return ffmpeg_path(path) if path else ""
 
 
-def pil_font(size):
+def pil_font(size, script="devanagari"):
     if not ImageFont:
         return None
-    path = resolve_devanagari_font_path()
+    path = resolve_latin_font_path() if script == "latin" else resolve_devanagari_font_path()
     if not path:
         return ImageFont.load_default()
     try:
@@ -1092,6 +1092,68 @@ def pil_font(size):
         return ImageFont.load_default()
 
 
+def is_devanagari_char(char):
+    return "\u0900" <= char <= "\u097f" or "\ua8e0" <= char <= "\ua8ff"
+
+
+def text_char_script(char):
+    return "devanagari" if is_devanagari_char(char) else "latin"
+
+
+def split_mixed_script_runs(text):
+    text = text or " "
+    runs = []
+    current_script = None
+    current_text = ""
+    pending_space = ""
+    for char in text:
+        if char.isspace():
+            pending_space += char
+            continue
+        script = text_char_script(char)
+        if current_script is None:
+            current_script = script
+            current_text = pending_space + char
+        elif script == current_script:
+            current_text += pending_space + char
+        else:
+            if pending_space:
+                current_text += pending_space
+            runs.append((current_script, current_text))
+            current_script = script
+            current_text = char
+        pending_space = ""
+    if current_script is None:
+        runs.append(("latin", pending_space or " "))
+    else:
+        current_text += pending_space
+        runs.append((current_script, current_text))
+    return [(script, value) for script, value in runs if value]
+
+
+def mixed_text_run_metrics(draw, text, font_size):
+    runs = []
+    total_width = 0
+    max_height = 1
+    for script, value in split_mixed_script_runs(text):
+        font = pil_font(font_size, script=script)
+        bbox = draw.textbbox((0, 0), value or " ", font=font)
+        width = max(0, bbox[2] - bbox[0])
+        height = max(1, bbox[3] - bbox[1])
+        runs.append(
+            {
+                "text": value,
+                "font": font,
+                "bbox": bbox,
+                "width": width,
+                "height": height,
+            }
+        )
+        total_width += width
+        max_height = max(max_height, height)
+    return runs, max(1, total_width), max_height
+
+
 def text_bbox_size(draw, text, font):
     bbox = draw.textbbox((0, 0), text or " ", font=font)
     return max(1, bbox[2] - bbox[0]), max(1, bbox[3] - bbox[1])
@@ -1100,21 +1162,22 @@ def text_bbox_size(draw, text, font):
 def make_text_png(text, prefix, font_size, fill, height, padding_x=24, min_width=1, max_width=12000, align="left"):
     if not Image or not ImageDraw:
         return None, 0
-    font = pil_font(font_size)
     probe = Image.new("RGBA", (10, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(probe)
-    bbox = draw.textbbox((0, 0), text or " ", font=font)
-    text_width = max(1, bbox[2] - bbox[0])
-    text_height = max(1, bbox[3] - bbox[1])
+    runs, text_width, text_height = mixed_text_run_metrics(draw, text or " ", font_size)
     width = max(min_width, min(max_width, text_width + padding_x * 2))
     image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    y = max(0, int((height - text_height) / 2)) - bbox[1]
     if align == "center":
-        x = max(0, int((width - text_width) / 2)) - bbox[0]
+        x = max(0, int((width - text_width) / 2))
     else:
-        x = padding_x - bbox[0]
-    draw.text((x, y), text or " ", font=font, fill=fill)
+        x = padding_x
+    for run in runs:
+        bbox = run["bbox"]
+        run_height = run["height"]
+        y = max(0, int((height - run_height) / 2)) - bbox[1]
+        draw.text((x - bbox[0], y), run["text"], font=run["font"], fill=fill)
+        x += run["width"]
     text_dir = Path(tempfile.gettempdir()) / "theupmedia-render-text"
     text_dir.mkdir(parents=True, exist_ok=True)
     image_path = text_dir / f"{prefix}-{uuid4().hex}.png"
@@ -1582,15 +1645,15 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
         )
 
     if bool_snapshot(snapshot, "show_ticker") and (ticker_label or ticker_text):
-        ticker_height = 76
-        label_width = 330
-        black_bar_width = 30
-        red_bar_width = 26
+        ticker_height = 90
+        label_width = 360
+        black_bar_width = 34
+        red_bar_width = 30
         mask_width = label_width + black_bar_width + red_bar_width
         ticker_top = input_height - ticker_height
-        ticker_start = mask_width + 18
+        ticker_start = mask_width + 22
         ticker_speed = 180
-        ticker_font_size = 34
+        ticker_font_size = 40
         ticker_text_image, ticker_label_image, ticker_loop_width = make_broadcast_ticker_assets(
             ticker_label,
             ticker_text,
