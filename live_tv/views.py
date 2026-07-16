@@ -1976,8 +1976,8 @@ def superuser_required(view_func):
 
 
 def live_tv_home(request):
-    channels = LiveTVChannel.objects.filter(is_active=True)
-    active_channel = channels.first()
+    channels = LiveTVChannel.objects.filter(is_active=True).order_by("display_order", "pk")
+    active_channel = get_main_live_channel(create=False) or channels.filter(is_live=True).first() or channels.first()
     force_autoplay = request.GET.get("autoplay") == "1"
     return render(request, "live_tv/live_tv_home.html", live_tv_context(active_channel, channels, force_autoplay))
 
@@ -2086,6 +2086,7 @@ def rendered_video_download_api(request, pk):
     return FileResponse(open(file_path, "rb"), as_attachment=True, filename=filename, content_type="video/mp4")
 
 
+@never_cache
 @require_GET
 def app_home_api(request):
     channels = LiveTVChannel.objects.filter(is_active=True).select_related("category", "state", "city")
