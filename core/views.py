@@ -16,6 +16,7 @@ from services.models import Service
 from services.sitemaps import ServiceSitemap
 from subscriptions.models import SubscriptionPlan
 from live_tv.models import LiveTVChannel, LiveTVSetting
+from live_tv.services import calculate_current_playback, get_main_live_channel
 from .sitemaps import StaticPageSitemap
 
 
@@ -28,8 +29,8 @@ def home(request):
     subscription_plans = list(SubscriptionPlan.objects.select_related("service").filter(is_active=True, service__is_active=True)[:6])
     for plan in subscription_plans:
         plan.home_features = [feature.strip() for feature in plan.features.splitlines() if feature.strip()][:3]
-    home_live_tv_channels = list(LiveTVChannel.objects.filter(is_active=True))
-    home_live_tv = home_live_tv_channels[0] if home_live_tv_channels else None
+    home_live_tv_channels = list(LiveTVChannel.objects.filter(is_active=True).order_by("display_order", "pk"))
+    home_live_tv = get_main_live_channel(create=False) or next((channel for channel in home_live_tv_channels if channel.is_live), None) or (home_live_tv_channels[0] if home_live_tv_channels else None)
     home_live_tv_next = None
     home_live_settings = LiveTVSetting.get_solo()
     home_news_ticker = SimpleNamespace(
@@ -40,7 +41,12 @@ def home(request):
         style="red_white_slant",
         updated_at=home_live_settings.updated_at,
     )
-    if home_live_tv_channels:
+    if home_live_tv and home_live_tv.source_type == LiveTVChannel.SourceType.PLAYLIST:
+        playlist_state = calculate_current_playback(home_live_tv)
+        if playlist_state:
+            home_live_tv = playlist_state["video"]
+            home_live_tv_next = playlist_state["next_entry"].video if playlist_state.get("next_entry") else home_live_tv
+    elif home_live_tv_channels:
         home_live_tv_next = home_live_tv_channels[1] if len(home_live_tv_channels) > 1 else home_live_tv
     return render(
         request,
