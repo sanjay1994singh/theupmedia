@@ -1514,20 +1514,21 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
         )
 
     if bool_snapshot(snapshot, "show_ticker") and (ticker_label or ticker_text):
-        ticker_height = 64
-        label_width = 300
-        black_bar_width = 28
-        red_bar_width = 24
+        ticker_height = 76
+        label_width = 330
+        black_bar_width = 30
+        red_bar_width = 26
         mask_width = label_width + black_bar_width + red_bar_width
         ticker_top = input_height - ticker_height
         ticker_start = mask_width + 18
         ticker_speed = 180
+        ticker_font_size = 34
         ticker_text_image, ticker_label_image, ticker_loop_width = make_broadcast_ticker_assets(
             ticker_label,
             ticker_text,
             height=ticker_height,
             label_width=label_width,
-            font_size=28,
+            font_size=ticker_font_size,
         )
         if ticker_text_image and ticker_label_image:
             text_files.extend([ticker_text_image, ticker_label_image])
@@ -1551,11 +1552,11 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
             ticker_font_arg = ffmpeg_font_arg_for_text(ticker_text, devanagari_font, latin_font)
             add_filter(
                 f"drawbox=x=0:y={ticker_top}:w={input_width}:h={ticker_height}:color=white@0.97:t=fill,"
-                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x={ticker_start}-mod({ticker_time_expr}*{ticker_speed}\\,tw/4):y={ticker_top + 16}:fontsize=28:fontcolor=#111111,"
+                f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x={ticker_start}-mod({ticker_time_expr}*{ticker_speed}\\,tw/4):y={ticker_top + 19}:fontsize={ticker_font_size}:fontcolor=#111111,"
                 f"drawbox=x=0:y={ticker_top}:w={label_width}:h={ticker_height}:color=#c80d13@1:t=fill,"
                 f"drawbox=x={label_width}:y={ticker_top}:w={black_bar_width}:h={ticker_height}:color=#111111@1:t=fill,"
                 f"drawbox=x={label_width + black_bar_width}:y={ticker_top}:w={red_bar_width}:h={ticker_height}:color=#ef1717@1:t=fill,"
-                f"drawtext=textfile='{ffmpeg_path(ticker_label_file)}'{ticker_label_font_arg}:x=42:y={ticker_top + 16}:fontsize=28:fontcolor=white"
+                f"drawtext=textfile='{ffmpeg_path(ticker_label_file)}'{ticker_label_font_arg}:x=42:y={ticker_top + 19}:fontsize={ticker_font_size}:fontcolor=white"
             )
 
     filters.append(f"[{current}]format=yuv420p[vout]")
