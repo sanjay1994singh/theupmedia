@@ -2397,43 +2397,32 @@ time {
   display: none !important;
 }
 
-.web-live-mute::before {
-  background: #fff;
-  clip-path: polygon(0 35%, 32% 35%, 78% 5%, 78% 95%, 32% 65%, 0 65%);
-  content: "";
-  height: 18px;
-  left: 10px;
-  position: absolute;
-  top: 12px;
-  width: 16px;
-}
-
+.web-live-mute::before,
 .web-live-mute::after {
-  background: #fff;
-  content: "";
-  height: 24px;
-  left: 27px;
-  position: absolute;
-  top: 9px;
-  transform: rotate(42deg);
-  width: 3px;
+  content: none !important;
+  display: none !important;
 }
 
-.web-live-mute[data-muted="false"]::after {
-  background: transparent;
-  border: 2px solid #fff;
-  border-bottom-color: transparent;
-  border-left: 0;
-  border-top-color: transparent;
-  border-radius: 0 999px 999px 0;
-  box-shadow: 5px 0 0 -1px #fff;
-  content: "";
-  height: 16px;
-  left: 24px;
-  position: absolute;
-  top: 13px;
-  transform: none;
-  width: 8px;
+.web-live-mute-icon {
+  display: none;
+  fill: none;
+  height: 24px;
+  pointer-events: none;
+  stroke: #fff;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.4;
+  width: 24px;
+}
+
+.web-live-mute-icon path:first-child {
+  fill: #fff;
+  stroke: none;
+}
+
+.web-live-mute[data-muted="true"] .web-live-mute-icon--muted,
+.web-live-mute[data-muted="false"] .web-live-mute-icon--sound {
+  display: block;
 }
 
 .web-live-ticker {
