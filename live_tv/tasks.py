@@ -1,7 +1,7 @@
 from celery import shared_task
 
 from .hls import convert_live_channel_to_hls, convert_short_to_hls
-from .models import ShortsVideo
+from .models import LiveTVChannel, ShortsVideo
 from .views import run_media_download_job, run_social_render_job
 
 
@@ -36,6 +36,18 @@ def process_short_hls_task(short_id):
 @shared_task(name="live_tv.process_live_channel_hls")
 def process_live_channel_hls_task(channel_id):
     convert_live_channel_to_hls(channel_id)
+    next_channel = (
+        LiveTVChannel.objects.filter(
+            source_type=LiveTVChannel.SourceType.DIRECT,
+            video_file__isnull=False,
+            hls_status=LiveTVChannel.HLSStatus.PENDING,
+        )
+        .exclude(pk=channel_id)
+        .order_by("display_order", "pk")
+        .first()
+    )
+    if next_channel:
+        process_live_channel_hls_task.delay(next_channel.pk)
 
 
 @shared_task(name="live_tv.cleanup_rendered_video_temps")

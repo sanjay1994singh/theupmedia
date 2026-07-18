@@ -11,6 +11,7 @@ class Command(BaseCommand):
         parser.add_argument("--id", type=int, dest="channel_id", help="Process one LiveTVChannel id.")
         parser.add_argument("--all", action="store_true", help="Process all direct uploaded Live TV channels.")
         parser.add_argument("--retry-failed", action="store_true", help="Include failed channels.")
+        parser.add_argument("--retry-stale", action="store_true", help="Include processing jobs older than the stale cutoff.")
 
     def handle(self, *args, **options):
         queryset = LiveTVChannel.objects.filter(source_type=LiveTVChannel.SourceType.DIRECT, video_file__isnull=False).order_by("pk")
@@ -20,7 +21,22 @@ class Command(BaseCommand):
             statuses = [LiveTVChannel.HLSStatus.PENDING]
             if options.get("retry_failed"):
                 statuses.append(LiveTVChannel.HLSStatus.FAILED)
-            queryset = queryset.filter(hls_status__in=statuses)
+            if options.get("retry_stale"):
+                from datetime import timedelta
+                from django.conf import settings
+                from django.utils import timezone
+
+                stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
+                queryset = queryset.filter(
+                    hls_status__in=statuses
+                ) | LiveTVChannel.objects.filter(
+                    source_type=LiveTVChannel.SourceType.DIRECT,
+                    video_file__isnull=False,
+                    hls_status=LiveTVChannel.HLSStatus.PROCESSING,
+                    updated_at__lt=stale_cutoff,
+                )
+            else:
+                queryset = queryset.filter(hls_status__in=statuses)
         else:
             self.stderr.write("Use --all, --retry-failed with --all, or --id <channel_id>.")
             return

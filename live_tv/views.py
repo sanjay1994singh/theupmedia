@@ -153,6 +153,32 @@ def enqueue_short_hls_job(short_id):
 
 
 def enqueue_live_channel_hls_job(channel_id):
+    try:
+        channel = LiveTVChannel.objects.only("pk", "hls_master_url", "hls_status", "updated_at").get(pk=channel_id)
+    except LiveTVChannel.DoesNotExist:
+        return "missing"
+
+    if channel.hls_status == LiveTVChannel.HLSStatus.COMPLETED and channel.hls_master_url:
+        return "completed"
+
+    stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
+    if channel.hls_status == LiveTVChannel.HLSStatus.PROCESSING and channel.updated_at >= stale_cutoff:
+        return "processing"
+
+    other_active = (
+        LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.PROCESSING, updated_at__gte=stale_cutoff)
+        .exclude(pk=channel_id)
+        .exists()
+    )
+    if other_active:
+        if channel.hls_status != LiveTVChannel.HLSStatus.PENDING:
+            LiveTVChannel.objects.filter(pk=channel_id).update(
+                hls_status=LiveTVChannel.HLSStatus.PENDING,
+                hls_progress_percent=0,
+                updated_at=timezone.now(),
+            )
+        return "pending"
+
     if getattr(settings, "LIVE_TV_RENDER_USE_CELERY", True):
         try:
             from .tasks import process_live_channel_hls_task
@@ -3290,13 +3316,34 @@ def live_control_dashboard_action_api(request):
         channel = rebuild_live_playlist(videos)
         return JsonResponse({"ok": True, "message": f"Playlist rebuilt with {channel.playlist_items.filter(is_active=True).count()} videos."})
     if action == "retry_failed_hls":
-        live_ids = list(LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.FAILED, video_file__isnull=False).values_list("pk", flat=True)[:20])
-        short_ids = list(ShortsVideo.objects.filter(hls_status=ShortsVideo.HLSStatus.FAILED, video_file__isnull=False).values_list("pk", flat=True)[:20])
+        stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
+        live_queryset = LiveTVChannel.objects.filter(video_file__isnull=False).filter(
+            Q(hls_status=LiveTVChannel.HLSStatus.FAILED)
+            | Q(hls_status=LiveTVChannel.HLSStatus.PROCESSING, updated_at__lt=stale_cutoff)
+        )
+        short_queryset = ShortsVideo.objects.filter(video_file__isnull=False).filter(
+            Q(hls_status=ShortsVideo.HLSStatus.FAILED)
+            | Q(hls_status=ShortsVideo.HLSStatus.PROCESSING, updated_at__lt=stale_cutoff)
+        )
+        live_ids = list(live_queryset.values_list("pk", flat=True)[:20])
+        short_ids = list(short_queryset.values_list("pk", flat=True)[:20])
+        LiveTVChannel.objects.filter(pk__in=live_ids).update(
+            hls_status=LiveTVChannel.HLSStatus.PENDING,
+            hls_progress_percent=0,
+            processing_error="",
+            updated_at=timezone.now(),
+        )
+        ShortsVideo.objects.filter(pk__in=short_ids).update(
+            hls_status=ShortsVideo.HLSStatus.PENDING,
+            hls_progress_percent=0,
+            processing_error="",
+            updated_at=timezone.now(),
+        )
         for channel_id in live_ids:
             enqueue_live_channel_hls_job(channel_id)
         for short_id in short_ids:
             enqueue_short_hls_job(short_id)
-        return JsonResponse({"ok": True, "message": f"Retried {len(live_ids)} live videos and {len(short_ids)} shorts."})
+        return JsonResponse({"ok": True, "message": f"Retried/resumed {len(live_ids)} live videos and {len(short_ids)} shorts."})
     if action == "retry_failed_renders":
         jobs = list(SocialRenderedVideo.objects.filter(status=SocialRenderedVideo.Status.FAILED).order_by("updated_at")[:10])
         for job in jobs:
