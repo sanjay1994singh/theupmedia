@@ -9,10 +9,26 @@
 
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
   const status = (value) => `<span class="status ${esc(value)}">${esc(value || "unknown")}</span>`;
-  const progress = (value) => `<div class="progress"><span style="width:${Math.max(0, Math.min(100, Number(value || 0)))}%"></span></div>`;
+  const pct = (value, state = "") => {
+    const normalized = String(state || "").toLowerCase();
+    if (["completed", "done"].includes(normalized)) return 100;
+    const number = Number(value || 0);
+    return Math.max(0, Math.min(100, Math.round(number)));
+  };
+  const progress = (value, state = "") => {
+    const valuePct = pct(value, state);
+    return `<div class="progress-wrap"><div class="progress"><span style="width:${valuePct}%"></span></div><strong>${valuePct}%</strong></div>`;
+  };
   const csrf = () => (document.cookie.match(/(?:^|; )csrftoken=([^;]+)/) || [])[1] || "";
   const sectionUrl = (name) => shell.dataset.sectionUrlTemplate.replace(/overview\/?$/, `${name}/`);
   const count = (obj, key) => Number((obj || {})[key] || 0);
+  const isActiveState = (value) => ["pending", "processing", "queued", "started"].includes(String(value || "").toLowerCase());
+  const jobProgress = (job) => pct(job?.progress_percent ?? job?.hls_progress_percent, job?.status || job?.hls_status);
+  const averageProgress = (jobs) => {
+    const list = (jobs || []).filter(Boolean);
+    if (!list.length) return 0;
+    return Math.round(list.reduce((total, job) => total + jobProgress(job), 0) / list.length);
+  };
 
   function showAlert(message, isError = false) {
     alertBox.hidden = false;
@@ -62,23 +78,27 @@
   }
 
   function renderProcessingCard(processing) {
-    const renderCount = count(processing.renders, "processing");
-    const renderPending = count(processing.renders, "pending");
-    const liveCount = count(processing.live_hls, "processing");
-    const shortCount = count(processing.short_hls, "processing");
-    const total = renderCount + renderPending + liveCount + shortCount + count(processing.downloads, "processing") + count(processing.downloads, "pending");
-    const percent = total ? Math.min(99, Math.round(((renderCount + liveCount + shortCount) / total) * 100)) : 0;
+    const liveJobs = processing.live_processing || [];
+    const shortJobs = processing.short_processing || [];
+    const renderJobs = (processing.render_jobs || []).filter((job) => isActiveState(job.status));
+    const downloadJobs = (processing.downloads_recent || []).filter((job) => isActiveState(job.status));
+    const pendingRenderCount = count(processing.renders, "pending");
+    const pendingDownloadCount = count(processing.downloads, "pending");
+    const activeJobs = [...liveJobs, ...shortJobs, ...renderJobs, ...downloadJobs];
     const rows = [
-      ["Uploading", liveCount, 66],
-      ["Transcoding", shortCount, 72],
-      ["Rendering", renderCount, 58],
-      ["Pending", renderPending, 42],
+      ["Live HLS", liveJobs.length || count(processing.live_hls, "processing"), averageProgress(liveJobs)],
+      ["Shorts HLS", shortJobs.length || count(processing.short_hls, "processing"), averageProgress(shortJobs)],
+      ["Rendering", renderJobs.length || count(processing.renders, "processing"), averageProgress(renderJobs)],
+      ["Downloads", downloadJobs.length || count(processing.downloads, "processing"), averageProgress(downloadJobs)],
+      ["Pending", pendingRenderCount + pendingDownloadCount, 0],
     ];
+    const total = rows.reduce((sum, [, amount]) => sum + Number(amount || 0), 0);
+    const percent = activeJobs.length ? averageProgress(activeJobs) : total ? 0 : 100;
     return `<section class="dashboard-card">
       <div class="card-head"><h2>System Processing</h2><button class="ghost-btn" data-section-jump="processing">Open</button></div>
       <div class="processing-layout">
         <div class="donut" style="--p:${percent}"><div><strong>${percent}%</strong><small>Processing</small></div></div>
-        <div class="task-list">${rows.map(([name, amount, pct]) => `<div class="task-row"><label>${esc(name)} ${amount}</label>${progress(amount ? pct : 0)}</div>`).join("")}<p class="muted">Total Tasks: ${total}</p></div>
+        <div class="task-list">${rows.map(([name, amount, rowPct]) => `<div class="task-row"><label>${esc(name)} <b>${amount}</b></label>${progress(amount ? rowPct : 0, amount ? "" : "pending")}</div>`).join("")}<p class="muted">Total Tasks: ${total}</p></div>
       </div>
     </section>`;
   }
@@ -132,7 +152,9 @@
     const renderJobs = processing.render_jobs || [];
     const liveProcessing = processing.live_processing || [];
     const shortProcessing = processing.short_processing || [];
-    return `${pageTitle("Upload & Processing", "Live status of HLS, uploads, downloads and render jobs", {})}<div class="grid main-grid" style="grid-template-columns:1fr 1fr">${renderProcessingCard(processing)}<section class="dashboard-card"><div class="card-head"><h2>Active Jobs</h2></div><table class="table"><thead><tr><th>Title</th><th>Status</th><th>Progress</th></tr></thead><tbody>${[...renderJobs, ...liveProcessing, ...shortProcessing].map((job) => `<tr><td>${esc(job.title)}</td><td>${status(job.status || job.hls_status)}</td><td>${progress(job.progress_percent || job.hls_progress_percent)}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">No active processing</td></tr>`}</tbody></table></section></div>`;
+    const downloads = processing.downloads_recent || [];
+    const activeRows = [...liveProcessing, ...shortProcessing, ...renderJobs, ...downloads];
+    return `${pageTitle("Upload & Processing", "Live status of HLS, uploads, downloads and render jobs", {})}<div class="grid main-grid" style="grid-template-columns:1fr 1fr">${renderProcessingCard(processing)}<section class="dashboard-card"><div class="card-head"><h2>Active Jobs</h2></div><table class="table"><thead><tr><th>Title</th><th>Status</th><th>Progress</th></tr></thead><tbody>${activeRows.map((job) => `<tr><td>${esc(job.title)}</td><td>${status(job.status || job.hls_status)}</td><td>${progress(job.progress_percent ?? job.hls_progress_percent, job.status || job.hls_status)}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">No active processing</td></tr>`}</tbody></table></section></div>`;
   }
 
   function renderServer(payload) {
@@ -143,12 +165,12 @@
   function renderUploads(uploads) {
     const videos = uploads.videos || [];
     const shorts = uploads.shorts || [];
-    return `${pageTitle("Uploads Library", "Latest uploaded videos and shorts", {})}<div class="grid lower-grid" style="grid-template-columns:1fr 1fr"><section class="dashboard-card"><div class="card-head"><h2>Live Uploads</h2></div><table class="table"><thead><tr><th>Video</th><th>HLS</th><th>Size</th><th>Updated</th></tr></thead><tbody>${videos.map((v) => `<tr><td>${esc(v.title)}</td><td>${status(v.hls_status)} ${progress(v.hls_progress_percent)}</td><td>${esc(v.file_size_display)}</td><td>${esc(v.updated_at)}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No videos</td></tr>`}</tbody></table></section><section class="dashboard-card"><div class="card-head"><h2>Shorts Uploads</h2></div><table class="table"><thead><tr><th>Short</th><th>HLS</th><th>Duration</th></tr></thead><tbody>${shorts.map((v) => `<tr><td>${esc(v.title)}</td><td>${status(v.status)} ${progress(v.progress_percent)}</td><td>${esc(v.duration_display)}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">No shorts</td></tr>`}</tbody></table></section></div>`;
+    return `${pageTitle("Uploads Library", "Latest uploaded videos and shorts", {})}<div class="grid lower-grid" style="grid-template-columns:1fr 1fr"><section class="dashboard-card"><div class="card-head"><h2>Live Uploads</h2></div><table class="table"><thead><tr><th>Video</th><th>HLS</th><th>Size</th><th>Updated</th></tr></thead><tbody>${videos.map((v) => `<tr><td>${esc(v.title)}</td><td>${status(v.hls_status)} ${progress(v.hls_progress_percent, v.hls_status)}</td><td>${esc(v.file_size_display)}</td><td>${esc(v.updated_at)}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No videos</td></tr>`}</tbody></table></section><section class="dashboard-card"><div class="card-head"><h2>Shorts Uploads</h2></div><table class="table"><thead><tr><th>Short</th><th>HLS</th><th>Duration</th></tr></thead><tbody>${shorts.map((v) => `<tr><td>${esc(v.title)}</td><td>${status(v.status)} ${progress(v.progress_percent, v.status)}</td><td>${esc(v.duration_display)}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">No shorts</td></tr>`}</tbody></table></section></div>`;
   }
 
   function renderRenders(renders) {
     const rows = renders.items || [];
-    return `${pageTitle("Video Library", "Rendered videos from live stream cycle", {})}<section class="dashboard-card"><div class="card-head"><h2>Rendered Videos</h2></div><table class="table"><thead><tr><th>Title</th><th>Source</th><th>Status</th><th>Progress</th><th>Size</th><th>Completed</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${esc(row.title)}</td><td>${esc(row.source_video)}</td><td>${status(row.status)}</td><td>${progress(row.progress_percent)}</td><td>${esc(row.file_size_display)}</td><td>${esc(row.completed_at || row.created_at)}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">No rendered videos</td></tr>`}</tbody></table></section>`;
+    return `${pageTitle("Video Library", "Rendered videos from live stream cycle", {})}<section class="dashboard-card"><div class="card-head"><h2>Rendered Videos</h2></div><table class="table"><thead><tr><th>Title</th><th>Source</th><th>Status</th><th>Progress</th><th>Size</th><th>Completed</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${esc(row.title)}</td><td>${esc(row.source_video)}</td><td>${status(row.status)}</td><td>${progress(row.progress_percent, row.status)}</td><td>${esc(row.file_size_display)}</td><td>${esc(row.completed_at || row.created_at)}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">No rendered videos</td></tr>`}</tbody></table></section>`;
   }
 
   function renderControls(payload) {
