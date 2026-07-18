@@ -181,6 +181,102 @@
     return Number.isFinite(parsed) ? parsed : fallback;
   }
 
+
+  function liveTvScriptOnce(src) {
+    return new Promise(function (resolve, reject) {
+      const existing = document.querySelector('script[src="' + src + '"]');
+      if (existing) {
+        if (existing.dataset.loaded === "true") {
+          resolve();
+          return;
+        }
+        existing.addEventListener("load", resolve, { once: true });
+        existing.addEventListener("error", reject, { once: true });
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = src;
+      script.async = true;
+      script.dataset.liveTvDynamic = "true";
+      script.addEventListener("load", function () {
+        script.dataset.loaded = "true";
+        resolve();
+      }, { once: true });
+      script.addEventListener("error", reject, { once: true });
+      document.head.appendChild(script);
+    });
+  }
+
+  function videoSource(video) {
+    const source = video.querySelector("source");
+    return source ? source.src || source.getAttribute("src") || "" : video.currentSrc || video.src || "";
+  }
+
+  function isHlsVideo(video) {
+    const source = video.querySelector("source");
+    const type = (source ? source.type : video.type || "").toLowerCase();
+    const src = videoSource(video).toLowerCase();
+    return type.indexOf("mpegurl") !== -1 || src.indexOf(".m3u8") !== -1;
+  }
+
+  function nativeHlsSupported(video) {
+    return Boolean(video.canPlayType("application/vnd.apple.mpegurl") || video.canPlayType("application/x-mpegURL"));
+  }
+
+  function attachHlsIfNeeded(frame, video) {
+    if (!isHlsVideo(video) || nativeHlsSupported(video)) {
+      return Promise.resolve();
+    }
+    const src = videoSource(video);
+    if (!src) {
+      return Promise.resolve();
+    }
+    if (video.liveTvHlsAttached === src) {
+      return Promise.resolve();
+    }
+    return liveTvScriptOnce("https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js")
+      .then(function () {
+        if (!window.Hls || !window.Hls.isSupported()) {
+          throw new Error("HLS is not supported in this browser.");
+        }
+        if (video.liveTvHls) {
+          video.liveTvHls.destroy();
+        }
+        const hls = new window.Hls({
+          enableWorker: true,
+          lowLatencyMode: false,
+          backBufferLength: 30,
+          maxBufferLength: 45,
+          maxMaxBufferLength: 90,
+          manifestLoadingTimeOut: 12000,
+          levelLoadingTimeOut: 12000,
+          fragLoadingTimeOut: 20000,
+        });
+        video.liveTvHls = hls;
+        video.liveTvHlsAttached = src;
+        hls.loadSource(src);
+        hls.attachMedia(video);
+        hls.on(window.Hls.Events.ERROR, function (_event, data) {
+          if (!data || !data.fatal) {
+            return;
+          }
+          if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR) {
+            hls.startLoad();
+          } else if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError();
+          } else {
+            hls.destroy();
+            video.liveTvHls = null;
+            video.liveTvHlsAttached = "";
+            setFrameControlState(frame, true);
+          }
+        });
+      })
+      .catch(function () {
+        setFrameControlState(frame, true);
+      });
+  }
+
   function syncedStartSeconds(frame) {
     const seekPosition = parseNumber(frame.dataset.seekPosition, 0);
     const videoDuration = parseNumber(frame.dataset.videoDuration, 0);
@@ -215,15 +311,17 @@
       video.autoplay = true;
       video.preload = "auto";
     }
-    syncNativeVideoToLive(frame, video);
-    if (frame.dataset.forceAutoplay === "true" || video.autoplay) {
-      const playPromise = video.play();
-      if (playPromise && typeof playPromise.catch === "function") {
-        playPromise.catch(function () {
-          setFrameControlState(frame, true);
-        });
+    attachHlsIfNeeded(frame, video).finally(function () {
+      syncNativeVideoToLive(frame, video);
+      if (frame.dataset.forceAutoplay === "true" || video.autoplay) {
+        const playPromise = video.play();
+        if (playPromise && typeof playPromise.catch === "function") {
+          playPromise.catch(function () {
+            setFrameControlState(frame, true);
+          });
+        }
       }
-    }
+    });
   }
 
   function syncMuteButton(frame) {
@@ -288,7 +386,9 @@
           video.muted = true;
           video.autoplay = true;
         }
-        if (video.readyState >= 1) {
+        if (isHlsVideo(video) && !nativeHlsSupported(video)) {
+          playNativeLiveVideo(frame, video);
+        } else if (video.readyState >= 1) {
           playNativeLiveVideo(frame, video);
         } else {
           video.addEventListener("loadedmetadata", function () {
