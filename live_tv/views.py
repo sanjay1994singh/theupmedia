@@ -9,7 +9,7 @@ import signal
 import subprocess
 import tempfile
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse
@@ -24,7 +24,7 @@ from django.core.files import File
 from django.core.files.base import ContentFile
 from django.db import close_old_connections, connection, transaction
 from django.db.models.deletion import ProtectedError
-from django.db.models import F, Q
+from django.db.models import Count, F, Q
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import FileResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -42,7 +42,7 @@ except ImportError:  # pragma: no cover - server requirements include Pillow
 from .forms import LiveTVChannelForm
 from .hls import validate_uploaded_video
 from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
-from .services import calculate_current_playback, enqueue_completed_broadcast_renders, get_main_live_channel, update_playlist_item
+from .services import calculate_current_playback, enqueue_completed_broadcast_renders, get_main_live_channel, rebuild_live_playlist, update_playlist_item
 from news.models import Article
 
 
@@ -2823,6 +2823,500 @@ def delete_media_download(request, pk):
     job.delete()
     messages.success(request, "Download job delete ho gaya.")
     return redirect("live_tv:media_downloads")
+
+
+def dashboard_human_bytes(value):
+    try:
+        value = float(value or 0)
+    except (TypeError, ValueError):
+        value = 0
+    units = ["B", "KB", "MB", "GB", "TB"]
+    index = 0
+    while value >= 1024 and index < len(units) - 1:
+        value /= 1024
+        index += 1
+    return f"{value:.1f} {units[index]}" if index else f"{int(value)} {units[index]}"
+
+
+def dashboard_duration(seconds):
+    try:
+        seconds = int(float(seconds or 0))
+    except (TypeError, ValueError):
+        seconds = 0
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
+
+
+def dashboard_file_size(file_obj):
+    if not file_obj or not getattr(file_obj, "name", ""):
+        return 0
+    try:
+        return file_obj.size
+    except (OSError, ValueError):
+        try:
+            return Path(file_obj.path).stat().st_size
+        except (OSError, ValueError):
+            return 0
+
+
+def dashboard_dir_size(path, max_files=5000):
+    path = Path(path)
+    if not path.exists():
+        return 0
+    total = 0
+    seen = 0
+    for root, _dirs, files in os.walk(path):
+        for filename in files:
+            seen += 1
+            if seen > max_files:
+                return total
+            try:
+                total += (Path(root) / filename).stat().st_size
+            except OSError:
+                continue
+    return total
+
+
+def dashboard_counts_by_status(queryset, field="status"):
+    return {row[field] or "unknown": row["count"] for row in queryset.values(field).annotate(count=Count("pk"))}
+
+
+def dashboard_server_stats():
+    media_root = Path(settings.MEDIA_ROOT)
+    disk_target = media_root if media_root.exists() else Path.cwd()
+    disk = shutil.disk_usage(disk_target)
+    stats = {
+        "hostname": socket.gethostname(),
+        "platform": os.name,
+        "cpu_percent": None,
+        "load_percent": None,
+        "load_average": "",
+        "ram_total": 0,
+        "ram_used": 0,
+        "ram_free": 0,
+        "ram_percent": None,
+        "disk_total": disk.total,
+        "disk_used": disk.used,
+        "disk_free": disk.free,
+        "disk_percent": round((disk.used / disk.total) * 100, 1) if disk.total else 0,
+    }
+    try:
+        import psutil
+
+        memory = psutil.virtual_memory()
+        stats.update(
+            {
+                "cpu_percent": psutil.cpu_percent(interval=None),
+                "ram_total": memory.total,
+                "ram_used": memory.used,
+                "ram_free": memory.available,
+                "ram_percent": memory.percent,
+            }
+        )
+    except Exception:
+        pass
+    try:
+        if hasattr(os, "getloadavg"):
+            load_1, load_5, load_15 = os.getloadavg()
+            stats["load_average"] = f"{load_1:.2f}, {load_5:.2f}, {load_15:.2f}"
+    except OSError:
+        pass
+    stats.update(
+        {
+            "ram_total_display": dashboard_human_bytes(stats["ram_total"]),
+            "ram_used_display": dashboard_human_bytes(stats["ram_used"]),
+            "ram_free_display": dashboard_human_bytes(stats["ram_free"]),
+            "disk_total_display": dashboard_human_bytes(stats["disk_total"]),
+            "disk_used_display": dashboard_human_bytes(stats["disk_used"]),
+            "disk_free_display": dashboard_human_bytes(stats["disk_free"]),
+        }
+    )
+    return stats
+
+
+def dashboard_storage_stats():
+    media_root = Path(settings.MEDIA_ROOT)
+    sections = [
+        ("Live videos", media_root / "live-tv"),
+        ("Shorts", media_root / "shorts"),
+        ("Rendered", media_root / "rendered"),
+        ("Social renders", media_root / "live-tv" / "rendered"),
+        ("Downloads", media_root / "media-downloads"),
+    ]
+    rows = []
+    for label, path in sections:
+        size = dashboard_dir_size(path)
+        rows.append({"label": label, "path": str(path), "bytes": size, "display": dashboard_human_bytes(size)})
+    return rows
+
+
+APACHE_LOG_RE = re.compile(
+    r"\[(?P<date>\d{2}/[A-Za-z]{3}/\d{4}):[^\]]+\]\s+\"(?P<method>[A-Z]+)\s+(?P<path>[^\" ]+)[^\"]*\"\s+(?P<status>\d{3})\s+(?P<bytes>\d+|-).*?\"(?P<agent>[^\"]*)\"\s*$"
+)
+
+
+def dashboard_parse_apache_logs():
+    log_paths = getattr(
+        settings,
+        "LIVE_TV_APACHE_ACCESS_LOGS",
+        ["/var/log/apache2/access.log", "/var/log/apache2/access.log.1"],
+    )
+    today = timezone.localdate()
+    periods = {
+        "today": {"from": today, "bytes": 0, "requests": 0, "mobile": 0, "web": 0},
+        "yesterday": {"from": today - timedelta(days=1), "bytes": 0, "requests": 0, "mobile": 0, "web": 0},
+        "week": {"from": today - timedelta(days=6), "bytes": 0, "requests": 0, "mobile": 0, "web": 0},
+        "month": {"from": today.replace(day=1), "bytes": 0, "requests": 0, "mobile": 0, "web": 0},
+        "year": {"from": today.replace(month=1, day=1), "bytes": 0, "requests": 0, "mobile": 0, "web": 0},
+    }
+    found_logs = []
+    for raw_path in log_paths:
+        path = Path(raw_path)
+        if not path.exists() or path.suffix == ".gz":
+            continue
+        found_logs.append(str(path))
+        try:
+            with path.open("r", encoding="utf-8", errors="ignore") as handle:
+                for line in handle:
+                    match = APACHE_LOG_RE.search(line.strip())
+                    if not match:
+                        continue
+                    try:
+                        event_date = datetime.strptime(match.group("date"), "%d/%b/%Y").date()
+                    except ValueError:
+                        continue
+                    raw_bytes = match.group("bytes")
+                    bytes_sent = int(raw_bytes) if raw_bytes.isdigit() else 0
+                    agent = (match.group("agent") or "").lower()
+                    is_mobile = any(value in agent for value in ["android", "iphone", "okhttp", "reactnative"])
+                    for key, bucket in periods.items():
+                        if key == "yesterday":
+                            include = event_date == bucket["from"]
+                        else:
+                            include = event_date >= bucket["from"]
+                        if include:
+                            bucket["bytes"] += bytes_sent
+                            bucket["requests"] += 1
+                            if is_mobile:
+                                bucket["mobile"] += bytes_sent
+                            else:
+                                bucket["web"] += bytes_sent
+        except OSError:
+            continue
+    for bucket in periods.values():
+        bucket["display"] = dashboard_human_bytes(bucket["bytes"])
+        bucket["mobile_display"] = dashboard_human_bytes(bucket["mobile"])
+        bucket["web_display"] = dashboard_human_bytes(bucket["web"])
+    return {"logs": found_logs, "periods": periods, "configured": bool(found_logs)}
+
+
+def dashboard_channel_summary(request, channel):
+    if not channel:
+        return None
+    hls_url = absolute_media_path_url(request, channel.hls_master_url)
+    return {
+        "id": channel.pk,
+        "title": channel.title,
+        "source_type": channel.source_type,
+        "is_active": channel.is_active,
+        "is_live": channel.is_live,
+        "headline": channel.headline or "",
+        "lower_third_label": channel.lower_third_label or "",
+        "duration_seconds": channel.effective_duration_seconds,
+        "duration_display": dashboard_duration(channel.effective_duration_seconds),
+        "hls_status": channel.hls_status,
+        "hls_progress_percent": channel.hls_progress_percent,
+        "hls_url": hls_url,
+        "video_url": absolute_media_url(request, channel.video_file),
+        "poster_url": absolute_media_url(request, channel.poster_image),
+        "file_size": dashboard_file_size(channel.video_file),
+        "file_size_display": dashboard_human_bytes(dashboard_file_size(channel.video_file)),
+        "updated_at": timezone.localtime(channel.updated_at).strftime("%d %b %Y, %I:%M %p"),
+    }
+
+
+def dashboard_live_snapshot(request):
+    now = timezone.now()
+    channel = get_main_live_channel(create=False)
+    setting = live_tv_setting()
+    data = {
+        "server_time": timezone.localtime(now).strftime("%d %b %Y, %I:%M:%S %p"),
+        "settings": serialize_live_tv_setting(request, setting),
+        "main_channel": dashboard_channel_summary(request, channel),
+        "current": None,
+        "next": None,
+        "schedule": [],
+        "playlist": {"count": 0, "duration_seconds": 0, "duration_display": "00:00", "version": 0},
+    }
+    if not channel:
+        return data
+    items = list(channel.playlist_items.filter(is_active=True).select_related("video").order_by("position", "pk"))
+    data["playlist"] = {
+        "count": len(items),
+        "duration_seconds": channel.playlist_duration_seconds,
+        "duration_display": dashboard_duration(channel.playlist_duration_seconds),
+        "target_duration_seconds": channel.target_playlist_duration_seconds,
+        "target_duration_display": dashboard_duration(channel.target_playlist_duration_seconds),
+        "version": channel.playlist_version,
+        "loop_enabled": channel.loop_enabled,
+        "playback_started_at": timezone.localtime(channel.playback_started_at).strftime("%d %b %Y, %I:%M %p") if channel.playback_started_at else "",
+    }
+    state = calculate_current_playback(channel, at=now) if items else None
+    if not state:
+        return data
+    current_video = state["video"]
+    data["current"] = dashboard_channel_summary(request, current_video)
+    data["current"].update(
+        {
+            "seek_position": round(state["seek_position"], 2),
+            "seek_display": dashboard_duration(state["seek_position"]),
+            "remaining_seconds": round(state["remaining_seconds"], 2),
+            "remaining_display": dashboard_duration(state["remaining_seconds"]),
+            "started_at": timezone.localtime(state["video_started_at"]).strftime("%I:%M:%S %p"),
+        }
+    )
+    next_video = state["next_entry"].video if state.get("next_entry") else None
+    data["next"] = dashboard_channel_summary(request, next_video)
+
+    cycle = state.get("cycle")
+    entries = list(cycle.items.select_related("video").order_by("position", "pk")) if cycle else []
+    if entries:
+        current_index = next((index for index, item in enumerate(entries) if item.pk == state["entry"].pk), 0)
+        start_at = now - timedelta(seconds=state["seek_position"])
+        schedule_rows = [
+            {
+                "position": "Now",
+                "title": current_video.title,
+                "time": timezone.localtime(start_at).strftime("%I:%M %p"),
+                "duration": dashboard_duration(state["entry"].duration_seconds),
+                "status": "playing",
+            }
+        ]
+        next_start = now + timedelta(seconds=state["remaining_seconds"])
+        cursor = next_start
+        for offset in range(1, min(len(entries), 10)):
+            entry = entries[(current_index + offset) % len(entries)]
+            schedule_rows.append(
+                {
+                    "position": f"+{offset}",
+                    "title": entry.video.title,
+                    "time": timezone.localtime(cursor).strftime("%I:%M %p"),
+                    "duration": dashboard_duration(entry.duration_seconds),
+                    "status": "next" if offset == 1 else "queued",
+                }
+            )
+            cursor += timedelta(seconds=entry.duration_seconds)
+        data["schedule"] = schedule_rows
+    return data
+
+
+def dashboard_processing_snapshot():
+    render_jobs = SocialRenderedVideo.objects.select_related("source_video", "live_channel").order_by("-updated_at", "-created_at")[:20]
+    live_processing = LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.PROCESSING).order_by("-updated_at")[:10]
+    short_processing = ShortsVideo.objects.filter(hls_status=ShortsVideo.HLSStatus.PROCESSING).order_by("-updated_at")[:10]
+    downloads = MediaDownload.objects.order_by("-updated_at", "-created_at")[:10]
+    return {
+        "live_hls": dashboard_counts_by_status(LiveTVChannel.objects.all(), "hls_status"),
+        "short_hls": dashboard_counts_by_status(ShortsVideo.objects.all(), "hls_status"),
+        "renders": dashboard_counts_by_status(SocialRenderedVideo.objects.all(), "status"),
+        "downloads": dashboard_counts_by_status(MediaDownload.objects.all(), "status"),
+        "live_processing": [dashboard_channel_summary(NoneRequest(), item) for item in live_processing],
+        "short_processing": [
+            {
+                "id": item.pk,
+                "title": item.title,
+                "status": item.hls_status,
+                "progress_percent": item.hls_progress_percent,
+                "updated_at": timezone.localtime(item.updated_at).strftime("%d %b, %I:%M %p"),
+            }
+            for item in short_processing
+        ],
+        "render_jobs": [
+            {
+                "id": item.pk,
+                "title": item.title,
+                "status": item.status,
+                "progress_percent": item.progress_percent,
+                "source_video": item.source_video.title if item.source_video_id else "",
+                "live_channel": item.live_channel.title if item.live_channel_id else "",
+                "updated_at": timezone.localtime(item.updated_at).strftime("%d %b, %I:%M %p"),
+            }
+            for item in render_jobs
+        ],
+        "downloads_recent": [
+            {
+                "id": item.pk,
+                "title": item.title,
+                "status": item.status,
+                "progress_percent": item.progress_percent,
+                "updated_at": timezone.localtime(item.updated_at).strftime("%d %b, %I:%M %p"),
+            }
+            for item in downloads
+        ],
+    }
+
+
+class NoneRequest:
+    def build_absolute_uri(self, value=""):
+        return value
+
+
+def dashboard_uploads_snapshot(request):
+    videos = LiveTVChannel.objects.filter(source_type=LiveTVChannel.SourceType.DIRECT).select_related("category", "state", "city").order_by("-created_at")[:30]
+    shorts = ShortsVideo.objects.select_related("category", "state", "city").order_by("-created_at")[:30]
+    return {
+        "videos": [dashboard_channel_summary(request, item) for item in videos],
+        "shorts": [
+            {
+                "id": item.pk,
+                "title": item.title,
+                "headline": item.headline,
+                "status": item.hls_status,
+                "progress_percent": item.hls_progress_percent,
+                "duration_display": dashboard_duration(item.duration or 0),
+                "thumbnail": absolute_media_url(request, item.thumbnail),
+                "created_at": timezone.localtime(item.created_at).strftime("%d %b %Y, %I:%M %p"),
+            }
+            for item in shorts
+        ],
+    }
+
+
+def dashboard_renders_snapshot(request):
+    jobs = SocialRenderedVideo.objects.select_related("source_video", "live_channel").order_by("-created_at")[:40]
+    return {
+        "items": [
+            {
+                "id": item.pk,
+                "title": item.title,
+                "status": item.status,
+                "progress_percent": item.progress_percent,
+                "source_video": item.source_video.title if item.source_video_id else "",
+                "live_channel": item.live_channel.title if item.live_channel_id else "",
+                "duration_display": dashboard_duration(item.duration_seconds or 0),
+                "file_size_display": dashboard_human_bytes(item.file_size or dashboard_file_size(item.rendered_video)),
+                "thumbnail": absolute_media_url(request, item.thumbnail),
+                "video_url": absolute_media_url(request, item.rendered_video),
+                "created_at": timezone.localtime(item.created_at).strftime("%d %b %Y, %I:%M %p"),
+                "completed_at": timezone.localtime(item.completed_at).strftime("%d %b %Y, %I:%M %p") if item.completed_at else "",
+            }
+            for item in jobs
+        ]
+    }
+
+
+def live_control_dashboard_payload(request, section="overview"):
+    live = dashboard_live_snapshot(request)
+    processing = dashboard_processing_snapshot()
+    if section == "live":
+        return {"section": section, "live": live}
+    if section == "playlist":
+        channel = get_main_live_channel(create=False)
+        items = []
+        if channel:
+            for item in channel.playlist_items.select_related("video").order_by("position", "pk")[:80]:
+                row = dashboard_channel_summary(request, item.video)
+                row.update({"playlist_item_id": item.pk, "position": item.position + 1, "priority": item.priority, "is_active": item.is_active})
+                items.append(row)
+        return {"section": section, "live": live, "items": items}
+    if section == "processing":
+        return {"section": section, "processing": processing}
+    if section == "uploads":
+        return {"section": section, "uploads": dashboard_uploads_snapshot(request)}
+    if section == "renders":
+        return {"section": section, "renders": dashboard_renders_snapshot(request)}
+    if section == "server":
+        return {
+            "section": section,
+            "server": dashboard_server_stats(),
+            "storage": dashboard_storage_stats(),
+            "bandwidth": dashboard_parse_apache_logs(),
+        }
+    if section == "controls":
+        return {"section": section, "settings": serialize_live_tv_setting(request, live_tv_setting()), "facebook_live": serialize_facebook_live_setting(facebook_live_setting())}
+    return {
+        "section": "overview",
+        "live": live,
+        "processing": processing,
+        "server": dashboard_server_stats(),
+        "storage": dashboard_storage_stats(),
+        "bandwidth": dashboard_parse_apache_logs(),
+        "uploads": {
+            "videos_total": LiveTVChannel.objects.filter(source_type=LiveTVChannel.SourceType.DIRECT).count(),
+            "shorts_total": ShortsVideo.objects.count(),
+            "playlist_items": live["playlist"]["count"],
+        },
+    }
+
+
+@superuser_required
+@require_GET
+def live_control_dashboard(request):
+    return render(
+        request,
+        "live_tv/control_dashboard.html",
+        {
+            "initial_payload": live_control_dashboard_payload(request, "overview"),
+            "page_title": "Live TV Control Room",
+        },
+    )
+
+
+@superuser_required
+@require_GET
+def live_control_dashboard_api(request, section="overview"):
+    section = (section or request.GET.get("section") or "overview").strip().lower()
+    return JsonResponse({"ok": True, "payload": live_control_dashboard_payload(request, section)})
+
+
+@superuser_required
+@require_POST
+def live_control_dashboard_action_api(request):
+    action = (request.POST.get("action") or "").strip()
+    if action == "rebuild_playlist":
+        videos = LiveTVChannel.objects.filter(
+            source_type=LiveTVChannel.SourceType.DIRECT,
+            auto_add_to_live=True,
+            is_active=True,
+            video_file__isnull=False,
+            duration_seconds__gt=0,
+        ).order_by("display_order", "created_at", "pk")
+        channel = rebuild_live_playlist(videos)
+        return JsonResponse({"ok": True, "message": f"Playlist rebuilt with {channel.playlist_items.filter(is_active=True).count()} videos."})
+    if action == "retry_failed_hls":
+        live_ids = list(LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.FAILED, video_file__isnull=False).values_list("pk", flat=True)[:20])
+        short_ids = list(ShortsVideo.objects.filter(hls_status=ShortsVideo.HLSStatus.FAILED, video_file__isnull=False).values_list("pk", flat=True)[:20])
+        for channel_id in live_ids:
+            enqueue_live_channel_hls_job(channel_id)
+        for short_id in short_ids:
+            enqueue_short_hls_job(short_id)
+        return JsonResponse({"ok": True, "message": f"Retried {len(live_ids)} live videos and {len(short_ids)} shorts."})
+    if action == "retry_failed_renders":
+        jobs = list(SocialRenderedVideo.objects.filter(status=SocialRenderedVideo.Status.FAILED).order_by("updated_at")[:10])
+        for job in jobs:
+            job.status = SocialRenderedVideo.Status.PENDING
+            job.progress_percent = 0
+            job.error_message = ""
+            job.save(update_fields=["status", "progress_percent", "error_message", "updated_at"])
+            enqueue_social_render_job(job.pk)
+        return JsonResponse({"ok": True, "message": f"Retried {len(jobs)} render jobs."})
+    if action in {"toggle_ticker", "toggle_live_badge", "toggle_channel_logo", "toggle_lower_third"}:
+        setting = live_tv_setting()
+        field_map = {
+            "toggle_ticker": "show_ticker",
+            "toggle_live_badge": "show_live_badge",
+            "toggle_channel_logo": "show_channel_logo",
+            "toggle_lower_third": "show_lower_third",
+        }
+        field = field_map[action]
+        setattr(setting, field, not getattr(setting, field))
+        setting.save(update_fields=[field, "updated_at"])
+        return JsonResponse({"ok": True, "message": f"{field} updated.", "settings": serialize_live_tv_setting(request, setting)})
+    return JsonResponse({"ok": False, "message": "Unknown dashboard action."}, status=400)
+
 
 @superuser_required
 def dashboard(request):

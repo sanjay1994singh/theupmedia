@@ -1,0 +1,52 @@
+﻿{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_title }} | The UP Media</title>
+  <link rel="stylesheet" href="{% static 'live_tv/control_dashboard.css' %}">
+</head>
+<body>
+  <div class="control-shell"
+       data-overview-url="{% url 'live_tv:api_control_dashboard_section' 'overview' %}"
+       data-section-url-template="{% url 'live_tv:api_control_dashboard_section' 'overview' %}"
+       data-action-url="{% url 'live_tv:api_control_dashboard_action' %}">
+    <aside class="control-side">
+      <div class="brand-block">
+        <span class="brand-mark">UP</span>
+        <div>
+          <strong>The UP Media</strong>
+          <small>Live Control Room</small>
+        </div>
+      </div>
+      <button class="side-item active" data-section="overview">Overview</button>
+      <button class="side-item" data-section="live">Live Now</button>
+      <button class="side-item" data-section="playlist">Playlist</button>
+      <button class="side-item" data-section="processing">Processing</button>
+      <button class="side-item" data-section="uploads">Uploads</button>
+      <button class="side-item" data-section="renders">Rendered Videos</button>
+      <button class="side-item" data-section="server">Server & Bandwidth</button>
+      <button class="side-item" data-section="controls">Controls</button>
+      <a class="admin-link" href="{% url 'admin:index' %}">Django Admin</a>
+    </aside>
+    <main class="control-main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Admin only</p>
+          <h1>Live TV Dashboard</h1>
+        </div>
+        <div class="top-actions">
+          <span id="dashboard-clock">--</span>
+          <button id="manual-refresh" type="button">Refresh</button>
+        </div>
+      </header>
+      <section id="dashboard-alert" class="dashboard-alert" hidden></section>
+      <section id="dashboard-content" class="dashboard-content"></section>
+    </main>
+  </div>
+  {{ initial_payload|json_script:"initial-dashboard-json" }}
+  <script src="{% static 'live_tv/control_dashboard.js' %}"></script>
+</body>
+</html>
+
