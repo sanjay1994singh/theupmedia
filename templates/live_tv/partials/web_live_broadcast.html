@@ -41,7 +41,7 @@
       </video>
     {% elif live_channel.player_source_type == "hls" %}
       <video preload="auto" autoplay muted playsinline disablepictureinpicture controlslist="nodownload noplaybackrate noremoteplayback nofullscreen" {% if live_channel.poster_image %}poster="{{ live_channel.poster_image.url }}"{% endif %}>
-        <source src="{{ live_channel.stream_url }}" type="application/x-mpegURL">
+        <source src="{{ live_channel.hls_media_url|default:live_channel.stream_url }}" type="application/x-mpegURL">
         Your browser does not support this live stream.
       </video>
     {% elif live_channel.poster_image %}
@@ -72,7 +72,7 @@
     {% endif %}
 
     {% if live_channel.player_source_type == "direct" or live_channel.player_source_type == "hls" %}
-      <button class="web-live-mute live-mute-toggle" type="button" aria-label="Unmute live TV" data-muted="true">
+      <button class="web-live-mute" type="button" aria-label="Unmute live TV" data-muted="true">
         <svg class="web-live-mute-icon web-live-mute-icon--muted" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path d="M3 9v6h4l5 4V5L7 9H3z"></path>
           <path d="M17 9l4 4m0-4l-4 4"></path>

@@ -228,18 +228,24 @@
 
   function syncMuteButton(frame) {
     const video = frame.querySelector("video");
-    const button = frame.querySelector(".live-mute-toggle, .web-live-mute");
+    const button = frame.querySelector(".web-live-mute, .live-mute-toggle");
     if (!video || !button) {
       return;
     }
     const muted = Boolean(video.muted);
     button.dataset.muted = muted ? "true" : "false";
     button.setAttribute("aria-label", muted ? "Unmute live TV" : "Mute live TV");
+    const mutedIcon = button.querySelector(".web-live-mute-icon--muted");
+    const soundIcon = button.querySelector(".web-live-mute-icon--sound");
+    if (mutedIcon && soundIcon) {
+      mutedIcon.style.display = muted ? "block" : "none";
+      soundIcon.style.display = muted ? "none" : "block";
+    }
   }
 
   function initMuteToggle(frame) {
     const video = frame.querySelector("video");
-    const button = frame.querySelector(".live-mute-toggle, .web-live-mute");
+    const button = frame.querySelector(".web-live-mute, .live-mute-toggle");
     if (!video || !button || button.dataset.ready === "true") {
       return;
     }

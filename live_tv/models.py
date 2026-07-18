@@ -240,6 +240,18 @@ class LiveTVChannel(models.Model):
         return ""
 
     @property
+    def hls_media_url(self):
+        if not self.hls_master_url:
+            return ""
+        url = str(self.hls_master_url).strip()
+        if url.startswith(("http://", "https://", "/")):
+            return url
+        media_url = settings.MEDIA_URL or "/media/"
+        if not media_url.endswith("/"):
+            media_url = f"{media_url}/"
+        return f"{media_url}{url.lstrip('/')}"
+
+    @property
     def effective_duration_seconds(self):
         try:
             value = int(self.duration_seconds or 0)
@@ -769,7 +781,7 @@ class SocialRenderedVideo(models.Model):
     title = models.CharField(max_length=180)
     headline = models.CharField(max_length=180, blank=True)
     ticker_label = models.CharField(max_length=60, default="BREAKING NEWS")
-    ticker_text = models.CharField(max_length=260, blank=True)
+    ticker_text = models.TextField(blank=True)
     lower_third_label = models.CharField(max_length=60, default="BREAKING NEWS")
     render_format = models.CharField(max_length=10, default="16:9", db_default="16:9")
     frame_category = models.CharField(max_length=40, blank=True)

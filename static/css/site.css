@@ -2370,15 +2370,23 @@ time {
 }
 
 .web-live-mute {
+  align-items: center;
   background: rgba(0, 0, 0, 0.62);
-  border-color: rgba(255, 255, 255, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 999px;
   bottom: 58px;
   box-shadow: none;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
   height: 42px;
+  justify-content: center;
   padding: 0;
   pointer-events: auto;
+  position: absolute;
   right: 14px;
   touch-action: manipulation;
+  transition: background 0.18s ease;
   -webkit-tap-highlight-color: transparent;
   width: 42px;
   z-index: 8;
@@ -2390,21 +2398,16 @@ time {
   transform: none;
 }
 
-.web-live-mute .live-mute-toggle__off,
-.web-live-mute .live-mute-toggle__on,
-.web-live-mute.live-mute-toggle[data-muted="true"] .live-mute-toggle__off,
-.web-live-mute.live-mute-toggle[data-muted="false"] .live-mute-toggle__on {
-  display: none !important;
-}
-
 .web-live-mute::before,
-.web-live-mute::after {
+.web-live-mute::after,
+.web-live-mute.live-mute-toggle::before,
+.web-live-mute.live-mute-toggle::after {
   content: none !important;
   display: none !important;
 }
 
-.web-live-mute-icon {
-  display: none;
+.web-live-mute .web-live-mute-icon {
+  display: none !important;
   fill: none;
   height: 24px;
   pointer-events: none;
@@ -2415,14 +2418,16 @@ time {
   width: 24px;
 }
 
-.web-live-mute-icon path:first-child {
+.web-live-mute .web-live-mute-icon path:first-child {
   fill: #fff;
   stroke: none;
 }
 
 .web-live-mute[data-muted="true"] .web-live-mute-icon--muted,
-.web-live-mute[data-muted="false"] .web-live-mute-icon--sound {
-  display: block;
+.web-live-mute[data-muted="false"] .web-live-mute-icon--sound,
+.web-live-mute.live-mute-toggle[data-muted="true"] .web-live-mute-icon--muted,
+.web-live-mute.live-mute-toggle[data-muted="false"] .web-live-mute-icon--sound {
+  display: block !important;
 }
 
 .web-live-ticker {

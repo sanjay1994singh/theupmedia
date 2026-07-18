@@ -1645,16 +1645,16 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
         )
 
     if bool_snapshot(snapshot, "show_ticker") and (ticker_label or ticker_text):
-        ticker_height = 112
-        label_width = 420
-        black_bar_width = 42
-        red_bar_width = 36
+        ticker_height = 128
+        label_width = 450
+        black_bar_width = 46
+        red_bar_width = 40
         mask_width = label_width + black_bar_width + red_bar_width
         ticker_top = input_height - ticker_height
         ticker_start = mask_width + 24
-        ticker_speed = 190
-        ticker_font_size = 52
-        ticker_text_y = ticker_top + 28
+        ticker_speed = 205
+        ticker_font_size = 60
+        ticker_text_y = ticker_top + 30
         ticker_text_image, ticker_label_image, ticker_loop_width = make_broadcast_ticker_assets(
             ticker_label,
             ticker_text,
@@ -1724,7 +1724,7 @@ def render_social_video_file(job):
     label_font_arg = ffmpeg_font_arg_for_text(label_text, devanagari_font, latin_font)
     headline_font_arg = ffmpeg_font_arg_for_text(headline_text, devanagari_font, latin_font)
     ticker_label_font_arg = ffmpeg_font_arg_for_text(ticker_label_text, devanagari_font, latin_font)
-    ticker_font_arg = f":fontfile='{devanagari_font}'" if devanagari_font else ""
+    ticker_font_arg = ffmpeg_font_arg_for_text(ticker_text, devanagari_font, latin_font)
     title_font_arg = ffmpeg_font_arg_for_text(title_text, devanagari_font, latin_font)
 
     try:

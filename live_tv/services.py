@@ -5,7 +5,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from .models import (
@@ -205,7 +205,7 @@ def create_broadcast_render_job(cycle_item):
         "title": snapshot["title"][:180],
         "headline": snapshot["headline"][:180],
         "ticker_label": snapshot["ticker_label"][:60],
-        "ticker_text": snapshot["ticker_text"][:260],
+        "ticker_text": snapshot["ticker_text"],
         "lower_third_label": snapshot["lower_third_label"][:60],
         "render_format": snapshot["render_format"],
         "frame_category": snapshot["frame_category"],
@@ -314,14 +314,25 @@ def enqueue_completed_broadcast_renders(channel, at=None, state=None):
     if not completed_ids:
         return []
 
-    jobs = []
+    active_cutoff = at - timedelta(seconds=30)
+    processing_cutoff = at - timedelta(minutes=10)
+    active_job = SocialRenderedVideo.objects.filter(
+        live_channel=channel,
+        frame_category="live_broadcast",
+    ).filter(
+        Q(status=SocialRenderedVideo.Status.PENDING, updated_at__gte=active_cutoff)
+        | Q(status=SocialRenderedVideo.Status.PROCESSING, updated_at__gte=processing_cutoff)
+    ).order_by("created_at").first()
+    if active_job:
+        return [active_job.pk]
+
     for entry in entries:
         if entry.pk not in completed_ids:
             continue
         job_id = enqueue_broadcast_render_job_for_cycle_item(entry)
         if job_id:
-            jobs.append(job_id)
-    return jobs
+            return [job_id]
+    return []
 
 
 def ensure_current_cycle(channel, at=None):
