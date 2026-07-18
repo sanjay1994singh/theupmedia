@@ -3,7 +3,7 @@
   const content = document.getElementById("dashboard-content");
   const alertBox = document.getElementById("dashboard-alert");
   const refreshButton = document.getElementById("manual-refresh");
-  const clock = document.getElementById("dashboard-clock");
+  const sideServerTime = document.getElementById("side-server-time");
   let section = "overview";
   let timer = null;
 
@@ -12,6 +12,7 @@
   const progress = (value) => `<div class="progress"><span style="width:${Math.max(0, Math.min(100, Number(value || 0)))}%"></span></div>`;
   const csrf = () => (document.cookie.match(/(?:^|; )csrftoken=([^;]+)/) || [])[1] || "";
   const sectionUrl = (name) => shell.dataset.sectionUrlTemplate.replace(/overview\/?$/, `${name}/`);
+  const count = (obj, key) => Number((obj || {})[key] || 0);
 
   function showAlert(message, isError = false) {
     alertBox.hidden = false;
@@ -21,8 +22,13 @@
     showAlert._timer = setTimeout(() => (alertBox.hidden = true), 4200);
   }
 
-  function kpi(label, value, sub = "") {
-    return `<div class="card"><span class="kpi-label">${esc(label)}</span><strong class="kpi-value">${esc(value)}</strong><div class="kpi-sub">${esc(sub)}</div></div>`;
+  function pageTitle(title, subtitle, live) {
+    if (sideServerTime && live?.server_time) sideServerTime.textContent = `Server Time: ${live.server_time}`;
+    return `<div class="page-title"><div><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div><div class="dashboard-clock">${esc(live?.server_time || "--")}</div></div>`;
+  }
+
+  function kpi(label, value, sub = "", tone = "") {
+    return `<div class="kpi-card ${tone}"><span class="kpi-label">${esc(label)}</span><strong class="kpi-value">${esc(value)}</strong><div class="kpi-sub">${esc(sub)}</div></div>`;
   }
 
   function renderLive(live) {
@@ -30,66 +36,117 @@
     const setting = live.settings || {};
     const poster = current.poster_url ? `background-image:url('${esc(current.poster_url)}')` : "";
     const tickerText = setting.default_ticker_text || current.ticker_text || "Live updates";
-    const tickerLabel = setting.default_ticker_label || "ताजा खबर";
-    return `<div class="card">
-      <h2>Live Now</h2>
+    const tickerLabel = setting.default_ticker_label || "TODAY'S";
+    return `<section class="dashboard-card">
+      <div class="card-head"><h2>Live TV Preview</h2><button class="ghost-btn" data-section-jump="live">View</button></div>
       <div class="live-preview">
         <div class="poster" style="${poster}"></div>
-        ${setting.show_live_badge ? `<div class="live-badge">● ${esc(setting.live_label || "LIVE")}</div>` : ""}
-        <div class="live-meta"><h2>${esc(current.title || "Live is going soon")}</h2><p>${esc(current.seek_display || "00:00")} / ${esc(current.duration_display || "00:00")}</p></div>
+        ${setting.show_live_badge ? `<div class="live-badge">LIVE</div>` : ""}
+        <div class="live-meta"><h2>${esc(current.title || "Live is going soon")}</h2><p>${esc(current.seek_display || "00:00")} / ${esc(current.duration_display || "00:00")} | Next: ${esc((live.next || {}).title || "-")}</p></div>
+        <div class="preview-actions"><span>V</span><span>L</span><span>S</span><span>F</span></div>
         ${setting.show_ticker ? `<div class="ticker-sim"><div class="ticker-label">${esc(tickerLabel)}</div><div class="ticker-cut"></div><div class="ticker-text">${esc(tickerText)}</div></div>` : ""}
       </div>
-      <div class="pill-row" style="margin-top:14px">
-        <span class="pill">Current: ${esc(current.title || "-")}</span>
-        <span class="pill">Next: ${esc((live.next || {}).title || "-")}</span>
-        <span class="pill">Remaining: ${esc(current.remaining_display || "00:00")}</span>
+      <div class="pill-row">
+        <span class="pill">Seek ${esc(current.seek_display || "00:00")}</span>
+        <span class="pill">Remaining ${esc(current.remaining_display || "00:00")}</span>
+        <span class="pill">Playlist ${(live.playlist || {}).count || 0} videos</span>
       </div>
-    </div>`;
+    </section>`;
   }
 
   function renderSchedule(rows = []) {
-    return `<div class="card"><h2>Upcoming Schedule</h2><table class="table"><thead><tr><th>Slot</th><th>Video</th><th>Time</th><th>Duration</th><th>Status</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${esc(row.position)}</td><td>${esc(row.title)}</td><td>${esc(row.time)}</td><td>${esc(row.duration)}</td><td>${status(row.status)}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">Playlist empty</td></tr>`}</tbody></table></div>`;
+    return `<section class="dashboard-card">
+      <div class="card-head"><h2>Upcoming Programs</h2><button class="ghost-btn" data-section-jump="playlist">View All</button></div>
+      <div class="schedule">${rows.map((row, index) => `<div class="schedule-row"><div><span class="dot" style="background:${index === 0 ? "#7c4dff" : index === 1 ? "#e8466d" : "#f08b22"}"></span>${esc(row.time)}</div><div><div class="schedule-title">${esc(row.title)}</div><div class="schedule-sub">${esc(row.duration)} | ${esc(row.status)}</div></div></div>`).join("") || `<p class="muted">Playlist empty</p>`}</div>
+    </section>`;
+  }
+
+  function renderProcessingCard(processing) {
+    const renderCount = count(processing.renders, "processing");
+    const renderPending = count(processing.renders, "pending");
+    const liveCount = count(processing.live_hls, "processing");
+    const shortCount = count(processing.short_hls, "processing");
+    const total = renderCount + renderPending + liveCount + shortCount + count(processing.downloads, "processing") + count(processing.downloads, "pending");
+    const percent = total ? Math.min(99, Math.round(((renderCount + liveCount + shortCount) / total) * 100)) : 0;
+    const rows = [
+      ["Uploading", liveCount, 66],
+      ["Transcoding", shortCount, 72],
+      ["Rendering", renderCount, 58],
+      ["Pending", renderPending, 42],
+    ];
+    return `<section class="dashboard-card">
+      <div class="card-head"><h2>System Processing</h2><button class="ghost-btn" data-section-jump="processing">Open</button></div>
+      <div class="processing-layout">
+        <div class="donut" style="--p:${percent}"><div><strong>${percent}%</strong><small>Processing</small></div></div>
+        <div class="task-list">${rows.map(([name, amount, pct]) => `<div class="task-row"><label>${esc(name)} ${amount}</label>${progress(amount ? pct : 0)}</div>`).join("")}<p class="muted">Total Tasks: ${total}</p></div>
+      </div>
+    </section>`;
+  }
+
+  function renderBandwidthCard(payload) {
+    const periods = (payload.bandwidth || {}).periods || {};
+    const today = periods.today || {};
+    return `<section class="dashboard-card bandwidth-card">
+      <div class="card-head" style="padding:0 0 14px;border:0"><h2>Bandwidth Usage</h2><div class="pill-row" style="padding:0"><span class="pill">Daily</span><span class="pill">Week</span><span class="pill">Month</span></div></div>
+      <div class="bandwidth-flex"><div class="bandwidth-donut"><div><strong>${esc(today.display || "0 B")}</strong><small>Total</small></div></div><div class="mini-list"><div class="mini-item"><span>Mobile App</span><b>${esc(today.mobile_display || "0 B")}</b></div><div class="mini-item"><span>Web App</span><b>${esc(today.web_display || "0 B")}</b></div><div class="mini-item"><span>Requests</span><b>${esc(today.requests || 0)}</b></div></div></div>
+    </section>`;
+  }
+
+  function renderServerCard(server) {
+    return `<section class="dashboard-card server-card">
+      <div class="card-head" style="padding:0 0 14px;border:0"><h2>Server Resources</h2><span class="muted">${esc(server.hostname || "")}</span></div>
+      <div class="server-rings">
+        <div class="ring" style="--p:${Number(server.cpu_percent || 0)};--c:#5fe17c"><div><strong>${esc(server.cpu_percent ?? "-")}%</strong><small>CPU</small></div></div>
+        <div class="ring" style="--p:${Number(server.ram_percent || 0)};--c:#78e560"><div><strong>${esc(server.ram_percent ?? "-")}%</strong><small>RAM</small></div></div>
+        <div class="ring" style="--p:${Number(server.disk_percent || 0)};--c:#f4a52f"><div><strong>${esc(server.disk_percent ?? "-")}%</strong><small>SSD</small></div></div>
+        <div class="ring" style="--p:45;--c:#80d95e"><div><strong>${esc(server.load_average || "0")}</strong><small>Load</small></div></div>
+      </div>
+      <div class="pill-row" style="padding:16px 0 0"><span class="pill">RAM ${esc(server.ram_used_display)} / ${esc(server.ram_total_display)}</span><span class="pill">SSD ${esc(server.disk_used_display)} / ${esc(server.disk_total_display)}</span></div>
+    </section>`;
+  }
+
+  function renderAnalytics(payload) {
+    return `<section class="dashboard-card bandwidth-card"><div class="card-head" style="padding:0 0 14px;border:0"><h2>Bandwidth Analytics</h2><span class="muted">This Month</span></div><div class="sparkline"></div></section>`;
+  }
+
+  function renderTables(payload) {
+    const storage = payload.storage || [];
+    const live = payload.live || {};
+    const rows = live.schedule || [];
+    return `<div class="grid mini-grid">
+      <section class="dashboard-card storage-card"><h2>Storage Overview</h2><table class="table"><tbody>${storage.slice(0,4).map((row) => `<tr><td>${esc(row.label)}</td><td>${esc(row.display)}</td></tr>`).join("")}</tbody></table></section>
+      <section class="dashboard-card top-card"><h2>Top Live Channels</h2><table class="table"><tbody>${rows.slice(0,4).map((row, index) => `<tr><td>${index + 1}. ${esc(row.title)}</td><td>${esc(row.duration)}</td></tr>`).join("") || `<tr><td class="muted">No playlist data</td></tr>`}</tbody></table></section>
+      <section class="dashboard-card activity-card"><h2>Recent Activities</h2><div class="mini-list"><div class="mini-item"><span>Live state refreshed</span><span>Now</span></div><div class="mini-item"><span>Playlist version</span><span>${esc((live.playlist || {}).version || 0)}</span></div><div class="mini-item"><span>Current video</span><span>${esc((live.current || {}).title || "-")}</span></div></div></section>
+      <section class="dashboard-card alert-card"><h2>Alerts & Notifications</h2><div class="mini-list"><div class="mini-item"><span>Failed HLS</span><span>${count((payload.processing || {}).live_hls, "failed")}</span></div><div class="mini-item"><span>Failed renders</span><span>${count((payload.processing || {}).renders, "failed")}</span></div><div class="mini-item"><span>Disk remaining</span><span>${esc((payload.server || {}).disk_free_display || "-")}</span></div></div></section>
+    </div>`;
   }
 
   function renderProcessing(processing) {
     const renderJobs = processing.render_jobs || [];
     const liveProcessing = processing.live_processing || [];
     const shortProcessing = processing.short_processing || [];
-    return `<div class="grid two-col">
-      <div class="card"><h2>Render Queue</h2><table class="table"><thead><tr><th>Title</th><th>Status</th><th>Progress</th><th>Updated</th></tr></thead><tbody>${renderJobs.map((job) => `<tr><td>${esc(job.title)}</td><td>${status(job.status)}</td><td>${progress(job.progress_percent)}</td><td>${esc(job.updated_at)}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No render jobs</td></tr>`}</tbody></table></div>
-      <div class="card"><h2>HLS Processing</h2><div class="mini-list">${[...liveProcessing, ...shortProcessing].map((item) => `<div class="mini-item"><span>${esc(item.title)}</span><span>${progress(item.hls_progress_percent || item.progress_percent)}</span></div>`).join("") || `<div class="muted">No active processing</div>`}</div></div>
-    </div>`;
+    return `${pageTitle("Upload & Processing", "Live status of HLS, uploads, downloads and render jobs", {})}<div class="grid main-grid" style="grid-template-columns:1fr 1fr">${renderProcessingCard(processing)}<section class="dashboard-card"><div class="card-head"><h2>Active Jobs</h2></div><table class="table"><thead><tr><th>Title</th><th>Status</th><th>Progress</th></tr></thead><tbody>${[...renderJobs, ...liveProcessing, ...shortProcessing].map((job) => `<tr><td>${esc(job.title)}</td><td>${status(job.status || job.hls_status)}</td><td>${progress(job.progress_percent || job.hls_progress_percent)}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">No active processing</td></tr>`}</tbody></table></section></div>`;
   }
 
   function renderServer(payload) {
-    const server = payload.server || {};
     const bandwidth = (payload.bandwidth || {}).periods || {};
-    const storage = payload.storage || [];
-    return `<div class="grid two-col">
-      <div class="card"><h2>Server Health</h2><div class="grid three-col">
-        <div><div class="server-ring" style="--p:${Number(server.cpu_percent || 0)}">${esc(server.cpu_percent ?? "-")}%</div><p class="muted">CPU</p></div>
-        <div><div class="server-ring" style="--p:${Number(server.ram_percent || 0)}">${esc(server.ram_percent ?? "-")}%</div><p class="muted">RAM ${esc(server.ram_used_display)} / ${esc(server.ram_total_display)}</p></div>
-        <div><div class="server-ring" style="--p:${Number(server.disk_percent || 0)}">${esc(server.disk_percent ?? "-")}%</div><p class="muted">SSD ${esc(server.disk_used_display)} / ${esc(server.disk_total_display)}</p></div>
-      </div><p class="muted">Host: ${esc(server.hostname)} | Load: ${esc(server.load_average || "-")}</p></div>
-      <div class="card"><h2>Bandwidth</h2><table class="table"><thead><tr><th>Period</th><th>Total</th><th>Mobile</th><th>Web</th></tr></thead><tbody>${Object.entries(bandwidth).map(([key,row]) => `<tr><td>${esc(key)}</td><td>${esc(row.display)}</td><td>${esc(row.mobile_display)}</td><td>${esc(row.web_display)}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">Apache logs not found on local system</td></tr>`}</tbody></table></div>
-      <div class="card" style="grid-column:1/-1"><h2>Storage Map</h2><table class="table"><thead><tr><th>Section</th><th>Used</th><th>Path</th></tr></thead><tbody>${storage.map((row) => `<tr><td>${esc(row.label)}</td><td>${esc(row.display)}</td><td class="muted">${esc(row.path)}</td></tr>`).join("")}</tbody></table></div>
-    </div>`;
+    return `${pageTitle("Server Monitor", "RAM, SSD, load and bandwidth analytics", {})}<div class="grid lower-grid">${renderBandwidthCard(payload)}${renderServerCard(payload.server || {})}${renderAnalytics(payload)}</div><div style="height:18px"></div><section class="dashboard-card"><div class="card-head"><h2>Bandwidth Detail</h2></div><table class="table"><thead><tr><th>Period</th><th>Total</th><th>Mobile</th><th>Web</th><th>Requests</th></tr></thead><tbody>${Object.entries(bandwidth).map(([key,row]) => `<tr><td>${esc(key)}</td><td>${esc(row.display)}</td><td>${esc(row.mobile_display)}</td><td>${esc(row.web_display)}</td><td>${esc(row.requests || 0)}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">Apache logs not found on local system</td></tr>`}</tbody></table></section>`;
   }
 
   function renderUploads(uploads) {
     const videos = uploads.videos || [];
     const shorts = uploads.shorts || [];
-    return `<div class="grid two-col"><div class="card"><h2>Live Uploads</h2><table class="table"><thead><tr><th>Video</th><th>HLS</th><th>Size</th><th>Updated</th></tr></thead><tbody>${videos.map((v) => `<tr><td>${esc(v.title)}</td><td>${status(v.hls_status)} ${progress(v.hls_progress_percent)}</td><td>${esc(v.file_size_display)}</td><td>${esc(v.updated_at)}</td></tr>`).join("")}</tbody></table></div><div class="card"><h2>Shorts Uploads</h2><table class="table"><thead><tr><th>Short</th><th>HLS</th><th>Duration</th></tr></thead><tbody>${shorts.map((v) => `<tr><td>${esc(v.title)}</td><td>${status(v.status)} ${progress(v.progress_percent)}</td><td>${esc(v.duration_display)}</td></tr>`).join("")}</tbody></table></div></div>`;
+    return `${pageTitle("Uploads Library", "Latest uploaded videos and shorts", {})}<div class="grid lower-grid" style="grid-template-columns:1fr 1fr"><section class="dashboard-card"><div class="card-head"><h2>Live Uploads</h2></div><table class="table"><thead><tr><th>Video</th><th>HLS</th><th>Size</th><th>Updated</th></tr></thead><tbody>${videos.map((v) => `<tr><td>${esc(v.title)}</td><td>${status(v.hls_status)} ${progress(v.hls_progress_percent)}</td><td>${esc(v.file_size_display)}</td><td>${esc(v.updated_at)}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No videos</td></tr>`}</tbody></table></section><section class="dashboard-card"><div class="card-head"><h2>Shorts Uploads</h2></div><table class="table"><thead><tr><th>Short</th><th>HLS</th><th>Duration</th></tr></thead><tbody>${shorts.map((v) => `<tr><td>${esc(v.title)}</td><td>${status(v.status)} ${progress(v.progress_percent)}</td><td>${esc(v.duration_display)}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">No shorts</td></tr>`}</tbody></table></section></div>`;
   }
 
   function renderRenders(renders) {
     const rows = renders.items || [];
-    return `<div class="card"><h2>Rendered Videos</h2><table class="table"><thead><tr><th>Title</th><th>Source</th><th>Status</th><th>Progress</th><th>Size</th><th>Completed</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${esc(row.title)}</td><td>${esc(row.source_video)}</td><td>${status(row.status)}</td><td>${progress(row.progress_percent)}</td><td>${esc(row.file_size_display)}</td><td>${esc(row.completed_at || row.created_at)}</td></tr>`).join("")}</tbody></table></div>`;
+    return `${pageTitle("Video Library", "Rendered videos from live stream cycle", {})}<section class="dashboard-card"><div class="card-head"><h2>Rendered Videos</h2></div><table class="table"><thead><tr><th>Title</th><th>Source</th><th>Status</th><th>Progress</th><th>Size</th><th>Completed</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${esc(row.title)}</td><td>${esc(row.source_video)}</td><td>${status(row.status)}</td><td>${progress(row.progress_percent)}</td><td>${esc(row.file_size_display)}</td><td>${esc(row.completed_at || row.created_at)}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">No rendered videos</td></tr>`}</tbody></table></section>`;
   }
 
   function renderControls(payload) {
     const setting = payload.settings || {};
-    return `<div class="card"><h2>Controls</h2><div class="actions">
+    return `${pageTitle("Control Center", "Safe live TV controls without page reload", {})}<section class="dashboard-card controls-card" style="padding:18px"><div class="actions">
       <button class="action-btn" data-action="rebuild_playlist">Rebuild Playlist</button>
       <button class="action-btn" data-action="retry_failed_hls">Retry Failed HLS</button>
       <button class="action-btn" data-action="retry_failed_renders">Retry Failed Renders</button>
@@ -97,24 +154,36 @@
       <button class="action-btn" data-action="toggle_live_badge">Live Badge: ${setting.show_live_badge ? "ON" : "OFF"}</button>
       <button class="action-btn" data-action="toggle_channel_logo">Logo: ${setting.show_channel_logo ? "ON" : "OFF"}</button>
       <button class="action-btn" data-action="toggle_lower_third">Lower Third: ${setting.show_lower_third ? "ON" : "OFF"}</button>
-    </div><p class="muted">Settings save karne ke liye detailed Django Admin me Live TV Settings open karein.</p></div>`;
+    </div></section>`;
+  }
+
+  function renderOverview(payload) {
+    const live = payload.live || {};
+    const processing = payload.processing || {};
+    const server = payload.server || {};
+    const uploads = payload.uploads || {};
+    return `${pageTitle("Dashboard Overview", "Real-time overview of your Live TV platform", live)}
+      <div class="grid kpi-grid">
+        ${kpi("Live TV Channels", (live.playlist || {}).count || 0, "+ playlist items")}
+        ${kpi("On Air Now", live.current ? "01" : "00", live.current?.title || "No live video", "green")}
+        ${kpi("Total Uploads", (uploads.videos_total || 0) + (uploads.shorts_total || 0), `${uploads.shorts_total || 0} shorts`, "blue")}
+        ${kpi("Render Jobs", (processing.renders || {}).completed || (processing.renders || {}).done || 0, `${(processing.renders || {}).processing || 0} processing`, "orange")}
+        ${kpi("Storage Used", server.disk_used_display || "-", `${server.disk_percent || 0}% used`, "pink")}
+      </div>
+      <div class="grid main-grid">${renderLive(live)}${renderProcessingCard(processing)}${renderSchedule(live.schedule || [])}</div>
+      <div class="grid lower-grid">${renderBandwidthCard(payload)}${renderServerCard(server)}${renderAnalytics(payload)}</div>
+      ${renderTables(payload)}`;
   }
 
   function render(payload) {
-    const live = payload.live || {};
-    clock.textContent = live.server_time || new Date().toLocaleTimeString();
-    if (payload.section === "live") content.innerHTML = `<div class="grid two-col">${renderLive(live)}${renderSchedule(live.schedule)}</div>`;
-    else if (payload.section === "playlist") content.innerHTML = `${renderLive(live)}<div style="height:16px"></div>${renderSchedule(live.schedule)}<div style="height:16px"></div>${renderUploads({ videos: payload.items || [], shorts: [] })}`;
+    if (payload.section === "live") content.innerHTML = `${pageTitle("Live TV Preview", "Same backend live cycle with current and next video", payload.live || {})}<div class="grid main-grid" style="grid-template-columns:1.2fr .8fr">${renderLive(payload.live || {})}${renderSchedule((payload.live || {}).schedule || [])}</div>`;
+    else if (payload.section === "playlist") content.innerHTML = `${pageTitle("EPG / Schedule", "Future live playlist timing and active items", payload.live || {})}${renderSchedule((payload.live || {}).schedule || [])}<div style="height:18px"></div>${renderUploads({ videos: payload.items || [], shorts: [] })}`;
     else if (payload.section === "processing") content.innerHTML = renderProcessing(payload.processing || {});
     else if (payload.section === "uploads") content.innerHTML = renderUploads(payload.uploads || {});
     else if (payload.section === "renders") content.innerHTML = renderRenders(payload.renders || {});
     else if (payload.section === "server") content.innerHTML = renderServer(payload);
     else if (payload.section === "controls") content.innerHTML = renderControls(payload);
-    else {
-      const p = payload.processing || {};
-      const uploads = payload.uploads || {};
-      content.innerHTML = `<div class="grid kpis">${kpi("Playlist Videos", (live.playlist || {}).count || 0, (live.playlist || {}).duration_display || "")}${kpi("Rendered Processing", (p.renders || {}).processing || 0, `${(p.renders || {}).pending || 0} pending`)}${kpi("Live HLS Processing", (p.live_hls || {}).processing || 0, `${(p.live_hls || {}).failed || 0} failed`)}${kpi("Total Uploads", (uploads.videos_total || 0) + (uploads.shorts_total || 0), `${uploads.shorts_total || 0} shorts`)}</div><div class="grid two-col">${renderLive(live)}${renderSchedule(live.schedule)}</div>`;
-    }
+    else content.innerHTML = renderOverview(payload);
   }
 
   async function load(nextSection = section) {
@@ -147,6 +216,12 @@
   });
   refreshButton.addEventListener("click", () => load(section));
   content.addEventListener("click", (event) => {
+    const jump = event.target.closest("[data-section-jump]");
+    if (jump) {
+      const target = jump.dataset.sectionJump;
+      document.querySelector(`.side-item[data-section="${target}"]`)?.click();
+      return;
+    }
     const button = event.target.closest("[data-action]");
     if (button) runAction(button.dataset.action);
   });

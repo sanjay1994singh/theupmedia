@@ -1,4 +1,4 @@
-﻿{% load static %}
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -13,34 +13,53 @@
        data-section-url-template="{% url 'live_tv:api_control_dashboard_section' 'overview' %}"
        data-action-url="{% url 'live_tv:api_control_dashboard_action' %}">
     <aside class="control-side">
-      <div class="brand-block">
-        <span class="brand-mark">UP</span>
+      <div class="side-brand">
+        <span class="paper-mark"></span>
         <div>
-          <strong>The UP Media</strong>
-          <small>Live Control Room</small>
+          <strong>LIVE <b>TV</b></strong>
+          <small>DASHBOARD</small>
         </div>
+        <span class="hamburger">=</span>
       </div>
-      <button class="side-item active" data-section="overview">Overview</button>
-      <button class="side-item" data-section="live">Live Now</button>
-      <button class="side-item" data-section="playlist">Playlist</button>
-      <button class="side-item" data-section="processing">Processing</button>
-      <button class="side-item" data-section="uploads">Uploads</button>
-      <button class="side-item" data-section="renders">Rendered Videos</button>
-      <button class="side-item" data-section="server">Server & Bandwidth</button>
-      <button class="side-item" data-section="controls">Controls</button>
-      <a class="admin-link" href="{% url 'admin:index' %}">Django Admin</a>
+      <nav class="side-nav">
+        <button class="side-item active" data-section="overview"><span>01</span>Dashboard</button>
+        <button class="side-item" data-section="live"><span>02</span>Live TV <em>LIVE</em></button>
+        <button class="side-item" data-section="playlist"><span>03</span>Programs</button>
+        <button class="side-item" data-section="playlist"><span>04</span>EPG / Schedule</button>
+        <button class="side-item" data-section="renders"><span>05</span>Video Library</button>
+        <button class="side-item" data-section="processing"><span>06</span>Upload & Processing</button>
+        <button class="side-item" data-section="uploads"><span>07</span>Users & Devices</button>
+        <button class="side-item" data-section="server"><span>08</span>Analytics</button>
+        <button class="side-item" data-section="server"><span>09</span>Bandwidth</button>
+        <button class="side-item" data-section="server"><span>10</span>Server Monitor</button>
+        <button class="side-item" data-section="controls"><span>11</span>Settings</button>
+      </nav>
+      <div class="server-status-card">
+        <div><strong>Server Status</strong><small>ONLINE</small></div>
+        <p id="side-server-time">Server Time: --</p>
+        <p>Timezone: Asia/Kolkata</p>
+      </div>
+      <a class="admin-link" href="{% url 'admin:index' %}">Open Django Admin</a>
     </aside>
+
     <main class="control-main">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">Admin only</p>
-          <h1>Live TV Dashboard</h1>
+      <header class="operator-bar">
+        <div class="welcome">
+          <strong>Welcome, Admin</strong>
+          <small>Super Administrator</small>
         </div>
-        <div class="top-actions">
-          <span id="dashboard-clock">--</span>
-          <button id="manual-refresh" type="button">Refresh</button>
+        <label class="search-box">
+          <span>Search</span>
+          <input type="search" placeholder="Search anything...">
+        </label>
+        <div class="operator-actions">
+          <span class="live-chip">LIVE</span>
+          <button id="manual-refresh" class="refresh-btn" type="button">Refresh</button>
+          <span class="bell">12</span>
+          <span class="avatar">A</span>
         </div>
       </header>
+
       <section id="dashboard-alert" class="dashboard-alert" hidden></section>
       <section id="dashboard-content" class="dashboard-content"></section>
     </main>
@@ -49,4 +68,3 @@
   <script src="{% static 'live_tv/control_dashboard.js' %}"></script>
 </body>
 </html>
-
