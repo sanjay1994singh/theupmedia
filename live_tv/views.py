@@ -9,6 +9,7 @@ import signal
 import subprocess
 import tempfile
 import time
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse
