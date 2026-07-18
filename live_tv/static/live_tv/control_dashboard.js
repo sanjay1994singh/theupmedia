@@ -176,8 +176,13 @@
   }
 
   function renderProcessing(processing) {
-    const activeRows = [...(processing.live_processing || []), ...(processing.short_processing || []), ...(processing.render_jobs || []), ...(processing.downloads_recent || [])];
-    return `${pageTitle("Upload & Processing", "Live status of HLS, uploads, downloads and render jobs", {})}<div class="grid main-grid two-col">${renderProcessingCard(processing)}<section class="dashboard-card"><div class="card-head"><h2>Active Jobs</h2></div><table class="table"><thead><tr><th>Title</th><th>Status</th><th>Progress</th></tr></thead><tbody>${activeRows.map((job) => `<tr><td>${esc(job.title)}</td><td>${status(job.status || job.hls_status)}</td><td>${progress(job.progress_percent ?? job.hls_progress_percent, job.status || job.hls_status)}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">No active processing</td></tr>`}</tbody></table></section></div>`;
+    const activeRows = [
+      ...(processing.live_processing || []).map((job) => ({ ...job, kind: "Live HLS" })),
+      ...(processing.short_processing || []).map((job) => ({ ...job, kind: "Shorts HLS" })),
+      ...(processing.render_jobs || []).filter((job) => isActiveState(job.status)).map((job) => ({ ...job, kind: "Render" })),
+      ...(processing.downloads_recent || []).filter((job) => isActiveState(job.status)).map((job) => ({ ...job, kind: "Download" })),
+    ];
+    return `${pageTitle("Upload & Processing", "Live status of HLS, uploads, downloads and render jobs", {})}<div class="grid main-grid two-col">${renderProcessingCard(processing)}<section class="dashboard-card"><div class="card-head"><h2>Active Jobs</h2></div><table class="table"><thead><tr><th>Type</th><th>Title</th><th>Status</th><th>Progress</th></tr></thead><tbody>${activeRows.map((job) => `<tr><td>${esc(job.kind)}</td><td>${esc(job.title)}</td><td>${status(job.status || job.hls_status)}</td><td>${progress(job.progress_percent ?? job.hls_progress_percent, job.status || job.hls_status)}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No active processing</td></tr>`}</tbody></table></section></div>`;
   }
 
   function renderServer(payload) {

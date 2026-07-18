@@ -11,8 +11,11 @@ from .services import calculate_current_playback, update_playlist_item
 
 
 def processing_progress_bar(percent, status=""):
-    safe_percent = max(0, min(100, int(percent or 0)))
     status_value = str(status or "").lower()
+    if status_value in {"completed", "done"}:
+        safe_percent = 100
+    else:
+        safe_percent = max(0, min(100, int(percent or 0)))
     color = "#16a34a" if safe_percent >= 100 or status_value in {"completed", "done"} else "#2563eb"
     if status_value == "failed":
         color = "#dc2626"

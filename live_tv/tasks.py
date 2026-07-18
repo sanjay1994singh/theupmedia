@@ -1,4 +1,8 @@
+from datetime import timedelta
+
 from celery import shared_task
+from django.conf import settings
+from django.utils import timezone
 
 from .hls import convert_live_channel_to_hls, convert_short_to_hls
 from .models import LiveTVChannel, ShortsVideo
@@ -36,6 +40,9 @@ def process_short_hls_task(short_id):
 @shared_task(name="live_tv.process_live_channel_hls")
 def process_live_channel_hls_task(channel_id):
     convert_live_channel_to_hls(channel_id)
+    stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
+    if LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.PROCESSING, updated_at__gte=stale_cutoff).exists():
+        return
     next_channel = (
         LiveTVChannel.objects.filter(
             source_type=LiveTVChannel.SourceType.DIRECT,

@@ -159,6 +159,12 @@ def enqueue_live_channel_hls_job(channel_id):
         return "missing"
 
     if channel.hls_status == LiveTVChannel.HLSStatus.COMPLETED and channel.hls_master_url:
+        if channel.hls_progress_percent != 100:
+            LiveTVChannel.objects.filter(pk=channel_id).update(
+                hls_progress_percent=100,
+                processing_error="",
+                updated_at=timezone.now(),
+            )
         return "completed"
 
     stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
@@ -3164,6 +3170,7 @@ def dashboard_channel_summary(request, channel):
     if not channel:
         return None
     hls_url = absolute_media_path_url(request, channel.hls_master_url)
+    hls_progress = 100 if channel.hls_status == LiveTVChannel.HLSStatus.COMPLETED else channel.hls_progress_percent
     return {
         "id": channel.pk,
         "title": channel.title,
@@ -3175,7 +3182,7 @@ def dashboard_channel_summary(request, channel):
         "duration_seconds": channel.effective_duration_seconds,
         "duration_display": dashboard_duration(channel.effective_duration_seconds),
         "hls_status": channel.hls_status,
-        "hls_progress_percent": channel.hls_progress_percent,
+        "hls_progress_percent": hls_progress,
         "hls_url": hls_url,
         "video_url": absolute_media_url(request, channel.video_file),
         "poster_url": absolute_media_url(request, channel.poster_image),
@@ -3261,10 +3268,11 @@ def dashboard_live_snapshot(request):
 
 
 def dashboard_processing_snapshot():
-    render_jobs = SocialRenderedVideo.objects.select_related("source_video", "live_channel").order_by("-updated_at", "-created_at")[:20]
-    live_processing = LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.PROCESSING).order_by("-updated_at")[:10]
-    short_processing = ShortsVideo.objects.filter(hls_status=ShortsVideo.HLSStatus.PROCESSING).order_by("-updated_at")[:10]
-    downloads = MediaDownload.objects.order_by("-updated_at", "-created_at")[:10]
+    stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
+    render_jobs = SocialRenderedVideo.objects.filter(status__in=[SocialRenderedVideo.Status.PENDING, SocialRenderedVideo.Status.PROCESSING]).select_related("source_video", "live_channel").order_by("-updated_at", "-created_at")[:20]
+    live_processing = LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.PROCESSING, updated_at__gte=stale_cutoff).order_by("-updated_at")[:10]
+    short_processing = ShortsVideo.objects.filter(hls_status=ShortsVideo.HLSStatus.PROCESSING, updated_at__gte=stale_cutoff).order_by("-updated_at")[:10]
+    downloads = MediaDownload.objects.filter(status=MediaDownload.Status.PROCESSING).order_by("-updated_at", "-created_at")[:10]
     return {
         "live_hls": dashboard_counts_by_status(LiveTVChannel.objects.all(), "hls_status"),
         "short_hls": dashboard_counts_by_status(ShortsVideo.objects.all(), "hls_status"),
@@ -3276,7 +3284,7 @@ def dashboard_processing_snapshot():
                 "id": item.pk,
                 "title": item.title,
                 "status": item.hls_status,
-                "progress_percent": item.hls_progress_percent,
+                "progress_percent": 100 if item.hls_status == ShortsVideo.HLSStatus.COMPLETED else item.hls_progress_percent,
                 "updated_at": timezone.localtime(item.updated_at).strftime("%d %b, %I:%M %p"),
             }
             for item in short_processing
@@ -3286,7 +3294,7 @@ def dashboard_processing_snapshot():
                 "id": item.pk,
                 "title": item.title,
                 "status": item.status,
-                "progress_percent": item.progress_percent,
+                "progress_percent": 100 if item.status in {SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE} else item.progress_percent,
                 "source_video": item.source_video.title if item.source_video_id else "",
                 "live_channel": item.live_channel.title if item.live_channel_id else "",
                 "updated_at": timezone.localtime(item.updated_at).strftime("%d %b, %I:%M %p"),
@@ -3298,7 +3306,7 @@ def dashboard_processing_snapshot():
                 "id": item.pk,
                 "title": item.title,
                 "status": item.status,
-                "progress_percent": item.progress_percent,
+                "progress_percent": 100 if item.status == MediaDownload.Status.DONE else item.progress_percent,
                 "updated_at": timezone.localtime(item.updated_at).strftime("%d %b, %I:%M %p"),
             }
             for item in downloads
@@ -3322,7 +3330,7 @@ def dashboard_uploads_snapshot(request):
                 "title": item.title,
                 "headline": item.headline,
                 "status": item.hls_status,
-                "progress_percent": item.hls_progress_percent,
+                "progress_percent": 100 if item.hls_status == ShortsVideo.HLSStatus.COMPLETED else item.hls_progress_percent,
                 "duration_display": dashboard_duration(item.duration or 0),
                 "thumbnail": absolute_media_url(request, item.thumbnail),
                 "created_at": timezone.localtime(item.created_at).strftime("%d %b %Y, %I:%M %p"),
@@ -3340,7 +3348,7 @@ def dashboard_renders_snapshot(request):
                 "id": item.pk,
                 "title": item.title,
                 "status": item.status,
-                "progress_percent": item.progress_percent,
+                "progress_percent": 100 if item.status in {SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE} else item.progress_percent,
                 "source_video": item.source_video.title if item.source_video_id else "",
                 "live_channel": item.live_channel.title if item.live_channel_id else "",
                 "duration_display": dashboard_duration(item.duration_seconds or 0),

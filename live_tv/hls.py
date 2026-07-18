@@ -1,5 +1,6 @@
 ﻿import json
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -173,6 +174,34 @@ def hls_media_file_exists(media_path):
     return bool(media_path and (Path(settings.MEDIA_ROOT) / media_path).exists())
 
 
+def acquire_hls_processing_lock(name):
+    lock_dir = Path(settings.MEDIA_ROOT) / "live-tv" / "hls" / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = lock_dir / f"{name}.lock"
+    stale_seconds = int(getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20)) * 60
+    try:
+        if lock_path.exists() and (timezone.now().timestamp() - lock_path.stat().st_mtime) > stale_seconds:
+            lock_path.unlink(missing_ok=True)
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, str(os.getpid()).encode("ascii", errors="ignore"))
+        return fd, lock_path
+    except FileExistsError:
+        return None, lock_path
+
+
+def release_hls_processing_lock(fd, lock_path):
+    if fd is not None:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+    if lock_path:
+        try:
+            lock_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def convert_short_to_hls(short_id):
     short = ShortsVideo.objects.get(pk=short_id)
     if not short.video_file:
@@ -307,6 +336,30 @@ def convert_live_channel_to_hls(channel_id):
     if not input_path.exists():
         raise HLSProcessingError("Source video file not found.")
 
+    stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
+    if channel.hls_status == LiveTVChannel.HLSStatus.COMPLETED and hls_media_file_exists(channel.hls_master_url):
+        if channel.hls_progress_percent != 100:
+            LiveTVChannel.objects.filter(pk=channel.pk).update(hls_progress_percent=100, processing_error="", updated_at=timezone.now())
+        logger.info("Live TV HLS already completed for %s; skipping duplicate conversion.", channel.pk)
+        return channel.hls_master_url
+    if channel.hls_status == LiveTVChannel.HLSStatus.PROCESSING and channel.updated_at >= stale_cutoff:
+        logger.info("Live TV HLS already processing for %s; skipping duplicate conversion.", channel.pk)
+        return channel.hls_master_url
+
+    other_active = (
+        LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.PROCESSING, updated_at__gte=stale_cutoff)
+        .exclude(pk=channel.pk)
+        .exists()
+    )
+    if other_active:
+        logger.info("Another Live TV HLS job is active; leaving channel %s pending.", channel.pk)
+        return channel.hls_master_url
+
+    lock_fd, lock_path = acquire_hls_processing_lock("live-channel")
+    if lock_fd is None:
+        logger.info("Live TV HLS lock is active; leaving channel %s pending.", channel.pk)
+        return channel.hls_master_url
+
     channel.hls_status = LiveTVChannel.HLSStatus.PROCESSING
     channel.hls_progress_percent = 1
     channel.processing_error = ""
@@ -422,4 +475,6 @@ def convert_live_channel_to_hls(channel_id):
             updated_at=timezone.now(),
         )
         raise
+    finally:
+        release_hls_processing_lock(lock_fd, lock_path)
 
