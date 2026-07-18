@@ -4,11 +4,14 @@
   const alertBox = document.getElementById("dashboard-alert");
   const refreshButton = document.getElementById("manual-refresh");
   const sideServerTime = document.getElementById("side-server-time");
+  const searchInput = document.querySelector(".search-box input");
   let section = "overview";
   let timer = null;
+  let requestId = 0;
 
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
-  const status = (value) => `<span class="status ${esc(value)}">${esc(value || "unknown")}</span>`;
+  const norm = (value) => String(value || "unknown").toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
+  const status = (value) => `<span class="status ${norm(value)}">${esc(value || "unknown")}</span>`;
   const pct = (value, state = "") => {
     const normalized = String(state || "").toLowerCase();
     if (["completed", "done"].includes(normalized)) return 100;
@@ -38,6 +41,15 @@
     showAlert._timer = setTimeout(() => (alertBox.hidden = true), 4200);
   }
 
+  function setLoading(active, message = "Loading live dashboard...") {
+    content.classList.toggle("is-loading", active);
+    content.dataset.loadingText = message;
+    refreshButton.disabled = active;
+    if (active && !content.innerHTML.trim()) {
+      content.innerHTML = `<div class="dashboard-loader"><span></span><strong>${esc(message)}</strong><p>Fetching live reports and processing data</p></div>`;
+    }
+  }
+
   function pageTitle(title, subtitle, live) {
     if (sideServerTime && live?.server_time) sideServerTime.textContent = `Server Time: ${live.server_time}`;
     return `<div class="page-title"><div><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div><div class="dashboard-clock">${esc(live?.server_time || "--")}</div></div>`;
@@ -59,7 +71,7 @@
         <div class="poster" style="${poster}"></div>
         ${setting.show_live_badge ? `<div class="live-badge">LIVE</div>` : ""}
         <div class="live-meta"><h2>${esc(current.title || "Live is going soon")}</h2><p>${esc(current.seek_display || "00:00")} / ${esc(current.duration_display || "00:00")} | Next: ${esc((live.next || {}).title || "-")}</p></div>
-        <div class="preview-actions"><span>V</span><span>L</span><span>S</span><span>F</span></div>
+        <div class="preview-actions"><span>View</span><span>Live</span><span>Sync</span><span>Full</span></div>
         ${setting.show_ticker ? `<div class="ticker-sim"><div class="ticker-label">${esc(tickerLabel)}</div><div class="ticker-cut"></div><div class="ticker-text">${esc(tickerText)}</div></div>` : ""}
       </div>
       <div class="pill-row">
@@ -70,11 +82,15 @@
     </section>`;
   }
 
-  function renderSchedule(rows = []) {
+  function renderSchedule(rows = [], title = "Upcoming Programs") {
     return `<section class="dashboard-card">
-      <div class="card-head"><h2>Upcoming Programs</h2><button class="ghost-btn" data-section-jump="playlist">View All</button></div>
+      <div class="card-head"><h2>${esc(title)}</h2><button class="ghost-btn" data-section-jump="epg">View All</button></div>
       <div class="schedule">${rows.map((row, index) => `<div class="schedule-row"><div><span class="dot" style="background:${index === 0 ? "#7c4dff" : index === 1 ? "#e8466d" : "#f08b22"}"></span>${esc(row.time)}</div><div><div class="schedule-title">${esc(row.title)}</div><div class="schedule-sub">${esc(row.duration)} | ${esc(row.status)}</div></div></div>`).join("") || `<p class="muted">Playlist empty</p>`}</div>
     </section>`;
+  }
+
+  function renderPlaylistTable(items = [], title = "Playlist Items") {
+    return `<section class="dashboard-card"><div class="card-head"><h2>${esc(title)}</h2></div><table class="table"><thead><tr><th>#</th><th>Title</th><th>HLS</th><th>Duration</th><th>Active</th></tr></thead><tbody>${items.map((item) => `<tr><td>${esc(item.position || "-")}</td><td>${esc(item.title)}</td><td>${status(item.hls_status)} ${progress(item.hls_progress_percent, item.hls_status)}</td><td>${esc(item.duration_display)}</td><td>${item.is_active ? "Yes" : "No"}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">No playlist items</td></tr>`}</tbody></table></section>`;
   }
 
   function renderProcessingCard(processing) {
@@ -132,7 +148,18 @@
     </section>`;
   }
 
-  function renderAnalytics(payload) {
+  function renderAnalyticsCard(payload) {
+    const bandwidth = ((payload.bandwidth || {}).periods || {}).today || {};
+    const processing = payload.processing || {};
+    return `<section class="dashboard-card bandwidth-card"><div class="card-head" style="padding:0 0 14px;border:0"><h2>Analysis Summary</h2><span class="muted">Today</span></div><div class="mini-list">
+      <div class="mini-item"><span>Traffic</span><b>${esc(bandwidth.display || "0 B")}</b></div>
+      <div class="mini-item"><span>Live HLS failed</span><b>${count(processing.live_hls, "failed")}</b></div>
+      <div class="mini-item"><span>Render failed</span><b>${count(processing.renders, "failed")}</b></div>
+      <div class="mini-item"><span>Active jobs</span><b>${(processing.live_processing || []).length + (processing.short_processing || []).length}</b></div>
+    </div></section>`;
+  }
+
+  function renderSparkline() {
     return `<section class="dashboard-card bandwidth-card"><div class="card-head" style="padding:0 0 14px;border:0"><h2>Bandwidth Analytics</h2><span class="muted">This Month</span></div><div class="sparkline"></div></section>`;
   }
 
@@ -149,23 +176,23 @@
   }
 
   function renderProcessing(processing) {
-    const renderJobs = processing.render_jobs || [];
-    const liveProcessing = processing.live_processing || [];
-    const shortProcessing = processing.short_processing || [];
-    const downloads = processing.downloads_recent || [];
-    const activeRows = [...liveProcessing, ...shortProcessing, ...renderJobs, ...downloads];
-    return `${pageTitle("Upload & Processing", "Live status of HLS, uploads, downloads and render jobs", {})}<div class="grid main-grid" style="grid-template-columns:1fr 1fr">${renderProcessingCard(processing)}<section class="dashboard-card"><div class="card-head"><h2>Active Jobs</h2></div><table class="table"><thead><tr><th>Title</th><th>Status</th><th>Progress</th></tr></thead><tbody>${activeRows.map((job) => `<tr><td>${esc(job.title)}</td><td>${status(job.status || job.hls_status)}</td><td>${progress(job.progress_percent ?? job.hls_progress_percent, job.status || job.hls_status)}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">No active processing</td></tr>`}</tbody></table></section></div>`;
+    const activeRows = [...(processing.live_processing || []), ...(processing.short_processing || []), ...(processing.render_jobs || []), ...(processing.downloads_recent || [])];
+    return `${pageTitle("Upload & Processing", "Live status of HLS, uploads, downloads and render jobs", {})}<div class="grid main-grid two-col">${renderProcessingCard(processing)}<section class="dashboard-card"><div class="card-head"><h2>Active Jobs</h2></div><table class="table"><thead><tr><th>Title</th><th>Status</th><th>Progress</th></tr></thead><tbody>${activeRows.map((job) => `<tr><td>${esc(job.title)}</td><td>${status(job.status || job.hls_status)}</td><td>${progress(job.progress_percent ?? job.hls_progress_percent, job.status || job.hls_status)}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">No active processing</td></tr>`}</tbody></table></section></div>`;
   }
 
   function renderServer(payload) {
-    const bandwidth = (payload.bandwidth || {}).periods || {};
-    return `${pageTitle("Project Monitor", "Project storage, traffic, RAM and load analytics", {})}<div class="grid lower-grid">${renderBandwidthCard(payload)}${renderServerCard(payload.server || {})}${renderAnalytics(payload)}</div><div style="height:18px"></div><section class="dashboard-card"><div class="card-head"><h2>Bandwidth Detail</h2></div><table class="table"><thead><tr><th>Period</th><th>Total</th><th>Mobile</th><th>Web</th><th>Requests</th></tr></thead><tbody>${Object.entries(bandwidth).map(([key,row]) => `<tr><td>${esc(key)}</td><td>${esc(row.display)}</td><td>${esc(row.mobile_display)}</td><td>${esc(row.web_display)}</td><td>${esc(row.requests || 0)}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">Apache logs not found on local system</td></tr>`}</tbody></table></section>`;
+    return `${pageTitle("Server Monitor", "Project storage, RAM, CPU and load health", {})}<div class="grid lower-grid">${renderServerCard(payload.server || {})}<section class="dashboard-card storage-card"><h2>Project Storage Detail</h2><table class="table"><tbody>${(payload.storage || []).map((row) => `<tr><td>${esc(row.label)}</td><td>${esc(row.display)}</td><td class="muted">${esc(row.path || "")}</td></tr>`).join("") || `<tr><td class="muted">No storage data</td></tr>`}</tbody></table></section>${renderAnalyticsCard(payload)}</div>`;
+  }
+
+  function renderBandwidth(payload) {
+    const periods = (payload.bandwidth || {}).periods || {};
+    return `${pageTitle("Bandwidth", "Mobile app, web app and project request usage", {})}<div class="grid lower-grid">${renderBandwidthCard(payload)}${renderSparkline()}${renderAnalyticsCard(payload)}</div><div style="height:18px"></div><section class="dashboard-card"><div class="card-head"><h2>Bandwidth Detail</h2></div><table class="table"><thead><tr><th>Period</th><th>Total</th><th>Mobile</th><th>Web</th><th>Requests</th></tr></thead><tbody>${Object.entries(periods).map(([key,row]) => `<tr><td>${esc(key)}</td><td>${esc(row.display)}</td><td>${esc(row.mobile_display)}</td><td>${esc(row.web_display)}</td><td>${esc(row.requests || 0)}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">Apache logs not available to Django user</td></tr>`}</tbody></table></section>`;
   }
 
   function renderUploads(uploads) {
     const videos = uploads.videos || [];
     const shorts = uploads.shorts || [];
-    return `${pageTitle("Uploads Library", "Latest uploaded videos and shorts", {})}<div class="grid lower-grid" style="grid-template-columns:1fr 1fr"><section class="dashboard-card"><div class="card-head"><h2>Live Uploads</h2></div><table class="table"><thead><tr><th>Video</th><th>HLS</th><th>Size</th><th>Updated</th></tr></thead><tbody>${videos.map((v) => `<tr><td>${esc(v.title)}</td><td>${status(v.hls_status)} ${progress(v.hls_progress_percent, v.hls_status)}</td><td>${esc(v.file_size_display)}</td><td>${esc(v.updated_at)}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No videos</td></tr>`}</tbody></table></section><section class="dashboard-card"><div class="card-head"><h2>Shorts Uploads</h2></div><table class="table"><thead><tr><th>Short</th><th>HLS</th><th>Duration</th></tr></thead><tbody>${shorts.map((v) => `<tr><td>${esc(v.title)}</td><td>${status(v.status)} ${progress(v.progress_percent, v.status)}</td><td>${esc(v.duration_display)}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">No shorts</td></tr>`}</tbody></table></section></div>`;
+    return `${pageTitle("Uploads Library", "Latest uploaded videos and shorts", {})}<div class="grid lower-grid two-col"><section class="dashboard-card"><div class="card-head"><h2>Live Uploads</h2></div><table class="table"><thead><tr><th>Video</th><th>HLS</th><th>Size</th><th>Updated</th></tr></thead><tbody>${videos.map((v) => `<tr><td>${esc(v.title)}</td><td>${status(v.hls_status)} ${progress(v.hls_progress_percent, v.hls_status)}</td><td>${esc(v.file_size_display)}</td><td>${esc(v.updated_at)}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No videos</td></tr>`}</tbody></table></section><section class="dashboard-card"><div class="card-head"><h2>Shorts Uploads</h2></div><table class="table"><thead><tr><th>Short</th><th>HLS</th><th>Duration</th></tr></thead><tbody>${shorts.map((v) => `<tr><td>${esc(v.title)}</td><td>${status(v.status)} ${progress(v.progress_percent, v.status)}</td><td>${esc(v.duration_display)}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">No shorts</td></tr>`}</tbody></table></section></div>`;
   }
 
   function renderRenders(renders) {
@@ -173,17 +200,54 @@
     return `${pageTitle("Video Library", "Rendered videos from live stream cycle", {})}<section class="dashboard-card"><div class="card-head"><h2>Rendered Videos</h2></div><table class="table"><thead><tr><th>Title</th><th>Source</th><th>Status</th><th>Progress</th><th>Size</th><th>Completed</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${esc(row.title)}</td><td>${esc(row.source_video)}</td><td>${status(row.status)}</td><td>${progress(row.progress_percent, row.status)}</td><td>${esc(row.file_size_display)}</td><td>${esc(row.completed_at || row.created_at)}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">No rendered videos</td></tr>`}</tbody></table></section>`;
   }
 
-  function renderControls(payload) {
+  function renderUsers(payload) {
+    const users = payload.users || {};
+    const devices = users.recent_devices || [];
+    return `${pageTitle("Users & Devices", "Mobile admin sessions, followers and viewer interactions", {})}<div class="grid kpi-grid">
+      ${kpi("Total Users", users.total_users || 0, `${users.active_users || 0} active`)}
+      ${kpi("Staff/Admin", users.staff_users || 0, "control access", "green")}
+      ${kpi("Mobile Devices", users.mobile_tokens || 0, `${users.mobile_tokens_today || 0} today`, "blue")}
+      ${kpi("Followers", users.channel_follows || 0, "channel follows", "orange")}
+      ${kpi("Shorts Activity", (users.shorts_likes || 0) + (users.shorts_comments || 0), `${users.shorts_likes || 0} likes / ${users.shorts_comments || 0} comments`, "pink")}
+    </div><section class="dashboard-card"><div class="card-head"><h2>Recent Mobile Admin Devices</h2></div><table class="table"><thead><tr><th>User</th><th>Device</th><th>Created</th><th>Last Used</th></tr></thead><tbody>${devices.map((row) => `<tr><td>${esc(row.user)}</td><td>${esc(row.device)}</td><td>${esc(row.created_at)}</td><td>${esc(row.last_used_at)}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No mobile devices</td></tr>`}</tbody></table></section>`;
+  }
+
+  function renderAnalyticsSection(payload) {
+    const live = payload.live || {};
+    const processing = payload.processing || {};
+    const uploads = payload.uploads || {};
+    const renders = payload.renders || {};
+    const users = payload.users || {};
+    return `${pageTitle("Analytics", "Project level live TV, render, viewer and upload analysis", live)}
+      <div class="grid kpi-grid">
+        ${kpi("Playlist Videos", (live.playlist || {}).count || 0, (live.playlist || {}).duration_display || "00:00")}
+        ${kpi("Live Uploads", (uploads.videos || []).length, "latest loaded", "green")}
+        ${kpi("Shorts", (uploads.shorts || []).length, "latest loaded", "blue")}
+        ${kpi("Rendered", (renders.items || []).length, `${count(processing.renders, "processing")} processing`, "orange")}
+        ${kpi("Users", users.total_users || 0, `${users.channel_follows || 0} follows`, "pink")}
+      </div>
+      <div class="grid lower-grid">${renderLive(live)}${renderProcessingCard(processing)}${renderAnalyticsCard(payload)}</div>
+      ${renderTables(payload)}`;
+  }
+
+  function renderSettings(payload) {
     const setting = payload.settings || {};
-    return `${pageTitle("Control Center", "Safe live TV controls without page reload", {})}<section class="dashboard-card controls-card" style="padding:18px"><div class="actions">
-      <button class="action-btn" data-action="rebuild_playlist">Rebuild Playlist</button>
-      <button class="action-btn" data-action="retry_failed_hls">Retry Failed HLS</button>
-      <button class="action-btn" data-action="retry_failed_renders">Retry Failed Renders</button>
-      <button class="action-btn" data-action="toggle_ticker">Ticker: ${setting.show_ticker ? "ON" : "OFF"}</button>
-      <button class="action-btn" data-action="toggle_live_badge">Live Badge: ${setting.show_live_badge ? "ON" : "OFF"}</button>
-      <button class="action-btn" data-action="toggle_channel_logo">Logo: ${setting.show_channel_logo ? "ON" : "OFF"}</button>
-      <button class="action-btn" data-action="toggle_lower_third">Lower Third: ${setting.show_lower_third ? "ON" : "OFF"}</button>
-    </div></section>`;
+    const fb = payload.facebook_live || {};
+    const processing = payload.processing || {};
+    return `${pageTitle("Settings", "Live TV controls and broadcast visibility", {})}<div class="grid lower-grid">
+      <section class="dashboard-card controls-card"><div class="card-head"><h2>Live Controls</h2></div><div class="actions">
+        <button class="action-btn" data-action="rebuild_playlist">Rebuild Playlist</button>
+        <button class="action-btn" data-action="retry_failed_hls">Retry Failed HLS</button>
+        <button class="action-btn" data-action="retry_failed_renders">Retry Failed Renders</button>
+        <button class="action-btn" data-action="toggle_ticker">Ticker: ${setting.show_ticker ? "ON" : "OFF"}</button>
+        <button class="action-btn" data-action="toggle_live_badge">Live Badge: ${setting.show_live_badge ? "ON" : "OFF"}</button>
+        <button class="action-btn" data-action="toggle_channel_logo">Logo: ${setting.show_channel_logo ? "ON" : "OFF"}</button>
+        <button class="action-btn" data-action="toggle_lower_third">Lower Third: ${setting.show_lower_third ? "ON" : "OFF"}</button>
+      </div></section>
+      <section class="dashboard-card storage-card"><h2>Current Broadcast Settings</h2><div class="mini-list"><div class="mini-item"><span>Ticker</span><b>${setting.show_ticker ? "ON" : "OFF"}</b></div><div class="mini-item"><span>Live Badge</span><b>${setting.show_live_badge ? "ON" : "OFF"}</b></div><div class="mini-item"><span>Channel Logo</span><b>${setting.show_channel_logo ? "ON" : "OFF"}</b></div><div class="mini-item"><span>Lower Third</span><b>${setting.show_lower_third ? "ON" : "OFF"}</b></div></div></section>
+      <section class="dashboard-card storage-card"><h2>Facebook Live</h2><div class="mini-list"><div class="mini-item"><span>Status</span><b>${esc(fb.status || "-")}</b></div><div class="mini-item"><span>Enabled</span><b>${fb.is_enabled ? "Yes" : "No"}</b></div><div class="mini-item"><span>Last Error</span><b>${esc(fb.last_error || "-")}</b></div></div></section>
+      ${renderProcessingCard(processing)}
+    </div>`;
   }
 
   function renderOverview(payload) {
@@ -200,50 +264,80 @@
         ${kpi("Project Used", server.project_used_display || "-", `${server.project_disk_percent || 0}% of project disk`, "pink")}
       </div>
       <div class="grid main-grid">${renderLive(live)}${renderProcessingCard(processing)}${renderSchedule(live.schedule || [])}</div>
-      <div class="grid lower-grid">${renderBandwidthCard(payload)}${renderServerCard(server)}${renderAnalytics(payload)}</div>
+      <div class="grid lower-grid">${renderBandwidthCard(payload)}${renderServerCard(server)}${renderSparkline()}</div>
       ${renderTables(payload)}`;
   }
 
   function render(payload) {
-    if (payload.section === "live") content.innerHTML = `${pageTitle("Live TV Preview", "Same backend live cycle with current and next video", payload.live || {})}<div class="grid main-grid" style="grid-template-columns:1.2fr .8fr">${renderLive(payload.live || {})}${renderSchedule((payload.live || {}).schedule || [])}</div>`;
-    else if (payload.section === "playlist") content.innerHTML = `${pageTitle("EPG / Schedule", "Future live playlist timing and active items", payload.live || {})}${renderSchedule((payload.live || {}).schedule || [])}<div style="height:18px"></div>${renderUploads({ videos: payload.items || [], shorts: [] })}`;
-    else if (payload.section === "processing") content.innerHTML = renderProcessing(payload.processing || {});
-    else if (payload.section === "uploads") content.innerHTML = renderUploads(payload.uploads || {});
-    else if (payload.section === "renders") content.innerHTML = renderRenders(payload.renders || {});
-    else if (payload.section === "server") content.innerHTML = renderServer(payload);
-    else if (payload.section === "controls") content.innerHTML = renderControls(payload);
+    const currentSection = payload.section || section;
+    if (currentSection === "live") content.innerHTML = `${pageTitle("Live TV Preview", "Same backend live cycle with current and next video", payload.live || {})}<div class="grid main-grid two-col">${renderLive(payload.live || {})}${renderSchedule((payload.live || {}).schedule || [])}</div>`;
+    else if (currentSection === "programs") content.innerHTML = `${pageTitle("Programs", "Current and upcoming live program sequence", payload.live || {})}<div class="grid main-grid two-col">${renderSchedule((payload.live || {}).schedule || [], "Program Timeline")}${renderPlaylistTable(payload.items || [], "Program Playlist")}</div>`;
+    else if (currentSection === "epg" || currentSection === "playlist") content.innerHTML = `${pageTitle("EPG / Schedule", "Future live playlist timing and active items", payload.live || {})}${renderSchedule((payload.live || {}).schedule || [], "EPG Timeline")}<div style="height:18px"></div>${renderPlaylistTable(payload.items || [], "Full Schedule")}`;
+    else if (currentSection === "processing") content.innerHTML = renderProcessing(payload.processing || {});
+    else if (currentSection === "uploads") content.innerHTML = renderUploads(payload.uploads || {});
+    else if (currentSection === "users") content.innerHTML = renderUsers(payload);
+    else if (currentSection === "library" || currentSection === "renders") content.innerHTML = renderRenders(payload.renders || {});
+    else if (currentSection === "analytics") content.innerHTML = renderAnalyticsSection(payload);
+    else if (currentSection === "bandwidth") content.innerHTML = renderBandwidth(payload);
+    else if (currentSection === "server") content.innerHTML = renderServer(payload);
+    else if (currentSection === "settings" || currentSection === "controls") content.innerHTML = renderSettings(payload);
     else content.innerHTML = renderOverview(payload);
+    applySearchFilter();
   }
 
-  async function load(nextSection = section) {
+  async function load(nextSection = section, options = {}) {
+    const currentRequest = ++requestId;
     section = nextSection;
+    if (!options.silent) setLoading(true, `Loading ${section.replace(/-/g, " ")}...`);
     try {
       const res = await fetch(sectionUrl(section), { headers: { "X-Requested-With": "XMLHttpRequest" } });
       const data = await res.json();
+      if (currentRequest !== requestId) return;
       if (!data.ok) throw new Error(data.message || "Dashboard failed");
       render(data.payload);
     } catch (error) {
       showAlert(error.message || "Dashboard data load failed", true);
+    } finally {
+      if (currentRequest === requestId) setLoading(false);
     }
   }
 
   async function runAction(action) {
     const form = new FormData();
     form.append("action", action);
-    const res = await fetch(shell.dataset.actionUrl, { method: "POST", body: form, headers: { "X-CSRFToken": csrf() } });
-    const data = await res.json();
-    showAlert(data.message || (data.ok ? "Done" : "Action failed"), !data.ok);
-    await load(section);
+    setLoading(true, "Running dashboard action...");
+    try {
+      const res = await fetch(shell.dataset.actionUrl, { method: "POST", body: form, headers: { "X-CSRFToken": csrf() } });
+      const data = await res.json();
+      showAlert(data.message || (data.ok ? "Done" : "Action failed"), !data.ok);
+      await load(section, { silent: true });
+    } catch (error) {
+      showAlert(error.message || "Action failed", true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function applySearchFilter() {
+    const query = (searchInput?.value || "").trim().toLowerCase();
+    content.querySelectorAll("tbody tr, .schedule-row, .mini-item").forEach((row) => {
+      row.hidden = Boolean(query) && !row.textContent.toLowerCase().includes(query);
+    });
+  }
+
+  function activateButton(button) {
+    document.querySelectorAll(".side-item").forEach((item) => item.classList.remove("active"));
+    button.classList.add("active");
   }
 
   document.querySelectorAll(".side-item").forEach((button) => {
     button.addEventListener("click", () => {
-      document.querySelectorAll(".side-item").forEach((item) => item.classList.remove("active"));
-      button.classList.add("active");
+      activateButton(button);
       load(button.dataset.section);
     });
   });
   refreshButton.addEventListener("click", () => load(section));
+  searchInput?.addEventListener("input", applySearchFilter);
   content.addEventListener("click", (event) => {
     const jump = event.target.closest("[data-section-jump]");
     if (jump) {
@@ -254,7 +348,12 @@
     const button = event.target.closest("[data-action]");
     if (button) runAction(button.dataset.action);
   });
-  load("overview");
-  timer = setInterval(() => load(section), 5000);
+
+  try {
+    const initial = JSON.parse(document.getElementById("initial-dashboard-json")?.textContent || "{}");
+    if (initial && initial.section) render(initial);
+  } catch (_) {}
+  load("overview", { silent: true });
+  timer = setInterval(() => load(section, { silent: true }), 5000);
   window.addEventListener("beforeunload", () => clearInterval(timer));
 })();

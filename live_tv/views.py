@@ -3354,13 +3354,38 @@ def dashboard_renders_snapshot(request):
         ]
     }
 
+def dashboard_users_devices_snapshot():
+    UserModel = get_user_model()
+    now = timezone.now()
+    today = now.date()
+    recent_tokens = MobileAdminToken.objects.select_related("user").order_by("-last_used_at", "-created_at")[:12]
+    return {
+        "total_users": UserModel.objects.count(),
+        "active_users": UserModel.objects.filter(is_active=True).count(),
+        "staff_users": UserModel.objects.filter(is_staff=True).count(),
+        "new_today": UserModel.objects.filter(date_joined__date=today).count(),
+        "mobile_tokens": MobileAdminToken.objects.count(),
+        "mobile_tokens_today": MobileAdminToken.objects.filter(created_at__date=today).count(),
+        "channel_follows": ChannelFollow.objects.count(),
+        "shorts_likes": ShortsLike.objects.count(),
+        "shorts_comments": ShortsComment.objects.count(),
+        "recent_devices": [
+            {
+                "user": token.user.get_username(),
+                "device": token.device_name or "Mobile app",
+                "created_at": timezone.localtime(token.created_at).strftime("%d %b, %I:%M %p"),
+                "last_used_at": timezone.localtime(token.last_used_at).strftime("%d %b, %I:%M %p") if token.last_used_at else "-",
+            }
+            for token in recent_tokens
+        ],
+    }
 
 def live_control_dashboard_payload(request, section="overview"):
+    section = (section or "overview").strip().lower()
     live = dashboard_live_snapshot(request)
     processing = dashboard_processing_snapshot()
-    if section == "live":
-        return {"section": section, "live": live}
-    if section == "playlist":
+
+    def playlist_payload(payload_section):
         channel = get_main_live_channel(create=False)
         items = []
         if channel:
@@ -3368,22 +3393,49 @@ def live_control_dashboard_payload(request, section="overview"):
                 row = dashboard_channel_summary(request, item.video)
                 row.update({"playlist_item_id": item.pk, "position": item.position + 1, "priority": item.priority, "is_active": item.is_active})
                 items.append(row)
-        return {"section": section, "live": live, "items": items}
+        return {"section": payload_section, "live": live, "items": items}
+
+    if section == "live":
+        return {"section": section, "live": live}
+    if section in {"programs", "epg", "playlist"}:
+        return playlist_payload(section)
     if section == "processing":
         return {"section": section, "processing": processing}
     if section == "uploads":
         return {"section": section, "uploads": dashboard_uploads_snapshot(request)}
-    if section == "renders":
+    if section in {"library", "renders"}:
         return {"section": section, "renders": dashboard_renders_snapshot(request)}
+    if section == "users":
+        return {"section": section, "users": dashboard_users_devices_snapshot(), "uploads": dashboard_uploads_snapshot(request)}
+    if section == "analytics":
+        return {
+            "section": section,
+            "live": live,
+            "processing": processing,
+            "server": dashboard_server_stats(),
+            "storage": dashboard_storage_stats(),
+            "bandwidth": dashboard_parse_apache_logs(),
+            "uploads": dashboard_uploads_snapshot(request),
+            "renders": dashboard_renders_snapshot(request),
+            "users": dashboard_users_devices_snapshot(),
+        }
+    if section == "bandwidth":
+        return {"section": section, "bandwidth": dashboard_parse_apache_logs(), "server": dashboard_server_stats(), "processing": processing}
     if section == "server":
         return {
             "section": section,
             "server": dashboard_server_stats(),
             "storage": dashboard_storage_stats(),
             "bandwidth": dashboard_parse_apache_logs(),
+            "processing": processing,
         }
-    if section == "controls":
-        return {"section": section, "settings": serialize_live_tv_setting(request, live_tv_setting()), "facebook_live": serialize_facebook_live_setting(facebook_live_setting())}
+    if section in {"settings", "controls"}:
+        return {
+            "section": section,
+            "settings": serialize_live_tv_setting(request, live_tv_setting()),
+            "facebook_live": serialize_facebook_live_setting(facebook_live_setting()),
+            "processing": processing,
+        }
     return {
         "section": "overview",
         "live": live,
@@ -3396,8 +3448,8 @@ def live_control_dashboard_payload(request, section="overview"):
             "shorts_total": ShortsVideo.objects.count(),
             "playlist_items": live["playlist"]["count"],
         },
+        "users": dashboard_users_devices_snapshot(),
     }
-
 
 @superuser_required
 @require_GET
@@ -3597,3 +3649,6 @@ def mobile_admin_facebook_live_status_api(request):
         return error
 
     return JsonResponse({"facebook_live": serialize_facebook_live_setting(facebook_live_setting())})
+
+
+
