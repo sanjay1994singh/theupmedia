@@ -10,6 +10,27 @@ from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, Ho
 from .services import calculate_current_playback, update_playlist_item
 
 
+def processing_progress_bar(percent, status=""):
+    safe_percent = max(0, min(100, int(percent or 0)))
+    status_value = str(status or "").lower()
+    color = "#16a34a" if safe_percent >= 100 or status_value in {"completed", "done"} else "#2563eb"
+    if status_value == "failed":
+        color = "#dc2626"
+    refresh_attr = ' data-processing-progress="1"' if status_value in {"pending", "processing"} else ""
+    return format_html(
+        '<div{} style="min-width:150px">'
+        '<div style="height:8px;background:#e5e7eb;border-radius:999px;overflow:hidden">'
+        '<div style="height:8px;width:{}%;background:{}"></div>'
+        '</div>'
+        '<strong style="font-size:12px">{}%</strong>'
+        '</div>',
+        refresh_attr,
+        safe_percent,
+        color,
+        safe_percent,
+    )
+
+
 @admin.register(AppMenu)
 class AppMenuAdmin(admin.ModelAdmin):
     list_display = ("title", "slug", "target_type", "target_value", "display_order", "is_active")
@@ -64,16 +85,16 @@ class LiveTVCityAdmin(admin.ModelAdmin):
 
 @admin.register(LiveTVChannel)
 class LiveTVChannelAdmin(admin.ModelAdmin):
-    list_display = ("title", "channel_role", "source_type", "hls_status", "playlist_duration_display", "is_live", "is_active", "display_order", "updated_at")
+    list_display = ("title", "channel_role", "source_type", "hls_status", "hls_progress_display", "playlist_duration_display", "is_live", "is_active", "display_order", "updated_at")
     list_filter = ("source_type", "auto_playlist_enabled", "auto_add_to_live", "hls_status", "is_live", "is_active")
     search_fields = ("title", "headline", "ticker_text", "city__name", "state__name", "category__name")
     prepopulated_fields = {"slug": ("title",)}
     list_editable = ("is_live", "is_active", "display_order")
-    readonly_fields = ("hls_master_url", "hls_status", "processing_error", "duration", "duration_seconds", "current_playback_display", "playlist_duration_display", "playlist_target_progress", "playlist_version", "playback_started_at", "last_playlist_update", "processing_failures")
+    readonly_fields = ("hls_master_url", "hls_status", "hls_progress_display", "hls_progress_percent", "processing_error", "duration", "duration_seconds", "current_playback_display", "playlist_duration_display", "playlist_target_progress", "playlist_version", "playback_started_at", "last_playlist_update", "processing_failures")
     fieldsets = (
         ("Basic", {"fields": ("title", "slug", "description", "is_active", "is_live", "display_order")}),
         ("Video Source", {"fields": ("source_type", "youtube_url", "stream_url", "video_file", "poster_image")}),
-        ("HLS Processing", {"fields": ("hls_master_url", "hls_status", "processing_error", "duration", "duration_seconds")}),
+        ("HLS Processing", {"fields": ("hls_master_url", "hls_status", "hls_progress_display", "hls_progress_percent", "processing_error", "duration", "duration_seconds")}),
         ("24x7 Auto Playlist", {"fields": ("auto_playlist_enabled", "auto_add_to_live", "loop_enabled", "target_playlist_duration_seconds", "current_playback_display", "playlist_duration_display", "playlist_target_progress", "playlist_version", "playback_started_at", "last_playlist_update", "processing_failures")}),
         ("Category / Location", {"fields": ("category", "state", "city")}),
         ("Video Text", {"fields": ("lower_third_label", "headline")}),
@@ -85,6 +106,7 @@ class LiveTVChannelAdmin(admin.ModelAdmin):
         if obj.source_type == LiveTVChannel.SourceType.DIRECT and obj.video_file and video_changed:
             obj.hls_master_url = ""
             obj.hls_status = LiveTVChannel.HLSStatus.PENDING
+            obj.hls_progress_percent = 0
             obj.processing_error = ""
             obj.duration = None
             obj.duration_seconds = 0
@@ -93,6 +115,13 @@ class LiveTVChannelAdmin(admin.ModelAdmin):
             from .views import enqueue_live_channel_hls_job
 
             transaction.on_commit(lambda: enqueue_live_channel_hls_job(obj.pk))
+
+    @admin.display(description="HLS progress")
+    def hls_progress_display(self, obj):
+        return processing_progress_bar(obj.hls_progress_percent, obj.hls_status)
+
+    class Media:
+        js = ("live_tv/admin_processing_refresh.js",)
 
     def _safe_related_name(self, obj, field_name, id_field_name):
         raw_id = getattr(obj, id_field_name, None)
@@ -316,18 +345,25 @@ class FacebookLiveSettingAdmin(admin.ModelAdmin):
 
 @admin.register(ShortsVideo)
 class ShortsVideoAdmin(admin.ModelAdmin):
-    list_display = ("title", "frame_template", "category", "state", "city", "location", "hls_status", "is_published", "display_order", "views_count", "likes_count", "comments_count", "shares_count", "created_at")
+    list_display = ("title", "frame_template", "category", "state", "city", "location", "hls_status", "hls_progress_display", "is_published", "display_order", "views_count", "likes_count", "comments_count", "shares_count", "created_at")
     list_filter = ("is_published", "hls_status", "frame_template")
     search_fields = ("title", "headline", "caption", "location", "city__name")
     list_editable = ("is_published", "display_order")
-    readonly_fields = ("hls_master_url", "hls_status", "processing_error", "duration", "created_at", "updated_at")
+    readonly_fields = ("hls_master_url", "hls_status", "hls_progress_display", "hls_progress_percent", "processing_error", "duration", "created_at", "updated_at")
     fieldsets = (
         ("Shorts Video", {"fields": ("title", "headline", "caption", "location", "category", "state", "city", "frame_template", "video_file", "original_video", "thumbnail")}),
-        ("HLS Processing", {"fields": ("hls_master_url", "hls_status", "processing_error", "duration")}),
+        ("HLS Processing", {"fields": ("hls_master_url", "hls_status", "hls_progress_display", "hls_progress_percent", "processing_error", "duration")}),
         ("Status", {"fields": ("is_published", "display_order", "created_by")}),
         ("Counters", {"fields": ("views_count", "likes_count", "comments_count", "shares_count")}),
         ("Dates", {"fields": ("created_at", "updated_at")}),
     )
+
+    @admin.display(description="HLS progress")
+    def hls_progress_display(self, obj):
+        return processing_progress_bar(obj.hls_progress_percent, obj.hls_status)
+
+    class Media:
+        js = ("live_tv/admin_processing_refresh.js",)
 
 
 @admin.register(ShortsComment)
@@ -361,17 +397,32 @@ class MobileAdminTokenAdmin(admin.ModelAdmin):
 
 @admin.register(MediaDownload)
 class MediaDownloadAdmin(admin.ModelAdmin):
-    list_display = ("title", "media_type", "status", "progress_percent", "created_by", "created_at")
+    list_display = ("title", "media_type", "status", "progress_display", "created_by", "created_at")
     list_filter = ("status", "media_type")
     search_fields = ("title", "source_url")
-    readonly_fields = ("progress_percent", "created_at", "updated_at", "error_message")
+    readonly_fields = ("progress_display", "progress_percent", "created_at", "updated_at", "error_message")
+
+    @admin.display(description="Progress")
+    def progress_display(self, obj):
+        return processing_progress_bar(obj.progress_percent, obj.status)
+
+    class Media:
+        js = ("live_tv/admin_processing_refresh.js",)
+
 @admin.register(SocialRenderedVideo)
 class SocialRenderedVideoAdmin(admin.ModelAdmin):
-    list_display = ("title", "live_channel", "source_video", "frame_template", "render_format", "status", "progress_percent", "is_active", "is_downloadable", "created_at")
+    list_display = ("title", "live_channel", "source_video", "frame_template", "render_format", "status", "progress_display", "is_active", "is_downloadable", "created_at")
     list_filter = ("status", "render_format", "frame_category", "live_channel", "is_active", "is_downloadable", "created_at")
     search_fields = ("title", "headline", "ticker_label", "ticker_text", "frame_template", "broadcast_session_id", "render_key")
-    readonly_fields = ("progress_percent", "render_key", "broadcast_session_id", "snapshot", "file_size", "resolution", "duration_seconds", "started_at", "completed_at", "created_at", "updated_at", "error_message")
+    readonly_fields = ("progress_display", "progress_percent", "render_key", "broadcast_session_id", "snapshot", "file_size", "resolution", "duration_seconds", "started_at", "completed_at", "created_at", "updated_at", "error_message")
     actions = ("retry_render_jobs", "regenerate_thumbnail", "mark_active", "mark_inactive")
+
+    @admin.display(description="Progress")
+    def progress_display(self, obj):
+        return processing_progress_bar(obj.progress_percent, obj.status)
+
+    class Media:
+        js = ("live_tv/admin_processing_refresh.js",)
 
     @admin.action(description="Retry / queue selected render jobs")
     def retry_render_jobs(self, request, queryset):

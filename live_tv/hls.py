@@ -1,5 +1,6 @@
-import json
+﻿import json
 import logging
+import re
 import shutil
 import subprocess
 import tempfile
@@ -54,6 +55,58 @@ def run_command(args, timeout=1800):
         raise HLSProcessingError(error[-3000:])
     return result
 
+
+def parse_ffmpeg_time(line):
+    match = re.search(r"time=(\d+):(\d+):(\d+(?:\.\d+)?)", line or "")
+    if not match:
+        return None
+    hours, minutes, seconds = match.groups()
+    return (int(hours) * 3600) + (int(minutes) * 60) + float(seconds)
+
+
+def progress_updater(model_cls, object_id, field_name="hls_progress_percent"):
+    last_percent = {"value": -1}
+
+    def update(percent):
+        safe_percent = max(0, min(99, int(percent)))
+        if safe_percent <= last_percent["value"]:
+            return
+        last_percent["value"] = safe_percent
+        model_cls.objects.filter(pk=object_id).update(**{field_name: safe_percent, "updated_at": timezone.now()})
+
+    return update
+
+
+def run_ffmpeg_command(args, duration=0, progress_callback=None, timeout=1800):
+    progress_args = list(args)
+    if progress_args and "ffmpeg" in Path(progress_args[0]).name.lower() and "-progress" not in progress_args:
+        progress_args[1:1] = ["-nostats", "-progress", "pipe:1"]
+    process = subprocess.Popen(progress_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    output_tail = []
+    try:
+        for line in process.stdout:
+            output_tail.append(line)
+            output_tail = output_tail[-40:]
+            current_time = None
+            if line.startswith("out_time_ms="):
+                try:
+                    current_time = int(line.split("=", 1)[1].strip()) / 1000000
+                except (TypeError, ValueError):
+                    current_time = None
+            elif line.startswith("out_time="):
+                current_time = parse_ffmpeg_time("time=" + line.split("=", 1)[1].strip())
+            else:
+                current_time = parse_ffmpeg_time(line)
+            if progress_callback and current_time is not None and duration:
+                progress_callback(min(99, (current_time / duration) * 100))
+        return_code = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        process.kill()
+        raise HLSProcessingError("FFmpeg command timed out.") from exc
+
+    if return_code != 0:
+        error = ("".join(output_tail) or "FFmpeg command failed.").strip()
+        raise HLSProcessingError(error[-3000:])
 
 def probe_video(input_path):
     result = run_command(
@@ -147,8 +200,9 @@ def convert_short_to_hls(short_id):
         return short.hls_master_url
 
     short.hls_status = ShortsVideo.HLSStatus.PROCESSING
+    short.hls_progress_percent = 1
     short.processing_error = ""
-    short.save(update_fields=["hls_status", "processing_error", "updated_at"])
+    short.save(update_fields=["hls_status", "hls_progress_percent", "processing_error", "updated_at"])
 
     final_dir = Path(settings.MEDIA_ROOT) / "videos" / str(short.pk) / "hls"
     tmp_parent = final_dir.parent
@@ -157,7 +211,10 @@ def convert_short_to_hls(short_id):
 
     try:
         metadata = probe_video(input_path)
-        for variant in HLS_VARIANTS:
+        duration = metadata.get("duration") or 0
+        update_progress = progress_updater(ShortsVideo, short.pk)
+        total_variants = max(1, len(HLS_VARIANTS))
+        for variant_index, variant in enumerate(HLS_VARIANTS):
             variant_dir = tmp_dir / variant["name"]
             variant_dir.mkdir(parents=True, exist_ok=True)
             args = [
@@ -211,7 +268,11 @@ def convert_short_to_hls(short_id):
                 str(variant_dir / "segment_%05d.ts"),
                 str(variant_dir / "index.m3u8"),
             ]
-            run_command(args, timeout=getattr(settings, "LIVE_TV_HLS_TIMEOUT", 1800))
+            def variant_progress(percent, index=variant_index):
+                update_progress(1 + (((index + (percent / 100)) / total_variants) * 98))
+
+            run_ffmpeg_command(args, duration=duration, progress_callback=variant_progress, timeout=getattr(settings, "LIVE_TV_HLS_TIMEOUT", 1800))
+            update_progress(1 + (((variant_index + 1) / total_variants) * 98))
 
         write_master_playlist(tmp_dir, metadata)
         make_public_media_tree(tmp_dir)
@@ -220,15 +281,17 @@ def convert_short_to_hls(short_id):
         tmp_dir.replace(final_dir)
         short.hls_master_url = f"videos/{short.pk}/hls/master.m3u8"
         short.hls_status = ShortsVideo.HLSStatus.COMPLETED
+        short.hls_progress_percent = 100
         short.processing_error = ""
         short.duration = metadata.get("duration")
-        short.save(update_fields=["hls_master_url", "hls_status", "processing_error", "duration", "updated_at"])
+        short.save(update_fields=["hls_master_url", "hls_status", "hls_progress_percent", "processing_error", "duration", "updated_at"])
         return short.hls_master_url
     except Exception as exc:
         if tmp_dir.exists():
             shutil.rmtree(tmp_dir, ignore_errors=True)
         ShortsVideo.objects.filter(pk=short.pk).update(
             hls_status=ShortsVideo.HLSStatus.FAILED,
+            hls_progress_percent=0,
             processing_error=str(exc)[-3000:],
             updated_at=timezone.now(),
         )
@@ -245,8 +308,9 @@ def convert_live_channel_to_hls(channel_id):
         raise HLSProcessingError("Source video file not found.")
 
     channel.hls_status = LiveTVChannel.HLSStatus.PROCESSING
+    channel.hls_progress_percent = 1
     channel.processing_error = ""
-    channel.save(update_fields=["hls_status", "processing_error", "updated_at"])
+    channel.save(update_fields=["hls_status", "hls_progress_percent", "processing_error", "updated_at"])
 
     final_dir = Path(settings.MEDIA_ROOT) / "live-tv" / "hls" / str(channel.pk)
     tmp_parent = final_dir.parent
@@ -255,7 +319,10 @@ def convert_live_channel_to_hls(channel_id):
 
     try:
         metadata = probe_video(input_path)
-        for variant in HLS_VARIANTS:
+        duration = metadata.get("duration") or 0
+        update_progress = progress_updater(LiveTVChannel, channel.pk)
+        total_variants = max(1, len(HLS_VARIANTS))
+        for variant_index, variant in enumerate(HLS_VARIANTS):
             variant_dir = tmp_dir / variant["name"]
             variant_dir.mkdir(parents=True, exist_ok=True)
             args = [
@@ -309,7 +376,11 @@ def convert_live_channel_to_hls(channel_id):
                 str(variant_dir / "segment_%05d.ts"),
                 str(variant_dir / "index.m3u8"),
             ]
-            run_command(args, timeout=getattr(settings, "LIVE_TV_HLS_TIMEOUT", 1800))
+            def variant_progress(percent, index=variant_index):
+                update_progress(1 + (((index + (percent / 100)) / total_variants) * 98))
+
+            run_ffmpeg_command(args, duration=duration, progress_callback=variant_progress, timeout=getattr(settings, "LIVE_TV_HLS_TIMEOUT", 1800))
+            update_progress(1 + (((variant_index + 1) / total_variants) * 98))
 
         write_master_playlist(tmp_dir, metadata)
         make_public_media_tree(tmp_dir)
@@ -318,6 +389,7 @@ def convert_live_channel_to_hls(channel_id):
         tmp_dir.replace(final_dir)
         channel.hls_master_url = f"live-tv/hls/{channel.pk}/master.m3u8"
         channel.hls_status = LiveTVChannel.HLSStatus.COMPLETED
+        channel.hls_progress_percent = 100
         channel.processing_error = ""
         channel.duration = metadata.get("duration")
         channel.duration_seconds = max(0, int(round(metadata.get("duration") or 0)))
@@ -325,6 +397,7 @@ def convert_live_channel_to_hls(channel_id):
             update_fields=[
                 "hls_master_url",
                 "hls_status",
+                "hls_progress_percent",
                 "processing_error",
                 "duration",
                 "duration_seconds",
@@ -344,7 +417,9 @@ def convert_live_channel_to_hls(channel_id):
             shutil.rmtree(tmp_dir, ignore_errors=True)
         LiveTVChannel.objects.filter(pk=channel.pk).update(
             hls_status=LiveTVChannel.HLSStatus.FAILED,
+            hls_progress_percent=0,
             processing_error=str(exc)[-3000:],
             updated_at=timezone.now(),
         )
         raise
+
