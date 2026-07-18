@@ -2975,7 +2975,10 @@ def dashboard_parse_apache_logs():
     found_logs = []
     for raw_path in log_paths:
         path = Path(raw_path)
-        if not path.exists() or path.suffix == ".gz":
+        try:
+            if path.suffix == ".gz" or not path.is_file():
+                continue
+        except OSError:
             continue
         found_logs.append(str(path))
         try:
