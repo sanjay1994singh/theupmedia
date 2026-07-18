@@ -112,6 +112,26 @@ def enqueue_social_render_job(job_id):
 
 
 def enqueue_short_hls_job(short_id):
+    try:
+        short = ShortsVideo.objects.only("pk", "hls_master_url", "hls_status", "updated_at").get(pk=short_id)
+    except ShortsVideo.DoesNotExist:
+        return "missing"
+
+    if short.hls_status == ShortsVideo.HLSStatus.COMPLETED and short.hls_master_url:
+        return "completed"
+
+    stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
+    if short.hls_status == ShortsVideo.HLSStatus.PROCESSING and short.updated_at >= stale_cutoff:
+        return "processing"
+
+    other_active = (
+        ShortsVideo.objects.filter(hls_status=ShortsVideo.HLSStatus.PROCESSING, updated_at__gte=stale_cutoff)
+        .exclude(pk=short_id)
+        .exists()
+    )
+    if other_active:
+        return "pending"
+
     if getattr(settings, "LIVE_TV_RENDER_USE_CELERY", True):
         try:
             from .tasks import process_short_hls_task

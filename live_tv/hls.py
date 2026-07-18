@@ -3,6 +3,7 @@ import logging
 import shutil
 import subprocess
 import tempfile
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
@@ -115,6 +116,10 @@ def make_public_media_tree(path):
     path.chmod(0o755)
 
 
+def hls_media_file_exists(media_path):
+    return bool(media_path and (Path(settings.MEDIA_ROOT) / media_path).exists())
+
+
 def convert_short_to_hls(short_id):
     short = ShortsVideo.objects.get(pk=short_id)
     if not short.video_file:
@@ -123,6 +128,23 @@ def convert_short_to_hls(short_id):
     input_path = Path(short.video_file.path)
     if not input_path.exists():
         raise HLSProcessingError("Source video file not found.")
+
+    stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
+    if short.hls_status == ShortsVideo.HLSStatus.COMPLETED and hls_media_file_exists(short.hls_master_url):
+        logger.info("Shorts HLS already completed for %s; skipping duplicate conversion.", short.pk)
+        return short.hls_master_url
+    if short.hls_status == ShortsVideo.HLSStatus.PROCESSING and short.updated_at >= stale_cutoff:
+        logger.info("Shorts HLS already processing for %s; skipping duplicate conversion.", short.pk)
+        return short.hls_master_url
+
+    other_active = (
+        ShortsVideo.objects.filter(hls_status=ShortsVideo.HLSStatus.PROCESSING, updated_at__gte=stale_cutoff)
+        .exclude(pk=short.pk)
+        .exists()
+    )
+    if other_active:
+        logger.info("Another shorts HLS job is active; leaving short %s pending.", short.pk)
+        return short.hls_master_url
 
     short.hls_status = ShortsVideo.HLSStatus.PROCESSING
     short.processing_error = ""
