@@ -329,9 +329,18 @@ def enqueue_completed_broadcast_renders(channel, at=None, state=None):
     for entry in entries:
         if entry.pk not in completed_ids:
             continue
-        job_id = enqueue_broadcast_render_job_for_cycle_item(entry)
-        if job_id:
-            return [job_id]
+        try:
+            job, created = create_broadcast_render_job(entry)
+        except Exception:
+            logger.exception("Failed to create live broadcast render job for cycle item %s", getattr(entry, "pk", None))
+            continue
+        if not job:
+            continue
+        if job.status in {SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE} and job.rendered_video:
+            continue
+        if getattr(job, "_render_should_enqueue", created):
+            queue_broadcast_render_task(job.pk)
+        return [job.pk]
     return []
 
 
