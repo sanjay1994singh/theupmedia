@@ -35,12 +35,16 @@
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowfullscreen></iframe>
     {% elif live_channel.player_source_type == "direct" %}
-      <video preload="auto" autoplay muted playsinline disablepictureinpicture controlslist="nodownload noplaybackrate noremoteplayback nofullscreen" {% if live_channel.poster_image %}poster="{{ live_channel.poster_image.url }}"{% endif %}>
-        <source src="{{ live_channel.video_file.url }}" type="{{ live_channel.video_mime_type }}">
+      <video preload="auto" autoplay muted playsinline disablepictureinpicture controlslist="nodownload noplaybackrate noremoteplayback nofullscreen" {% if live_channel.video_file %}data-fallback-video-url="{{ live_channel.video_file.url }}"{% endif %} data-fallback-video-type="{{ live_channel.video_mime_type }}" {% if live_channel.poster_image %}poster="{{ live_channel.poster_image.url }}"{% endif %}>
+        {% if live_channel.hls_master_url %}
+          <source src="{{ live_channel.hls_media_url }}" type="application/x-mpegURL">
+        {% else %}
+          <source src="{{ live_channel.video_file.url }}" type="{{ live_channel.video_mime_type }}">
+        {% endif %}
         Your browser does not support video playback.
       </video>
     {% elif live_channel.player_source_type == "hls" %}
-      <video preload="auto" autoplay muted playsinline disablepictureinpicture controlslist="nodownload noplaybackrate noremoteplayback nofullscreen" {% if live_channel.poster_image %}poster="{{ live_channel.poster_image.url }}"{% endif %}>
+      <video preload="auto" autoplay muted playsinline disablepictureinpicture controlslist="nodownload noplaybackrate noremoteplayback nofullscreen" {% if live_channel.video_file %}data-fallback-video-url="{{ live_channel.video_file.url }}"{% endif %} data-fallback-video-type="{{ live_channel.video_mime_type }}" {% if live_channel.poster_image %}poster="{{ live_channel.poster_image.url }}"{% endif %}>
         <source src="{{ live_channel.hls_media_url|default:live_channel.stream_url }}" type="application/x-mpegURL">
         Your browser does not support this live stream.
       </video>

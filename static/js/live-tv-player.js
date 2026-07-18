@@ -223,6 +223,37 @@
     return Boolean(video.canPlayType("application/vnd.apple.mpegurl") || video.canPlayType("application/x-mpegURL"));
   }
 
+
+  function switchToFallbackVideo(frame, video) {
+    const fallback = video.dataset.fallbackVideoUrl || "";
+    if (!fallback || video.dataset.fallbackActive === "true") {
+      setFrameControlState(frame, true);
+      return false;
+    }
+    if (video.liveTvHls) {
+      video.liveTvHls.destroy();
+      video.liveTvHls = null;
+    }
+    video.dataset.fallbackActive = "true";
+    video.liveTvHlsAttached = "";
+    video.innerHTML = "";
+    const source = document.createElement("source");
+    source.src = fallback;
+    source.type = video.dataset.fallbackVideoType || "video/mp4";
+    video.appendChild(source);
+    video.load();
+    video.addEventListener("loadedmetadata", function () {
+      syncNativeVideoToLive(frame, video);
+      const playPromise = video.play();
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(function () {
+          setFrameControlState(frame, true);
+        });
+      }
+    }, { once: true });
+    return true;
+  }
+
   function attachHlsIfNeeded(frame, video) {
     if (!isHlsVideo(video) || nativeHlsSupported(video)) {
       return Promise.resolve();
@@ -268,12 +299,12 @@
             hls.destroy();
             video.liveTvHls = null;
             video.liveTvHlsAttached = "";
-            setFrameControlState(frame, true);
+            switchToFallbackVideo(frame, video);
           }
         });
       })
       .catch(function () {
-        setFrameControlState(frame, true);
+        switchToFallbackVideo(frame, video);
       });
   }
 
