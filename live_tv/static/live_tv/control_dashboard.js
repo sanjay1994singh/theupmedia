@@ -87,21 +87,28 @@
     const periods = (payload.bandwidth || {}).periods || {};
     const today = periods.today || {};
     return `<section class="dashboard-card bandwidth-card">
-      <div class="card-head" style="padding:0 0 14px;border:0"><h2>Bandwidth Usage</h2><div class="pill-row" style="padding:0"><span class="pill">Daily</span><span class="pill">Week</span><span class="pill">Month</span></div></div>
-      <div class="bandwidth-flex"><div class="bandwidth-donut"><div><strong>${esc(today.display || "0 B")}</strong><small>Total</small></div></div><div class="mini-list"><div class="mini-item"><span>Mobile App</span><b>${esc(today.mobile_display || "0 B")}</b></div><div class="mini-item"><span>Web App</span><b>${esc(today.web_display || "0 B")}</b></div><div class="mini-item"><span>Requests</span><b>${esc(today.requests || 0)}</b></div></div></div>
+      <div class="card-head" style="padding:0 0 14px;border:0"><h2>Project Bandwidth Usage</h2><div class="pill-row" style="padding:0"><span class="pill">Daily</span><span class="pill">Week</span><span class="pill">Month</span></div></div>
+      <div class="bandwidth-flex"><div class="bandwidth-donut"><div><strong>${esc(today.display || "0 B")}</strong><small>Project Traffic</small></div></div><div class="mini-list"><div class="mini-item"><span>Mobile App</span><b>${esc(today.mobile_display || "0 B")}</b></div><div class="mini-item"><span>Web App</span><b>${esc(today.web_display || "0 B")}</b></div><div class="mini-item"><span>Project Requests</span><b>${esc(today.requests || 0)}</b></div></div></div>
     </section>`;
   }
 
   function renderServerCard(server) {
+    const projectPercent = Number(server.project_disk_percent ?? server.disk_percent ?? 0);
+    const partitionPercent = Number(server.project_partition_used_percent ?? server.disk_percent ?? 0);
     return `<section class="dashboard-card server-card">
-      <div class="card-head" style="padding:0 0 14px;border:0"><h2>Server Resources</h2><span class="muted">${esc(server.hostname || "")}</span></div>
+      <div class="card-head" style="padding:0 0 14px;border:0"><h2>Project Resources</h2><span class="muted">${esc(server.hostname || "")}</span></div>
       <div class="server-rings">
         <div class="ring" style="--p:${Number(server.cpu_percent || 0)};--c:#5fe17c"><div><strong>${esc(server.cpu_percent ?? "-")}%</strong><small>CPU</small></div></div>
         <div class="ring" style="--p:${Number(server.ram_percent || 0)};--c:#78e560"><div><strong>${esc(server.ram_percent ?? "-")}%</strong><small>RAM</small></div></div>
-        <div class="ring" style="--p:${Number(server.disk_percent || 0)};--c:#f4a52f"><div><strong>${esc(server.disk_percent ?? "-")}%</strong><small>SSD</small></div></div>
-        <div class="ring" style="--p:45;--c:#80d95e"><div><strong>${esc(server.load_average || "0")}</strong><small>Load</small></div></div>
+        <div class="ring" style="--p:${projectPercent};--c:#f4a52f"><div><strong>${esc(projectPercent)}%</strong><small>Project</small></div></div>
+        <div class="ring" style="--p:${partitionPercent};--c:#80d95e"><div><strong>${esc(server.load_average || "0")}</strong><small>Load</small></div></div>
       </div>
-      <div class="pill-row" style="padding:16px 0 0"><span class="pill">RAM ${esc(server.ram_used_display)} / ${esc(server.ram_total_display)}</span><span class="pill">SSD ${esc(server.disk_used_display)} / ${esc(server.disk_total_display)}</span></div>
+      <div class="pill-row" style="padding:16px 0 0">
+        <span class="pill">Project Used ${esc(server.project_used_display || "-")}</span>
+        <span class="pill">Project Disk Free ${esc(server.project_disk_free_display || server.disk_free_display || "-")}</span>
+        <span class="pill">RAM ${esc(server.ram_used_display)} / ${esc(server.ram_total_display)}</span>
+        <span class="pill">Root ${esc(server.project_root || "-")}</span>
+      </div>
     </section>`;
   }
 
@@ -114,10 +121,10 @@
     const live = payload.live || {};
     const rows = live.schedule || [];
     return `<div class="grid mini-grid">
-      <section class="dashboard-card storage-card"><h2>Storage Overview</h2><table class="table"><tbody>${storage.slice(0,4).map((row) => `<tr><td>${esc(row.label)}</td><td>${esc(row.display)}</td></tr>`).join("")}</tbody></table></section>
+      <section class="dashboard-card storage-card"><h2>Project Storage Overview</h2><table class="table"><tbody>${storage.slice(0,4).map((row) => `<tr><td>${esc(row.label)}</td><td>${esc(row.display)}</td></tr>`).join("")}</tbody></table></section>
       <section class="dashboard-card top-card"><h2>Top Live Channels</h2><table class="table"><tbody>${rows.slice(0,4).map((row, index) => `<tr><td>${index + 1}. ${esc(row.title)}</td><td>${esc(row.duration)}</td></tr>`).join("") || `<tr><td class="muted">No playlist data</td></tr>`}</tbody></table></section>
       <section class="dashboard-card activity-card"><h2>Recent Activities</h2><div class="mini-list"><div class="mini-item"><span>Live state refreshed</span><span>Now</span></div><div class="mini-item"><span>Playlist version</span><span>${esc((live.playlist || {}).version || 0)}</span></div><div class="mini-item"><span>Current video</span><span>${esc((live.current || {}).title || "-")}</span></div></div></section>
-      <section class="dashboard-card alert-card"><h2>Alerts & Notifications</h2><div class="mini-list"><div class="mini-item"><span>Failed HLS</span><span>${count((payload.processing || {}).live_hls, "failed")}</span></div><div class="mini-item"><span>Failed renders</span><span>${count((payload.processing || {}).renders, "failed")}</span></div><div class="mini-item"><span>Disk remaining</span><span>${esc((payload.server || {}).disk_free_display || "-")}</span></div></div></section>
+      <section class="dashboard-card alert-card"><h2>Alerts & Notifications</h2><div class="mini-list"><div class="mini-item"><span>Failed HLS</span><span>${count((payload.processing || {}).live_hls, "failed")}</span></div><div class="mini-item"><span>Failed renders</span><span>${count((payload.processing || {}).renders, "failed")}</span></div><div class="mini-item"><span>Project disk free</span><span>${esc((payload.server || {}).project_disk_free_display || (payload.server || {}).disk_free_display || "-")}</span></div></div></section>
     </div>`;
   }
 
@@ -130,7 +137,7 @@
 
   function renderServer(payload) {
     const bandwidth = (payload.bandwidth || {}).periods || {};
-    return `${pageTitle("Server Monitor", "RAM, SSD, load and bandwidth analytics", {})}<div class="grid lower-grid">${renderBandwidthCard(payload)}${renderServerCard(payload.server || {})}${renderAnalytics(payload)}</div><div style="height:18px"></div><section class="dashboard-card"><div class="card-head"><h2>Bandwidth Detail</h2></div><table class="table"><thead><tr><th>Period</th><th>Total</th><th>Mobile</th><th>Web</th><th>Requests</th></tr></thead><tbody>${Object.entries(bandwidth).map(([key,row]) => `<tr><td>${esc(key)}</td><td>${esc(row.display)}</td><td>${esc(row.mobile_display)}</td><td>${esc(row.web_display)}</td><td>${esc(row.requests || 0)}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">Apache logs not found on local system</td></tr>`}</tbody></table></section>`;
+    return `${pageTitle("Project Monitor", "Project storage, traffic, RAM and load analytics", {})}<div class="grid lower-grid">${renderBandwidthCard(payload)}${renderServerCard(payload.server || {})}${renderAnalytics(payload)}</div><div style="height:18px"></div><section class="dashboard-card"><div class="card-head"><h2>Bandwidth Detail</h2></div><table class="table"><thead><tr><th>Period</th><th>Total</th><th>Mobile</th><th>Web</th><th>Requests</th></tr></thead><tbody>${Object.entries(bandwidth).map(([key,row]) => `<tr><td>${esc(key)}</td><td>${esc(row.display)}</td><td>${esc(row.mobile_display)}</td><td>${esc(row.web_display)}</td><td>${esc(row.requests || 0)}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">Apache logs not found on local system</td></tr>`}</tbody></table></section>`;
   }
 
   function renderUploads(uploads) {
@@ -168,7 +175,7 @@
         ${kpi("On Air Now", live.current ? "01" : "00", live.current?.title || "No live video", "green")}
         ${kpi("Total Uploads", (uploads.videos_total || 0) + (uploads.shorts_total || 0), `${uploads.shorts_total || 0} shorts`, "blue")}
         ${kpi("Render Jobs", (processing.renders || {}).completed || (processing.renders || {}).done || 0, `${(processing.renders || {}).processing || 0} processing`, "orange")}
-        ${kpi("Storage Used", server.disk_used_display || "-", `${server.disk_percent || 0}% used`, "pink")}
+        ${kpi("Project Used", server.project_used_display || "-", `${server.project_disk_percent || 0}% of project disk`, "pink")}
       </div>
       <div class="grid main-grid">${renderLive(live)}${renderProcessingCard(processing)}${renderSchedule(live.schedule || [])}</div>
       <div class="grid lower-grid">${renderBandwidthCard(payload)}${renderServerCard(server)}${renderAnalytics(payload)}</div>

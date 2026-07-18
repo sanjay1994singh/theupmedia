@@ -2888,13 +2888,46 @@ def dashboard_file_size(file_obj):
             return 0
 
 
-def dashboard_dir_size(path, max_files=5000):
+DASHBOARD_PROJECT_EXCLUDED_DIRS = {
+    ".git",
+    ".venv",
+    "env",
+    "venv",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".cache",
+    ".gradle",
+    "node_modules",
+}
+DASHBOARD_PROJECT_BANDWIDTH_PREFIXES = (
+    "/media/",
+    "/static/",
+    "/staticfiles/",
+    "/api/live-tv/",
+    "/live-tv/",
+    "/admin/live_tv/",
+)
+DASHBOARD_PROJECT_STORAGE_CACHE = {"timestamp": 0.0, "data": None}
+
+
+def dashboard_path_is_relative_to(path, parent):
+    try:
+        Path(path).resolve().relative_to(Path(parent).resolve())
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def dashboard_dir_size(path, max_files=30000, excluded_dirs=None):
     path = Path(path)
     if not path.exists():
         return 0
     total = 0
     seen = 0
-    for root, _dirs, files in os.walk(path):
+    excluded = set(excluded_dirs or DASHBOARD_PROJECT_EXCLUDED_DIRS)
+    for root, dirs, files in os.walk(path):
+        dirs[:] = [name for name in dirs if name not in excluded]
         for filename in files:
             seen += 1
             if seen > max_files:
@@ -2906,14 +2939,101 @@ def dashboard_dir_size(path, max_files=5000):
     return total
 
 
+def dashboard_project_source_size(base_dir, excluded_paths, max_files=30000):
+    base_dir = Path(base_dir)
+    if not base_dir.exists():
+        return 0
+    excluded_resolved = [Path(path).resolve() for path in excluded_paths if path and Path(path).exists()]
+    total = 0
+    seen = 0
+    for root, dirs, files in os.walk(base_dir):
+        root_path = Path(root).resolve()
+        if any(root_path == excluded or dashboard_path_is_relative_to(root_path, excluded) for excluded in excluded_resolved):
+            dirs[:] = []
+            continue
+        keep_dirs = []
+        for name in dirs:
+            if name in DASHBOARD_PROJECT_EXCLUDED_DIRS:
+                continue
+            child = (root_path / name).resolve()
+            if any(child == excluded or dashboard_path_is_relative_to(child, excluded) for excluded in excluded_resolved):
+                continue
+            keep_dirs.append(name)
+        dirs[:] = keep_dirs
+        for filename in files:
+            seen += 1
+            if seen > max_files:
+                return total
+            try:
+                total += (root_path / filename).stat().st_size
+            except OSError:
+                continue
+    return total
+
+
+def dashboard_project_storage_stats():
+    cached = DASHBOARD_PROJECT_STORAGE_CACHE.get("data")
+    if cached and time.time() - DASHBOARD_PROJECT_STORAGE_CACHE.get("timestamp", 0) < 60:
+        return cached
+
+    base_dir = Path(settings.BASE_DIR).resolve()
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    static_root = Path(getattr(settings, "STATIC_ROOT", base_dir / "staticfiles")).resolve()
+    static_dirs = [Path(path).resolve() for path in getattr(settings, "STATICFILES_DIRS", []) if Path(path).exists()]
+
+    live_media = media_root / "live-tv"
+    shorts_media = media_root / "shorts"
+    rendered_paths = [media_root / "rendered", media_root / "live-tv" / "rendered"]
+    downloads_media = media_root / "media-downloads"
+
+    media_size = dashboard_dir_size(media_root)
+    live_size = dashboard_dir_size(live_media)
+    shorts_size = dashboard_dir_size(shorts_media)
+    rendered_size = sum(dashboard_dir_size(path) for path in rendered_paths)
+    downloads_size = dashboard_dir_size(downloads_media)
+    static_root_size = dashboard_dir_size(static_root)
+    static_source_size = sum(dashboard_dir_size(path) for path in static_dirs)
+    source_size = dashboard_project_source_size(base_dir, [media_root, static_root, *static_dirs])
+    project_total = media_size + static_root_size + static_source_size + source_size
+
+    disk = shutil.disk_usage(base_dir)
+    sections = [
+        ("Project source/code", base_dir, source_size),
+        ("Media uploads", media_root, media_size),
+        ("Live TV media", live_media, live_size),
+        ("Shorts media", shorts_media, shorts_size),
+        ("Rendered videos", " + ".join(str(path) for path in rendered_paths), rendered_size),
+        ("Media downloads", downloads_media, downloads_size),
+        ("Collected static", static_root, static_root_size),
+        ("Source static", " + ".join(str(path) for path in static_dirs) or "-", static_source_size),
+    ]
+    data = {
+        "project_root": str(base_dir),
+        "project_total_bytes": project_total,
+        "project_total_display": dashboard_human_bytes(project_total),
+        "project_disk_total": disk.total,
+        "project_disk_used": disk.used,
+        "project_disk_free": disk.free,
+        "project_disk_total_display": dashboard_human_bytes(disk.total),
+        "project_disk_used_display": dashboard_human_bytes(disk.used),
+        "project_disk_free_display": dashboard_human_bytes(disk.free),
+        "project_disk_percent": round((project_total / disk.total) * 100, 2) if disk.total else 0,
+        "project_partition_used_percent": round((disk.used / disk.total) * 100, 1) if disk.total else 0,
+        "sections": [
+            {"label": label, "path": str(path), "bytes": size, "display": dashboard_human_bytes(size)}
+            for label, path, size in sections
+        ],
+    }
+    DASHBOARD_PROJECT_STORAGE_CACHE.update({"timestamp": time.time(), "data": data})
+    return data
+
 def dashboard_counts_by_status(queryset, field="status"):
     return {row[field] or "unknown": row["count"] for row in queryset.values(field).annotate(count=Count("pk"))}
 
 
 def dashboard_server_stats():
-    media_root = Path(settings.MEDIA_ROOT)
-    disk_target = media_root if media_root.exists() else Path.cwd()
-    disk = shutil.disk_usage(disk_target)
+    project = dashboard_project_storage_stats()
+    disk = shutil.disk_usage(Path(settings.BASE_DIR))
     stats = {
         "hostname": socket.gethostname(),
         "platform": os.name,
@@ -2958,25 +3078,20 @@ def dashboard_server_stats():
             "disk_total_display": dashboard_human_bytes(stats["disk_total"]),
             "disk_used_display": dashboard_human_bytes(stats["disk_used"]),
             "disk_free_display": dashboard_human_bytes(stats["disk_free"]),
+            "project_root": project["project_root"],
+            "project_used": project["project_total_bytes"],
+            "project_used_display": project["project_total_display"],
+            "project_disk_total_display": project["project_disk_total_display"],
+            "project_disk_used_display": project["project_disk_used_display"],
+            "project_disk_free_display": project["project_disk_free_display"],
+            "project_disk_percent": project["project_disk_percent"],
+            "project_partition_used_percent": project["project_partition_used_percent"],
         }
     )
     return stats
 
-
 def dashboard_storage_stats():
-    media_root = Path(settings.MEDIA_ROOT)
-    sections = [
-        ("Live videos", media_root / "live-tv"),
-        ("Shorts", media_root / "shorts"),
-        ("Rendered", media_root / "rendered"),
-        ("Social renders", media_root / "live-tv" / "rendered"),
-        ("Downloads", media_root / "media-downloads"),
-    ]
-    rows = []
-    for label, path in sections:
-        size = dashboard_dir_size(path)
-        rows.append({"label": label, "path": str(path), "bytes": size, "display": dashboard_human_bytes(size)})
-    return rows
+    return dashboard_project_storage_stats()["sections"]
 
 
 APACHE_LOG_RE = re.compile(
@@ -2990,6 +3105,7 @@ def dashboard_parse_apache_logs():
         "LIVE_TV_APACHE_ACCESS_LOGS",
         ["/var/log/apache2/access.log", "/var/log/apache2/access.log.1"],
     )
+    path_prefixes = tuple(getattr(settings, "LIVE_TV_DASHBOARD_PROJECT_PATHS", DASHBOARD_PROJECT_BANDWIDTH_PREFIXES))
     today = timezone.localdate()
     periods = {
         "today": {"from": today, "bytes": 0, "requests": 0, "mobile": 0, "web": 0},
@@ -3012,6 +3128,9 @@ def dashboard_parse_apache_logs():
                 for line in handle:
                     match = APACHE_LOG_RE.search(line.strip())
                     if not match:
+                        continue
+                    request_path = urlparse(match.group("path") or "").path
+                    if path_prefixes and not any(request_path.startswith(prefix) for prefix in path_prefixes):
                         continue
                     try:
                         event_date = datetime.strptime(match.group("date"), "%d/%b/%Y").date()
@@ -3039,8 +3158,7 @@ def dashboard_parse_apache_logs():
         bucket["display"] = dashboard_human_bytes(bucket["bytes"])
         bucket["mobile_display"] = dashboard_human_bytes(bucket["mobile"])
         bucket["web_display"] = dashboard_human_bytes(bucket["web"])
-    return {"logs": found_logs, "periods": periods, "configured": bool(found_logs)}
-
+    return {"logs": found_logs, "periods": periods, "configured": bool(found_logs), "scope": list(path_prefixes)}
 
 def dashboard_channel_summary(request, channel):
     if not channel:
