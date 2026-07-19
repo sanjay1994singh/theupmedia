@@ -42,13 +42,36 @@ except ImportError:  # pragma: no cover - server requirements include Pillow
 
 from .forms import LiveTVChannelForm
 from .hls import validate_uploaded_video
-from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
+from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, PushDevice, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
 from .services import calculate_current_playback, enqueue_completed_broadcast_renders, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
 from blog.models import BlogPost
 from news.models import Article
 
 
 logger = logging.getLogger(__name__)
+
+
+@csrf_exempt
+@require_POST
+def register_push_device_api(request):
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return JsonResponse({"detail": "Invalid JSON body."}, status=400)
+
+    token = str(payload.get("token") or "").strip()
+    if not token.startswith(("ExponentPushToken[", "ExpoPushToken[")) or len(token) > 255:
+        return JsonResponse({"detail": "Invalid Expo push token."}, status=400)
+
+    device, _created = PushDevice.objects.update_or_create(
+        token=token,
+        defaults={
+            "platform": str(payload.get("platform") or "")[:20],
+            "device_name": str(payload.get("device_name") or "")[:160],
+            "is_active": bool(payload.get("active", True)),
+        },
+    )
+    return JsonResponse({"ok": True, "active": device.is_active})
 
 RESTRICTED_DOWNLOAD_HOSTS = {
     "youtube.com",

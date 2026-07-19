@@ -464,6 +464,12 @@ def convert_live_channel_to_hls(channel_id):
                 add_uploaded_video_to_live_playlist(channel)
             except Exception:
                 logger.exception("Live playlist auto-add failed for channel %s", channel.pk)
+        try:
+            from .notifications import notify_new_video_ready
+
+            notify_new_video_ready(channel.pk)
+        except Exception:
+            logger.exception("New video push notification failed for channel %s", channel.pk)
         return channel.hls_master_url
     except Exception as exc:
         if tmp_dir.exists():

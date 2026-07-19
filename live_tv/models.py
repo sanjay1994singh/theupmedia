@@ -146,6 +146,7 @@ class LiveTVChannel(models.Model):
     meta_title = models.CharField(max_length=160, blank=True)
     meta_description = models.CharField(max_length=220, blank=True)
     display_order = models.PositiveIntegerField(default=0)
+    push_notification_sent_at = models.DateTimeField(blank=True, null=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -705,6 +706,21 @@ class MobileAdminToken(models.Model):
         )
         cls.objects.filter(user=user).exclude(pk=token.pk).delete()
         return token
+
+
+class PushDevice(models.Model):
+    token = models.CharField(max_length=255, unique=True, db_index=True)
+    platform = models.CharField(max_length=20, blank=True)
+    device_name = models.CharField(max_length=160, blank=True)
+    is_active = models.BooleanField(default=True)
+    last_registered_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-last_registered_at"]
+
+    def __str__(self):
+        return f"{self.platform or 'mobile'} push device"
 
 
 

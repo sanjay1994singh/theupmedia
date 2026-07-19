@@ -6,7 +6,7 @@ from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistCycle, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
+from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistCycle, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, PushDevice, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
 from .services import calculate_current_playback, update_playlist_item
 
 
@@ -395,6 +395,14 @@ class MobileAdminTokenAdmin(admin.ModelAdmin):
     list_display = ("user", "device_name", "created_at", "last_used_at")
     search_fields = ("user__username", "user__email", "device_name")
     readonly_fields = ("key", "created_at", "last_used_at")
+
+
+@admin.register(PushDevice)
+class PushDeviceAdmin(admin.ModelAdmin):
+    list_display = ("platform", "device_name", "is_active", "last_registered_at")
+    list_filter = ("is_active", "platform")
+    search_fields = ("token", "device_name")
+    readonly_fields = ("token", "platform", "device_name", "created_at", "last_registered_at")
 
 
 
