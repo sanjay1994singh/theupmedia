@@ -3,15 +3,25 @@
 {% block title %}Sign Up - {{ SITE_NAME }}{% endblock %}
 
 {% block content %}
-<section class="auth-panel">
-  <h1>Create Account</h1>
-  <div class="social-logins">
-    <a href="{% url 'social:begin' 'google-oauth2' %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}">Continue with Google</a>
+<section class="account-page account-page-signup">
+  <aside class="account-visual">
+    <span class="account-badge">Join The UP Media</span>
+    <h1>Create one account for everything</h1>
+    <p>Follow trusted updates and manage digital services without repeating your details.</p>
+    <div class="account-benefits"><span>✓ Quick checkout</span><span>✓ Wishlist access</span><span>✓ Profile and order history</span></div>
+  </aside>
+  <div class="account-form-panel">
+    <div class="account-form-heading"><span>Get started</span><h2>Create your account</h2><p>It takes less than a minute.</p></div>
+    <div class="social-logins account-socials">
+      <a href="{% url 'social:begin' 'google-oauth2' %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}">Continue with Google</a>
+    </div>
+    <div class="account-divider"><span>or register manually</span></div>
+    <form class="account-form" method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit">Create account</button>
+    </form>
+    <p class="account-switch">Already registered? <a href="{% url 'accounts:login' %}">Sign in</a></p>
   </div>
-  <form method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Sign up</button>
-  </form>
 </section>
 {% endblock %}

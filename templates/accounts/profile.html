@@ -3,12 +3,26 @@
 {% block title %}Profile - {{ SITE_NAME }}{% endblock %}
 
 {% block content %}
-<section class="auth-panel wide">
-  <h1>Your Profile</h1>
-  <form method="post" enctype="multipart/form-data">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Save profile</button>
-  </form>
+<section class="profile-page">
+  <aside class="profile-summary">
+    <div class="profile-avatar">{{ user.get_username|slice:":1"|upper }}</div>
+    <span class="account-badge">Your account</span>
+    <h1>{{ user.get_full_name|default:user.get_username }}</h1>
+    <p>{{ user.email|default:"Add your email address" }}</p>
+    <nav>
+      <a href="{% url 'subscriptions:my_subscriptions' %}">My services <span>→</span></a>
+      <a href="{% url 'subscriptions:orders' %}">Orders <span>→</span></a>
+      <a href="{% url 'subscriptions:wishlist' %}">Wishlist <span>→</span></a>
+      <a href="{% url 'subscriptions:cart' %}">Cart <span>→</span></a>
+    </nav>
+  </aside>
+  <div class="profile-editor">
+    <div class="account-form-heading"><span>Profile settings</span><h2>Personal information</h2><p>Keep your contact and account details up to date.</p></div>
+    <form class="account-form profile-form" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit">Save profile</button>
+    </form>
+  </div>
 </section>
 {% endblock %}
