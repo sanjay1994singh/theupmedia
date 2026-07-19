@@ -21,7 +21,6 @@
     {% endif %}
     <div class="social-logins account-socials">
       <a href="{% url 'social:begin' 'google-oauth2' %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}">Continue with Google</a>
-      <a href="{% url 'social:begin' 'facebook' %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}">Continue with Facebook</a>
     </div>
     <div class="account-divider"><span>or continue with email</span></div>
     <form class="account-form" method="post">

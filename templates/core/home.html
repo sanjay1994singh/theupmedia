@@ -49,18 +49,26 @@
   </div>
 </section>
 
-<section class="content-band">
-  <div class="section-heading">
+<section class="content-band subscription-home-band">
+  <div class="subscription-showcase">
+  <div class="section-heading subscription-intro">
     <div>
       <p class="eyebrow">Paid Services</p>
       <h2>Subscription Plans</h2>
       <p>Monthly service plans jo client directly cart me add karke Razorpay se purchase kar sakte hain.</p>
     </div>
-    <a href="{% url 'services:service_list' %}">View all services</a>
+    <div class="account-benefits">
+      <span>✓ Secure online payment</span>
+      <span>✓ Account-based plan management</span>
+      <span>✓ Direct service support</span>
+    </div>
+    <a class="subscription-view-all" href="{% url 'services:service_list' %}">View all services →</a>
   </div>
-  <div class="home-plan-grid">
+  <div class="subscription-plan-area">
+  <div class="subscription-area-heading"><p class="eyebrow">Choose your plan</p><span>Simple monthly pricing</span></div>
+  <div class="home-plan-grid premium-plan-grid">
     {% for plan in subscription_plans %}
-      <article class="home-plan-card">
+      <article class="home-plan-card premium-plan-card">
         <div>
           <span class="category">{{ plan.service.name }}</span>
           <h3>{{ plan.name }}</h3>
@@ -99,6 +107,8 @@
       <p>Add subscription plans from Django admin.</p>
     {% endfor %}
   </div>
+  </div>
+  </div>
 </section>
 
 <section class="content-band">
@@ -110,7 +120,7 @@
     <a href="{% url 'news:article_list' %}">View all</a>
   </div>
   <div class="card-grid">
-    {% for article in latest %}
+    {% for article in latest|slice:":3" %}
       {% include "news/includes/article_card.html" with article=article %}
     {% empty %}
       <p>No published articles yet. Add articles from Django admin and mark them as published.</p>
@@ -130,7 +140,7 @@
     <a href="{% url 'services:service_list' %}">View services</a>
   </div>
   <div class="service-grid">
-    {% for service in business_services %}
+    {% for service in business_services|slice:":3" %}
       <article class="service-card">
         {% if service.icon_label %}<span class="service-icon">{{ service.icon_label }}</span>{% endif %}
         <h3>
@@ -161,7 +171,7 @@
     <a href="{% url 'blog:post_list' %}">View blog</a>
   </div>
   <div class="card-grid">
-    {% for post in latest_blogs %}
+    {% for post in latest_blogs|slice:":3" %}
       <article class="story-card">
         {% if post.featured_image %}
           <a class="story-media" href="{{ post.get_absolute_url }}">
