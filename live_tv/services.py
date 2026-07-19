@@ -1,3 +1,5 @@
+import hashlib
+import json
 import logging
 import threading
 from datetime import timedelta
@@ -185,6 +187,104 @@ def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
     }
 
 
+LIVE_BROADCAST_VISUAL_SNAPSHOT_KEYS = (
+    "headline",
+    "headline_label",
+    "lower_third_label",
+    "ticker_label",
+    "ticker_text",
+    "ticker_speed_seconds",
+    "mobile_ticker_speed_seconds",
+    "ticker_style",
+    "channel_name",
+    "channel_logo",
+    "live_label",
+    "show_channel_logo",
+    "show_live_badge",
+    "show_lower_third",
+    "show_ticker",
+    "render_format",
+    "frame_template",
+    "frame_category",
+    "duration_seconds",
+)
+
+
+def live_broadcast_visual_snapshot(snapshot):
+    return {key: (snapshot or {}).get(key) for key in LIVE_BROADCAST_VISUAL_SNAPSHOT_KEYS}
+
+
+def live_broadcast_render_identity(channel, video, playlist_item, snapshot):
+    visual_snapshot = live_broadcast_visual_snapshot(snapshot)
+    fingerprint = hashlib.sha1(json.dumps(visual_snapshot, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+    playlist_slot = playlist_item.pk if playlist_item else "direct"
+    return f"live:v2:{channel.pk}:{playlist_slot}:{video.pk}:{fingerprint}"
+
+
+def same_live_broadcast_render_jobs(channel, video, playlist_item):
+    queryset = SocialRenderedVideo.objects.filter(
+        live_channel=channel,
+        source_video=video,
+        frame_category="live_broadcast",
+        frame_template="broadcast_live_tv",
+        render_format="16:9",
+        is_active=True,
+    )
+    if playlist_item:
+        queryset = queryset.filter(playlist_item=playlist_item)
+    return queryset
+
+
+def matching_live_broadcast_render_job(queryset, snapshot, render_key=None):
+    if render_key:
+        exact = queryset.filter(render_key=render_key).first()
+        if exact:
+            return exact
+    wanted_snapshot = live_broadcast_visual_snapshot(snapshot)
+    for job in queryset.order_by("-completed_at", "-updated_at", "-created_at")[:25]:
+        if live_broadcast_visual_snapshot(job.snapshot) == wanted_snapshot:
+            return job
+    return None
+
+
+def completed_live_broadcast_render_job(channel, video, playlist_item, snapshot, render_key):
+    queryset = (
+        same_live_broadcast_render_jobs(channel, video, playlist_item)
+        .filter(status__in=[SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE])
+        .exclude(rendered_video="")
+    )
+    return matching_live_broadcast_render_job(queryset, snapshot, render_key)
+
+
+def queueable_live_broadcast_render_job(channel, video, playlist_item, snapshot, render_key):
+    queryset = same_live_broadcast_render_jobs(channel, video, playlist_item).filter(
+        status__in=[SocialRenderedVideo.Status.PENDING, SocialRenderedVideo.Status.PROCESSING]
+    )
+    return matching_live_broadcast_render_job(queryset, snapshot, render_key)
+
+
+def mark_duplicate_live_render_jobs_skipped(canonical_job):
+    if not canonical_job or not canonical_job.source_video_id:
+        return 0
+    queryset = SocialRenderedVideo.objects.filter(
+        live_channel_id=canonical_job.live_channel_id,
+        source_video_id=canonical_job.source_video_id,
+        playlist_item_id=canonical_job.playlist_item_id,
+        frame_category=canonical_job.frame_category,
+        frame_template=canonical_job.frame_template,
+        render_format=canonical_job.render_format,
+        status__in=[SocialRenderedVideo.Status.PENDING, SocialRenderedVideo.Status.PROCESSING],
+    ).exclude(pk=canonical_job.pk)
+    return queryset.update(
+        status=SocialRenderedVideo.Status.DONE,
+        progress_percent=100,
+        is_active=False,
+        error_message=f"Duplicate skipped. Canonical render id: {canonical_job.pk}",
+        completed_at=timezone.now(),
+        updated_at=timezone.now(),
+    )
+
+
 def create_broadcast_render_job(cycle_item):
     cycle_item = (
         LiveTVPlaylistCycleItem.objects.select_related(
@@ -196,11 +296,24 @@ def create_broadcast_render_job(cycle_item):
     )
     channel = cycle_item.cycle.channel
     video = cycle_item.video
+    playlist_item = cycle_item.playlist_item
     if not video.video_file:
         return None, False
     broadcast_session_id = f"cycle-{cycle_item.cycle_id}-v{cycle_item.cycle.version}-item-{cycle_item.pk}"
-    render_key = f"live:{channel.pk}:{cycle_item.playlist_item_id}:{video.pk}:{broadcast_session_id}"
-    snapshot = broadcast_snapshot_for(video, channel, cycle_item.playlist_item, cycle_item)
+    snapshot = broadcast_snapshot_for(video, channel, playlist_item, cycle_item)
+    render_key = live_broadcast_render_identity(channel, video, playlist_item, snapshot)
+
+    completed_job = completed_live_broadcast_render_job(channel, video, playlist_item, snapshot, render_key)
+    if completed_job:
+        mark_duplicate_live_render_jobs_skipped(completed_job)
+        completed_job._render_should_enqueue = False
+        return completed_job, False
+
+    active_job = queueable_live_broadcast_render_job(channel, video, playlist_item, snapshot, render_key)
+    if active_job:
+        active_job._render_should_enqueue = False
+        return active_job, False
+
     defaults = {
         "title": snapshot["title"][:180],
         "headline": snapshot["headline"][:180],
@@ -212,7 +325,7 @@ def create_broadcast_render_job(cycle_item):
         "frame_template": snapshot["frame_template"],
         "source_video": video,
         "live_channel": channel,
-        "playlist_item": cycle_item.playlist_item,
+        "playlist_item": playlist_item,
         "broadcast_session_id": broadcast_session_id,
         "snapshot": snapshot,
         "duration_seconds": video.effective_duration_seconds,

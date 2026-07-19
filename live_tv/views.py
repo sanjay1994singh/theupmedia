@@ -1601,6 +1601,67 @@ def normalize_duplicate_processing_render_jobs(active_job_id):
     )
 
 
+LIVE_BROADCAST_VISUAL_SNAPSHOT_KEYS = (
+    "headline",
+    "headline_label",
+    "lower_third_label",
+    "ticker_label",
+    "ticker_text",
+    "ticker_speed_seconds",
+    "mobile_ticker_speed_seconds",
+    "ticker_style",
+    "channel_name",
+    "channel_logo",
+    "live_label",
+    "show_channel_logo",
+    "show_live_badge",
+    "show_lower_third",
+    "show_ticker",
+    "render_format",
+    "frame_template",
+    "frame_category",
+    "duration_seconds",
+)
+
+
+def live_broadcast_visual_snapshot(snapshot):
+    return {key: (snapshot or {}).get(key) for key in LIVE_BROADCAST_VISUAL_SNAPSHOT_KEYS}
+
+
+def duplicate_completed_render_for(job):
+    if not job or not job.source_video_id or not job.live_channel_id:
+        return None
+    queryset = SocialRenderedVideo.objects.filter(
+        live_channel_id=job.live_channel_id,
+        source_video_id=job.source_video_id,
+        playlist_item_id=job.playlist_item_id,
+        frame_category=job.frame_category,
+        frame_template=job.frame_template,
+        render_format=job.render_format,
+        is_active=True,
+        status__in=[SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE],
+    ).exclude(pk=job.pk).exclude(rendered_video="")
+    if job.render_key:
+        keyed = queryset.filter(render_key=job.render_key).first()
+        if keyed:
+            return keyed
+    wanted_snapshot = live_broadcast_visual_snapshot(job.snapshot)
+    for candidate in queryset.order_by("-completed_at", "-updated_at", "-created_at")[:25]:
+        if live_broadcast_visual_snapshot(candidate.snapshot) == wanted_snapshot:
+            return candidate
+    return None
+
+
+def skip_duplicate_render_job(job, canonical_job):
+    SocialRenderedVideo.objects.filter(pk=job.pk).update(
+        status=SocialRenderedVideo.Status.DONE,
+        progress_percent=100,
+        is_active=False,
+        completed_at=timezone.now(),
+        error_message=f"Duplicate skipped. Canonical render id: {canonical_job.pk}",
+    )
+
+
 RENDER_TEMPLATE_ACCENTS = {
     "breaking-red": "#d71920",
     "live-report": "#e11d48",
@@ -1950,10 +2011,19 @@ def run_social_render_job(job_id, raise_errors=False):
     if job.status in {SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE} and job.rendered_video:
         close_old_connections()
         return
+    duplicate_job = duplicate_completed_render_for(job)
+    if duplicate_job:
+        skip_duplicate_render_job(job, duplicate_job)
+        close_old_connections()
+        return
     try:
         with single_live_render_lock():
             job.refresh_from_db()
             if job.status in {SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE} and job.rendered_video:
+                return
+            duplicate_job = duplicate_completed_render_for(job)
+            if duplicate_job:
+                skip_duplicate_render_job(job, duplicate_job)
                 return
             normalize_duplicate_processing_render_jobs(job.pk)
             update_render_progress(job.pk, 1)

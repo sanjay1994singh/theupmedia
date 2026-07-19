@@ -418,7 +418,7 @@ class SocialRenderedVideoAdmin(admin.ModelAdmin):
     list_filter = ("status", "render_format", "frame_category", "live_channel", "is_active", "is_downloadable", "created_at")
     search_fields = ("title", "headline", "ticker_label", "ticker_text", "frame_template", "broadcast_session_id", "render_key")
     readonly_fields = ("progress_display", "progress_percent", "render_key", "broadcast_session_id", "snapshot", "file_size", "resolution", "duration_seconds", "started_at", "completed_at", "created_at", "updated_at", "error_message")
-    actions = ("retry_render_jobs", "regenerate_thumbnail", "mark_active", "mark_inactive")
+    actions = ("retry_render_jobs", "regenerate_thumbnail", "collapse_duplicate_live_renders", "mark_active", "mark_inactive")
 
     @admin.display(description="Progress")
     def progress_display(self, obj):
@@ -452,6 +452,32 @@ class SocialRenderedVideoAdmin(admin.ModelAdmin):
             job.save(update_fields=["thumbnail", "updated_at"])
             count += 1
         self.message_user(request, f"{count} thumbnails regenerated.")
+
+    @admin.action(description="Collapse duplicate live broadcast renders")
+    def collapse_duplicate_live_renders(self, request, queryset):
+        duplicate_count = 0
+        groups = {}
+        jobs = queryset.select_related("source_video", "live_channel", "playlist_item").order_by("source_video_id", "playlist_item_id", "-completed_at", "-updated_at", "-created_at")
+        for job in jobs:
+            if job.frame_template != "broadcast_live_tv" or not job.source_video_id or not job.live_channel_id:
+                continue
+            key = (job.live_channel_id, job.source_video_id, job.playlist_item_id, job.frame_template, job.render_format)
+            groups.setdefault(key, []).append(job)
+        for grouped_jobs in groups.values():
+            if len(grouped_jobs) < 2:
+                continue
+            canonical = next((item for item in grouped_jobs if item.status in {SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE} and item.rendered_video), grouped_jobs[0])
+            for job in grouped_jobs:
+                if job.pk == canonical.pk:
+                    continue
+                job.status = SocialRenderedVideo.Status.DONE
+                job.progress_percent = 100
+                job.is_active = False
+                job.error_message = f"Duplicate skipped. Canonical render id: {canonical.pk}"
+                job.completed_at = job.completed_at or canonical.completed_at
+                job.save(update_fields=["status", "progress_percent", "is_active", "error_message", "completed_at", "updated_at"])
+                duplicate_count += 1
+        self.message_user(request, f"{duplicate_count} duplicate render jobs collapsed.")
 
     @admin.action(description="Mark selected active")
     def mark_active(self, request, queryset):
