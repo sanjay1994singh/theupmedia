@@ -242,8 +242,12 @@
     const uploads = payload.uploads || {};
     const renders = payload.renders || {};
     const users = payload.users || {};
+    const blogs = payload.blogs || {};
     return `${pageTitle("Analytics", "Project level live TV, render, viewer and upload analysis", live)}
       <div class="grid kpi-grid">
+        ${kpi("Blogs Today", blogs.today || 0, "published today", "green")}
+        ${kpi("Blogs Yesterday", blogs.yesterday || 0, "published yesterday", "blue")}
+        ${kpi("Blogs This Month", blogs.this_month || 0, "published this month", "orange")}
         ${kpi("Playlist Videos", (live.playlist || {}).count || 0, (live.playlist || {}).duration_display || "00:00")}
         ${kpi("Live Uploads", (uploads.videos || []).length, "latest loaded", "green")}
         ${kpi("Shorts", (uploads.shorts || []).length, "latest loaded", "blue")}
@@ -280,8 +284,12 @@
     const processing = payload.processing || {};
     const server = payload.server || {};
     const uploads = payload.uploads || {};
+    const blogs = payload.blogs || {};
     return `${pageTitle("Dashboard Overview", "Real-time overview of your Live TV platform", live)}
       <div class="grid kpi-grid">
+        ${kpi("Blogs Today", blogs.today || 0, "published today", "green")}
+        ${kpi("Blogs Yesterday", blogs.yesterday || 0, "published yesterday", "blue")}
+        ${kpi("Blogs This Month", blogs.this_month || 0, "published this month", "orange")}
         ${kpi("Live TV Channels", (live.playlist || {}).count || 0, "+ playlist items")}
         ${kpi("On Air Now", live.current ? "01" : "00", live.current?.title || "No live video", "green")}
         ${kpi("Total Uploads", (uploads.videos_total || 0) + (uploads.shorts_total || 0), `${uploads.shorts_total || 0} shorts`, "blue")}

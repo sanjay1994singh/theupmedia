@@ -43,6 +43,7 @@ from .forms import LiveTVChannelForm
 from .hls import validate_uploaded_video
 from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
 from .services import calculate_current_playback, enqueue_completed_broadcast_renders, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
+from blog.models import BlogPost
 from news.models import Article
 
 
@@ -3521,6 +3522,31 @@ def dashboard_users_devices_snapshot():
         ],
     }
 
+
+def dashboard_blog_snapshot():
+    now = timezone.now()
+    current_timezone = timezone.get_current_timezone()
+    today = timezone.localtime(now, current_timezone).date()
+    today_start = timezone.make_aware(datetime.combine(today, datetime.min.time()), current_timezone)
+    yesterday_start = today_start - timedelta(days=1)
+    month_start = timezone.make_aware(
+        datetime.combine(today.replace(day=1), datetime.min.time()),
+        current_timezone,
+    )
+    published = BlogPost.objects.filter(
+        status=BlogPost.Status.PUBLISHED,
+        published_at__lte=now,
+    )
+    return {
+        "today": published.filter(published_at__gte=today_start).count(),
+        "yesterday": published.filter(
+            published_at__gte=yesterday_start,
+            published_at__lt=today_start,
+        ).count(),
+        "this_month": published.filter(published_at__gte=month_start).count(),
+    }
+
+
 def live_control_dashboard_payload(request, section="overview"):
     section = (section or "overview").strip().lower()
     live = dashboard_live_snapshot(request)
@@ -3564,6 +3590,7 @@ def live_control_dashboard_payload(request, section="overview"):
             "uploads": dashboard_uploads_snapshot(request),
             "renders": dashboard_renders_snapshot(request),
             "users": dashboard_users_devices_snapshot(),
+            "blogs": dashboard_blog_snapshot(),
         }
     if section == "bandwidth":
         return {"section": section, "bandwidth": dashboard_parse_apache_logs(), "server": dashboard_server_stats(), "processing": processing}
@@ -3595,6 +3622,7 @@ def live_control_dashboard_payload(request, section="overview"):
             "playlist_items": live["playlist"]["count"],
         },
         "users": dashboard_users_devices_snapshot(),
+        "blogs": dashboard_blog_snapshot(),
     }
 
 @superuser_required
