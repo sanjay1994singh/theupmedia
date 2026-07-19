@@ -37,6 +37,10 @@
   min-width: 720px;
 }
 
+.table-scroll .news-table {
+  min-width: 1120px;
+}
+
 .blog-title-link {
   color: #8acbff;
   text-decoration: none;

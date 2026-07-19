@@ -3585,6 +3585,76 @@ def dashboard_blog_snapshot(page=1):
     }
 
 
+def dashboard_news_snapshot(page=1):
+    now = timezone.now()
+    current_timezone = timezone.get_current_timezone()
+    today = timezone.localtime(now, current_timezone).date()
+    today_start = timezone.make_aware(datetime.combine(today, datetime.min.time()), current_timezone)
+    yesterday_start = today_start - timedelta(days=1)
+    month_start = timezone.make_aware(
+        datetime.combine(today.replace(day=1), datetime.min.time()),
+        current_timezone,
+    )
+    published = Article.objects.filter(
+        status=Article.Status.PUBLISHED,
+        published_at__lte=now,
+    )
+    recent_articles = published.select_related(
+        "author", "category", "state", "city",
+    ).order_by("-published_at", "-pk")
+    paginator = Paginator(recent_articles, 10)
+    page_obj = paginator.get_page(page)
+
+    def published_time_label(value):
+        local_value = timezone.localtime(value, current_timezone)
+        hour = local_value.strftime("%I").lstrip("0") or "12"
+        minute = f":{local_value:%M}" if local_value.minute else ""
+        return f"{local_value:%d %b %Y}, {hour}{minute} {local_value:%p}"
+
+    return {
+        "today": published.filter(published_at__gte=today_start).count(),
+        "yesterday": published.filter(
+            published_at__gte=yesterday_start,
+            published_at__lt=today_start,
+        ).count(),
+        "this_month": published.filter(published_at__gte=month_start).count(),
+        "pagination": {
+            "page": page_obj.number,
+            "total_pages": paginator.num_pages,
+            "total_items": paginator.count,
+            "has_previous": page_obj.has_previous(),
+            "has_next": page_obj.has_next(),
+        },
+        "items": [
+            {
+                "id": article.pk,
+                "title": article.title,
+                "url": article.get_absolute_url(),
+                "views": article.unique_reads,
+                "author": article.author.get_username() if article.author_id else "-",
+                "category": article.category.name,
+                "location": ", ".join(
+                    value for value in [
+                        article.city.name if article.city_id else "",
+                        article.state.name if article.state_id else "",
+                    ] if value
+                ) or "-",
+                "published_at": published_time_label(article.published_at),
+                "period": (
+                    "Today"
+                    if article.published_at >= today_start
+                    else "Yesterday"
+                    if article.published_at >= yesterday_start
+                    else "This Month"
+                    if article.published_at >= month_start
+                    else "Earlier"
+                ),
+            }
+            for article in page_obj.object_list
+        ],
+    }
+
+
 def live_control_dashboard_payload(request, section="overview"):
     section = (section or "overview").strip().lower()
     live = dashboard_live_snapshot(request)
@@ -3621,6 +3691,11 @@ def live_control_dashboard_payload(request, section="overview"):
         return {
             "section": section,
             "blogs": dashboard_blog_snapshot(request.GET.get("page", 1)),
+        }
+    if section == "news":
+        return {
+            "section": section,
+            "news": dashboard_news_snapshot(request.GET.get("page", 1)),
         }
     if section == "analytics":
         return {

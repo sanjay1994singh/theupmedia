@@ -9,6 +9,7 @@
   let timer = null;
   let requestId = 0;
   let blogPage = 1;
+  let newsPage = 1;
 
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
   const norm = (value) => String(value || "unknown").toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
@@ -294,6 +295,47 @@
       </section>`;
   }
 
+  function renderNews(payload) {
+    const news = payload.news || {};
+    const items = news.items || [];
+    const pagination = news.pagination || {};
+    newsPage = Number(pagination.page || 1);
+    const totalPages = Number(pagination.total_pages || 1);
+    const pageButtons = Array.from({ length: totalPages }, (_, index) => index + 1)
+      .map((page) => `<button class="page-btn${page === newsPage ? " active" : ""}" data-news-page="${page}" ${page === newsPage ? "disabled" : ""}>${page}</button>`)
+      .join("");
+    return `${pageTitle("News Articles", "Published news activity and article details", {})}
+      <div class="grid kpi-grid">
+        ${kpi("News Today", news.today || 0, "published today", "green")}
+        ${kpi("News Yesterday", news.yesterday || 0, "published yesterday", "blue")}
+        ${kpi("News This Month", news.this_month || 0, "published this month", "orange")}
+      </div>
+      <section class="dashboard-card">
+        <div class="card-head"><h2>Published News — Latest First</h2><span class="muted">All published articles</span></div>
+        <div class="table-scroll"><table class="table news-table">
+          <thead><tr><th>#</th><th>Article Title</th><th>Views</th><th>Category</th><th>Location</th><th>Author</th><th>Period</th><th>Published Date & Time</th></tr></thead>
+          <tbody>${items.map((item, index) => `<tr>
+            <td>${((newsPage - 1) * 10) + index + 1}</td>
+            <td><a class="blog-title-link" href="${esc(item.url)}" target="_blank" rel="noopener"><strong>${esc(item.title)}</strong></a></td>
+            <td><strong>${esc(item.views || 0)}</strong></td>
+            <td>${esc(item.category)}</td>
+            <td>${esc(item.location)}</td>
+            <td>${esc(item.author)}</td>
+            <td>${status(item.period)}</td>
+            <td>${esc(item.published_at)}</td>
+          </tr>`).join("") || `<tr><td colspan="8" class="muted">No published news articles</td></tr>`}</tbody>
+        </table></div>
+        ${totalPages > 1 ? `<div class="ajax-pagination">
+          <span class="muted">${esc(pagination.total_items || 0)} articles · Page ${newsPage} of ${totalPages}</span>
+          <div>
+            <button class="page-btn" data-news-page="${newsPage - 1}" ${pagination.has_previous ? "" : "disabled"}>Previous</button>
+            ${pageButtons}
+            <button class="page-btn" data-news-page="${newsPage + 1}" ${pagination.has_next ? "" : "disabled"}>Next</button>
+          </div>
+        </div>` : ""}
+      </section>`;
+  }
+
   function renderSettings(payload) {
     const setting = payload.settings || {};
     const fb = payload.facebook_live || {};
@@ -342,6 +384,7 @@
     else if (currentSection === "uploads") content.innerHTML = renderUploads(payload.uploads || {});
     else if (currentSection === "users") content.innerHTML = renderUsers(payload);
     else if (currentSection === "blogs") content.innerHTML = renderBlogs(payload);
+    else if (currentSection === "news") content.innerHTML = renderNews(payload);
     else if (currentSection === "library" || currentSection === "renders") content.innerHTML = renderRenders(payload.renders || {});
     else if (currentSection === "analytics") content.innerHTML = renderAnalyticsSection(payload);
     else if (currentSection === "bandwidth") content.innerHTML = renderBandwidth(payload);
@@ -360,6 +403,10 @@
       if (section === "blogs") {
         blogPage = Number(options.page || blogPage || 1);
         url.searchParams.set("page", blogPage);
+      }
+      if (section === "news") {
+        newsPage = Number(options.page || newsPage || 1);
+        url.searchParams.set("page", newsPage);
       }
       const res = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
       const data = await readJsonResponse(res, "Dashboard data load failed");
@@ -410,6 +457,11 @@
   refreshButton.addEventListener("click", () => load(section));
   searchInput?.addEventListener("input", applySearchFilter);
   content.addEventListener("click", (event) => {
+    const newsPaginationButton = event.target.closest("[data-news-page]");
+    if (newsPaginationButton && !newsPaginationButton.disabled) {
+      load("news", { page: Number(newsPaginationButton.dataset.newsPage) });
+      return;
+    }
     const paginationButton = event.target.closest("[data-blog-page]");
     if (paginationButton && !paginationButton.disabled) {
       load("blogs", { page: Number(paginationButton.dataset.blogPage) });
