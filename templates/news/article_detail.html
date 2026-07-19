@@ -21,7 +21,7 @@
 {% endblock %}
 
 {% block content %}
-<article class="article-page">
+<article class="article-page editorial-detail">
   <header class="article-header">
     <div class="article-taxonomy">
       <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
@@ -52,8 +52,18 @@
   {% endif %}
     {% include "advertisements/news_portal.html" %}
     {% include "advertisements/property_plot.html" %}
-  <div class="article-content">
-    {{ article.content|safe }}
+  <div class="reading-layout">
+    <aside class="reading-rail">
+      <span>Published</span>
+      <strong>{{ article.published_at|date:"M d, Y" }}</strong>
+      <span>Category</span>
+      <strong>{{ article.category.name }}</strong>
+      <span>Reads</span>
+      <strong>{{ article.unique_reads }}</strong>
+    </aside>
+    <div class="article-content">
+      {{ article.content|safe }}
+    </div>
   </div>
   {% if article.source_url %}
     <p class="source">Source: <a href="{{ article.source_url }}" rel="nofollow noopener">{{ article.source_name|default:article.source_url }}</a></p>

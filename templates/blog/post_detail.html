@@ -17,7 +17,7 @@
 {% endblock %}
 
 {% block content %}
-<article class="article-page">
+<article class="article-page editorial-detail">
   <header class="article-header">
     {% if post.focus_keyword %}<p class="eyebrow">{{ post.focus_keyword }}</p>{% endif %}
     <h1>{{ post.title }}</h1>
@@ -40,8 +40,18 @@
     </figure>
   {% endif %}
   {% include "advertisements/gen_ai_course.html" %}
-  <div class="article-content">
-    {{ post.content|safe }}
+  <div class="reading-layout">
+    <aside class="reading-rail">
+      <span>Published</span>
+      <strong>{{ post.published_at|date:"M d, Y" }}</strong>
+      <span>Author</span>
+      <strong>{{ post.author|default:"The UP Media" }}</strong>
+      <span>Views</span>
+      <strong>{{ post.views_count }}</strong>
+    </aside>
+    <div class="article-content">
+      {{ post.content|safe }}
+    </div>
   </div>
 </article>
 

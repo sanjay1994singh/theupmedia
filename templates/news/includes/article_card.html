@@ -11,7 +11,10 @@
     {% endif %}
   {% endif %}
   <div class="story-body">
-    <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
+    <div class="story-kicker">
+      <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
+      <time class="story-time" datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
+    </div>
     {% if article.slug %}
       <h3><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h3>
     {% else %}
@@ -29,6 +32,9 @@
       </p>
     {% endif %}
     <p>{{ article.summary|truncatewords:22 }}</p>
-    <time class="story-time" datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
+    <div class="story-footer">
+      <span>{% if article.author %}{{ article.author }}{% else %}The UP Media Desk{% endif %}</span>
+      {% if article.slug %}<a href="{{ article.get_absolute_url }}">Read story <span aria-hidden="true">→</span></a>{% endif %}
+    </div>
   </div>
 </article>

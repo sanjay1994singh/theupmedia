@@ -6,14 +6,15 @@
 
 {% block content %}
 <section class="content-band">
-  <div class="section-heading">
+  <div class="listing-hero">
     <div>
       <p class="eyebrow">Software Engineering</p>
-      <h1>Blog</h1>
+      <h1>Ideas for building and growing online</h1>
       <p>Practical guides, business growth ideas, and technical notes for websites, automation, SEO, and AI-powered apps.</p>
     </div>
+    <div class="listing-hero-mark">Insights</div>
   </div>
-  <div class="card-grid">
+  <div class="card-grid editorial-grid">
     {% for post in page_obj %}
       <article class="story-card">
         {% if post.featured_image %}
@@ -22,10 +23,13 @@
           </a>
         {% endif %}
         <div class="story-body">
-          {% if post.focus_keyword %}<span class="category">{{ post.focus_keyword }}</span>{% endif %}
+          <div class="story-kicker">
+            {% if post.focus_keyword %}<span class="category">{{ post.focus_keyword }}</span>{% endif %}
+            <time class="story-time" datetime="{{ post.published_at|date:'c' }}">{{ post.published_at|date:"M d, Y" }}</time>
+          </div>
           <h3><a href="{{ post.get_absolute_url }}">{{ post.title }}</a></h3>
           <p>{{ post.excerpt|truncatewords:24 }}</p>
-          <time datetime="{{ post.published_at|date:'c' }}">{{ post.published_at|date:"M d, Y" }}</time>
+          <div class="story-footer"><span>{{ post.author|default:"The UP Media" }}</span><a href="{{ post.get_absolute_url }}">Read guide →</a></div>
         </div>
       </article>
     {% empty %}
