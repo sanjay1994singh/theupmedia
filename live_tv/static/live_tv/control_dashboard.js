@@ -50,6 +50,25 @@
     }
   }
 
+  async function readJsonResponse(response, fallbackMessage) {
+    const body = await response.text();
+    if (!body.trim()) {
+      throw new Error(`${fallbackMessage} (HTTP ${response.status}: empty response)`);
+    }
+
+    let data;
+    try {
+      data = JSON.parse(body);
+    } catch (_) {
+      throw new Error(`${fallbackMessage} (HTTP ${response.status}: server returned non-JSON data)`);
+    }
+
+    if (!response.ok) {
+      throw new Error(data.message || data.detail || `${fallbackMessage} (HTTP ${response.status})`);
+    }
+    return data;
+  }
+
   function pageTitle(title, subtitle, live) {
     if (sideServerTime && live?.server_time) sideServerTime.textContent = `Server Time: ${live.server_time}`;
     return `<div class="page-title"><div><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div><div class="dashboard-clock">${esc(live?.server_time || "--")}</div></div>`;
@@ -297,7 +316,7 @@
     if (!options.silent) setLoading(true, `Loading ${section.replace(/-/g, " ")}...`);
     try {
       const res = await fetch(sectionUrl(section), { headers: { "X-Requested-With": "XMLHttpRequest" } });
-      const data = await res.json();
+      const data = await readJsonResponse(res, "Dashboard data load failed");
       if (currentRequest !== requestId) return;
       if (!data.ok) throw new Error(data.message || "Dashboard failed");
       render(data.payload);
@@ -314,7 +333,7 @@
     setLoading(true, "Running dashboard action...");
     try {
       const res = await fetch(shell.dataset.actionUrl, { method: "POST", body: form, headers: { "X-CSRFToken": csrf() } });
-      const data = await res.json();
+      const data = await readJsonResponse(res, "Dashboard action failed");
       showAlert(data.message || (data.ok ? "Done" : "Action failed"), !data.ok);
       await load(section, { silent: true });
     } catch (error) {

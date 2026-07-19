@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
+from django.contrib.auth import get_user_model
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.urls import reverse
@@ -10,6 +11,29 @@ from django.utils import timezone
 
 from .models import LiveTVChannel, LiveTVPlaylistItem, SocialRenderedVideo
 from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, enqueue_completed_broadcast_renders, rebuild_live_playlist
+
+
+class ControlDashboardTests(TestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_superuser(
+            username="dashboard-admin",
+            email="dashboard@example.com",
+            password="test-password",
+        )
+        self.client.force_login(self.admin)
+
+    @patch("live_tv.views.live_control_dashboard_payload", return_value={"section": "settings"})
+    def test_section_endpoint_returns_json(self, _payload):
+        response = self.client.get(reverse("live_tv:api_control_dashboard_section", args=["settings"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/json")
+        self.assertTrue(response.json()["ok"])
+
+    @patch("live_tv.views.live_control_dashboard_payload")
+    def test_action_url_is_not_captured_as_section(self, payload):
+        response = self.client.get(reverse("live_tv:api_control_dashboard_action"))
+        self.assertEqual(response.status_code, 405)
+        payload.assert_not_called()
 
 
 class AutoLivePlaylistTests(TestCase):
