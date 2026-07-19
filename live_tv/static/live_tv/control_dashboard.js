@@ -273,14 +273,15 @@
       <section class="dashboard-card">
         <div class="card-head"><h2>Published Blogs — Latest First</h2><span class="muted">Current month</span></div>
         <div class="table-scroll"><table class="table">
-          <thead><tr><th>#</th><th>Blog Title</th><th>Author</th><th>Period</th><th>Published Date & Time</th></tr></thead>
+          <thead><tr><th>#</th><th>Blog Title</th><th>Views</th><th>Author</th><th>Period</th><th>Published Date & Time</th></tr></thead>
           <tbody>${items.map((item, index) => `<tr>
             <td>${((blogPage - 1) * 10) + index + 1}</td>
-            <td><strong>${esc(item.title)}</strong></td>
+            <td><a class="blog-title-link" href="${esc(item.url)}" target="_blank" rel="noopener"><strong>${esc(item.title)}</strong></a></td>
+            <td><strong>${esc(item.views || 0)}</strong></td>
             <td>${esc(item.author)}</td>
             <td>${status(item.period)}</td>
             <td>${esc(item.published_at)}</td>
-          </tr>`).join("") || `<tr><td colspan="5" class="muted">No blogs published this month</td></tr>`}</tbody>
+          </tr>`).join("") || `<tr><td colspan="6" class="muted">No blogs published this month</td></tr>`}</tbody>
         </table></div>
         ${totalPages > 1 ? `<div class="ajax-pagination">
           <span class="muted">${esc(pagination.total_items || 0)} blogs · Page ${blogPage} of ${totalPages}</span>

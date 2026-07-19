@@ -30,6 +30,7 @@ class BlogPost(models.Model):
     meta_description = models.CharField(max_length=220, blank=True)
     meta_keywords = models.CharField(max_length=255, blank=True)
     canonical_url = models.URLField(blank=True)
+    views_count = models.PositiveBigIntegerField(default=0)
     published_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -1,6 +1,7 @@
 from urllib.parse import quote_plus
 
 from django.core.paginator import Paginator
+from django.db.models import F
 from django.shortcuts import get_object_or_404, render
 
 from .models import BlogPost
@@ -15,6 +16,8 @@ def post_list(request):
 
 def post_detail(request, slug):
     post = get_object_or_404(BlogPost.published.select_related("author"), slug=slug)
+    BlogPost.objects.filter(pk=post.pk).update(views_count=F("views_count") + 1)
+    post.views_count += 1
     related_posts = BlogPost.published.exclude(pk=post.pk)[:3]
     share_url = request.build_absolute_uri(post.get_absolute_url())
     return render(

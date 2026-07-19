@@ -3543,6 +3543,13 @@ def dashboard_blog_snapshot(page=1):
     ).select_related("author").order_by("-published_at", "-pk")
     paginator = Paginator(recent_posts, 10)
     page_obj = paginator.get_page(page)
+
+    def published_time_label(value):
+        local_value = timezone.localtime(value, current_timezone)
+        hour = local_value.strftime("%I").lstrip("0") or "12"
+        minute = f":{local_value:%M}" if local_value.minute else ""
+        return f"{local_value:%d %b %Y}, {hour}{minute} {local_value:%p}"
+
     return {
         "today": published.filter(published_at__gte=today_start).count(),
         "yesterday": published.filter(
@@ -3561,11 +3568,10 @@ def dashboard_blog_snapshot(page=1):
             {
                 "id": post.pk,
                 "title": post.title,
+                "url": post.get_absolute_url(),
                 "author": post.author.get_username() if post.author_id else "-",
-                "published_at": timezone.localtime(
-                    post.published_at,
-                    current_timezone,
-                ).strftime("%d %b %Y, %I:%M:%S %p"),
+                "views": post.views_count,
+                "published_at": published_time_label(post.published_at),
                 "period": (
                     "Today"
                     if post.published_at >= today_start

@@ -37,6 +37,16 @@
   min-width: 720px;
 }
 
+.blog-title-link {
+  color: #8acbff;
+  text-decoration: none;
+}
+
+.blog-title-link:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
 .ajax-pagination {
   display: flex;
   align-items: center;
