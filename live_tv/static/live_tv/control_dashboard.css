@@ -37,6 +37,45 @@
   min-width: 720px;
 }
 
+.ajax-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px;
+  border-top: 1px solid #1b2d46;
+}
+
+.ajax-pagination > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.page-btn {
+  min-width: 38px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid #273a58;
+  border-radius: 8px;
+  background: #0d192b;
+  color: #dce6f5;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.page-btn:hover:not(:disabled),
+.page-btn.active {
+  border-color: #7654ff;
+  background: linear-gradient(135deg, #5f33df, #301889);
+  color: #fff;
+}
+
+.page-btn:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
 .card-head {
   gap: 10px;
 }
@@ -202,6 +241,11 @@
 
   .ring {
     width: 92px;
+  }
+
+  .ajax-pagination {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

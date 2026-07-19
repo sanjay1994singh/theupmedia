@@ -8,6 +8,7 @@
   let section = "overview";
   let timer = null;
   let requestId = 0;
+  let blogPage = 1;
 
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
   const norm = (value) => String(value || "unknown").toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
@@ -257,6 +258,12 @@
   function renderBlogs(payload) {
     const blogs = payload.blogs || {};
     const items = blogs.items || [];
+    const pagination = blogs.pagination || {};
+    blogPage = Number(pagination.page || 1);
+    const totalPages = Number(pagination.total_pages || 1);
+    const pageButtons = Array.from({ length: totalPages }, (_, index) => index + 1)
+      .map((page) => `<button class="page-btn${page === blogPage ? " active" : ""}" data-blog-page="${page}" ${page === blogPage ? "disabled" : ""}>${page}</button>`)
+      .join("");
     return `${pageTitle("Blog Publishing", "Published blog activity by date", {})}
       <div class="grid kpi-grid">
         ${kpi("Blogs Today", blogs.today || 0, "published today", "green")}
@@ -268,13 +275,21 @@
         <div class="table-scroll"><table class="table">
           <thead><tr><th>#</th><th>Blog Title</th><th>Author</th><th>Period</th><th>Published Date & Time</th></tr></thead>
           <tbody>${items.map((item, index) => `<tr>
-            <td>${index + 1}</td>
+            <td>${((blogPage - 1) * 10) + index + 1}</td>
             <td><strong>${esc(item.title)}</strong></td>
             <td>${esc(item.author)}</td>
             <td>${status(item.period)}</td>
             <td>${esc(item.published_at)}</td>
           </tr>`).join("") || `<tr><td colspan="5" class="muted">No blogs published this month</td></tr>`}</tbody>
         </table></div>
+        ${totalPages > 1 ? `<div class="ajax-pagination">
+          <span class="muted">${esc(pagination.total_items || 0)} blogs · Page ${blogPage} of ${totalPages}</span>
+          <div>
+            <button class="page-btn" data-blog-page="${blogPage - 1}" ${pagination.has_previous ? "" : "disabled"}>Previous</button>
+            ${pageButtons}
+            <button class="page-btn" data-blog-page="${blogPage + 1}" ${pagination.has_next ? "" : "disabled"}>Next</button>
+          </div>
+        </div>` : ""}
       </section>`;
   }
 
@@ -340,7 +355,12 @@
     section = nextSection;
     if (!options.silent) setLoading(true, `Loading ${section.replace(/-/g, " ")}...`);
     try {
-      const res = await fetch(sectionUrl(section), { headers: { "X-Requested-With": "XMLHttpRequest" } });
+      const url = new URL(sectionUrl(section), window.location.origin);
+      if (section === "blogs") {
+        blogPage = Number(options.page || blogPage || 1);
+        url.searchParams.set("page", blogPage);
+      }
+      const res = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
       const data = await readJsonResponse(res, "Dashboard data load failed");
       if (currentRequest !== requestId) return;
       if (!data.ok) throw new Error(data.message || "Dashboard failed");
@@ -389,6 +409,11 @@
   refreshButton.addEventListener("click", () => load(section));
   searchInput?.addEventListener("input", applySearchFilter);
   content.addEventListener("click", (event) => {
+    const paginationButton = event.target.closest("[data-blog-page]");
+    if (paginationButton && !paginationButton.disabled) {
+      load("blogs", { page: Number(paginationButton.dataset.blogPage) });
+      return;
+    }
     const jump = event.target.closest("[data-section-jump]");
     if (jump) {
       const target = jump.dataset.sectionJump;

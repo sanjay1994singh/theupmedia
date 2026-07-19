@@ -22,6 +22,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
 from django.core.files import File
 from django.core.files.base import ContentFile
+from django.core.paginator import Paginator
 from django.db import close_old_connections, connection, transaction
 from django.db.models.deletion import ProtectedError
 from django.db.models import Count, F, Q
@@ -3523,7 +3524,7 @@ def dashboard_users_devices_snapshot():
     }
 
 
-def dashboard_blog_snapshot():
+def dashboard_blog_snapshot(page=1):
     now = timezone.now()
     current_timezone = timezone.get_current_timezone()
     today = timezone.localtime(now, current_timezone).date()
@@ -3539,14 +3540,23 @@ def dashboard_blog_snapshot():
     )
     recent_posts = published.filter(
         published_at__gte=month_start,
-    ).select_related("author").order_by("-published_at", "-pk")[:100]
+    ).select_related("author").order_by("-published_at", "-pk")
+    paginator = Paginator(recent_posts, 10)
+    page_obj = paginator.get_page(page)
     return {
         "today": published.filter(published_at__gte=today_start).count(),
         "yesterday": published.filter(
             published_at__gte=yesterday_start,
             published_at__lt=today_start,
         ).count(),
-        "this_month": published.filter(published_at__gte=month_start).count(),
+        "this_month": paginator.count,
+        "pagination": {
+            "page": page_obj.number,
+            "total_pages": paginator.num_pages,
+            "total_items": paginator.count,
+            "has_previous": page_obj.has_previous(),
+            "has_next": page_obj.has_next(),
+        },
         "items": [
             {
                 "id": post.pk,
@@ -3564,7 +3574,7 @@ def dashboard_blog_snapshot():
                     else "This Month"
                 ),
             }
-            for post in recent_posts
+            for post in page_obj.object_list
         ],
     }
 
@@ -3602,7 +3612,10 @@ def live_control_dashboard_payload(request, section="overview"):
     if section == "users":
         return {"section": section, "users": dashboard_users_devices_snapshot(), "uploads": dashboard_uploads_snapshot(request)}
     if section == "blogs":
-        return {"section": section, "blogs": dashboard_blog_snapshot()}
+        return {
+            "section": section,
+            "blogs": dashboard_blog_snapshot(request.GET.get("page", 1)),
+        }
     if section == "analytics":
         return {
             "section": section,
