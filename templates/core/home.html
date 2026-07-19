@@ -16,35 +16,11 @@
           <p>Hindi news, local updates, and public-interest stories from state, city, and digital sources.</p>
         </div>
       {% endif %}
-      {% include "advertisements/news_portal.html" %}
-      {% include "advertisements/gen_ai_course.html" %}
     </div>
 
-    <aside class="live-news-sidebar home-latest-sidebar">
-      <div class="section-heading compact">
-        <div>
-          <p class="eyebrow">Latest Updates</p>
-          <h2>Latest News</h2>
-        </div>
-      </div>
-      <div class="live-news-list">
-        {% for article in latest|slice:":4" %}
-          <article>
-            {% if article.featured_image %}
-              <a class="live-news-thumb" href="{{ article.get_absolute_url }}">
-                <img src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}" loading="lazy" decoding="async">
-              </a>
-            {% endif %}
-            <div>
-              <a class="category" href="{{ article.category.get_absolute_url }}">{{ article.category.name }}</a>
-              <h3><a href="{{ article.get_absolute_url }}">{{ article.title }}</a></h3>
-              <time datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y" }}</time>
-            </div>
-          </article>
-        {% empty %}
-          <p>No latest news yet.</p>
-        {% endfor %}
-      </div>
+    <aside class="home-ad-sidebar" aria-label="Featured advertisements">
+      {% include "advertisements/news_portal.html" with size="sidebar" %}
+      {% include "advertisements/gen_ai_course.html" with size="sidebar" %}
     </aside>
   </div>
 </section>
