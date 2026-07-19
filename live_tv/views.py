@@ -42,7 +42,7 @@ except ImportError:  # pragma: no cover - server requirements include Pillow
 from .forms import LiveTVChannelForm
 from .hls import validate_uploaded_video
 from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
-from .services import calculate_current_playback, enqueue_completed_broadcast_renders, get_main_live_channel, rebuild_live_playlist, update_playlist_item
+from .services import calculate_current_playback, enqueue_completed_broadcast_renders, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
 from news.models import Article
 
 
@@ -525,11 +525,11 @@ def serialize_channel_for_mobile(request, channel):
     stream_url = ""
     youtube_embed_url = ""
 
-    hls_url = absolute_media_path_url(request, channel.hls_master_url)
-    mp4_url = absolute_media_url(request, channel.video_file)
+    hls_url = absolute_media_path_url(request, channel.hls_master_url) if live_video_hls_ready(channel) else ""
+    mp4_url = ""
 
     if player_type == LiveTVChannel.SourceType.DIRECT:
-        stream_url = hls_url or mp4_url
+        stream_url = hls_url
         if hls_url:
             player_type = LiveTVChannel.SourceType.HLS
     elif player_type == LiveTVChannel.SourceType.HLS:
@@ -593,9 +593,11 @@ def serialize_synced_live_state(request, channel, server_time=None):
     video = state["video"]
     setting = live_tv_setting()
     ticker_setting = news_ticker_setting()
+    if not live_video_hls_ready(video):
+        return None
     hls_url = absolute_media_path_url(request, video.hls_master_url)
-    video_url = absolute_media_url(request, video.video_file)
-    stream_url = hls_url or video_url
+    video_url = ""
+    stream_url = hls_url
     next_video = state["next_entry"].video if state.get("next_entry") else None
     ticker = ticker_items_from_text(ticker_setting.text)
     ticker_started_at = channel.playback_started_at or (state["cycle"].starts_at if state.get("cycle") else state["video_started_at"])
@@ -609,7 +611,7 @@ def serialize_synced_live_state(request, channel, server_time=None):
         "channel_title": channel.title,
         "channel": {"id": channel.pk, "slug": channel.slug, "title": channel.title},
         "source_type": LiveTVChannel.SourceType.PLAYLIST,
-        "player_type": LiveTVChannel.SourceType.HLS if hls_url else LiveTVChannel.SourceType.DIRECT,
+        "player_type": LiveTVChannel.SourceType.HLS,
         "video_id": video.pk,
         "title": video.title,
         "headline": video.headline or "",
@@ -669,7 +671,7 @@ def serialize_live_fallback(request, channel, server_time=None):
             "channel_slug": channel.slug,
             "channel_title": channel.title,
             "video_id": channel.pk if data.get("stream_url") else None,
-            "video_url": data.get("mp4_url") or data.get("stream_url") or "",
+            "video_url": data.get("stream_url") or "",
             "poster_url": data.get("poster_image") or "",
             "video_duration": channel.effective_duration_seconds,
             "seek_position": 0,
@@ -946,9 +948,10 @@ def serialize_shorts_video(request, short):
         }
         for comment in short.comments.all()[:5]
     ]
-    hls_url = absolute_media_path_url(request, short.hls_master_url)
-    fallback_video_url = absolute_media_url(request, short.video_file)
-    video_url = hls_url or fallback_video_url
+    hls_ready = short.hls_status == ShortsVideo.HLSStatus.COMPLETED and bool(short.hls_master_url)
+    hls_url = absolute_media_path_url(request, short.hls_master_url) if hls_ready else ""
+    fallback_video_url = ""
+    video_url = hls_url
     return {
         "id": short.pk,
         "title": short.title,
@@ -2188,6 +2191,7 @@ def current_live_api(request, slug=None):
 
     if channel and channel.source_type == LiveTVChannel.SourceType.PLAYLIST and channel.auto_playlist_enabled:
         try:
+            repair_live_tv_health(at=server_time)
             synced = serialize_synced_live_state(request, channel, server_time=server_time)
         except Exception:
             logger.exception("Current live playlist calculation failed for channel %s", channel.pk)
@@ -2204,7 +2208,9 @@ def current_live_api(request, slug=None):
         if fallback.source_type == LiveTVChannel.SourceType.PLAYLIST:
             continue
         if fallback.player_source_type:
-            return JsonResponse(serialize_live_fallback(request, fallback, server_time=server_time))
+            fallback_data = serialize_live_fallback(request, fallback, server_time=server_time)
+            if fallback_data.get("stream_url") or fallback_data.get("youtube_embed_url"):
+                return JsonResponse(fallback_data)
 
     data = serialize_empty_live_tv(request)
     setting = live_tv_setting()
@@ -2509,7 +2515,21 @@ def mobile_admin_dashboard_api(request):
     media_downloads = manageable_media_downloads_for(user)[:50]
     settings_obj = live_tv_setting()
     main_channel = get_main_live_channel(create=False)
-    playlist_state = calculate_current_playback(main_channel) if main_channel else None
+    if main_channel:
+        now = timezone.now()
+        expire_old_live_playlist_items(main_channel, at=now)
+        fresh_playlist_items = main_channel.playlist_items.filter(
+            is_active=True,
+            video__created_at__gte=live_playlist_cutoff(now),
+            video__hls_status=LiveTVChannel.HLSStatus.COMPLETED,
+            video__hls_master_url__gt="",
+        )
+        fresh_playlist_duration = sum(fresh_playlist_items.values_list("duration_seconds", flat=True))
+        playlist_state = calculate_current_playback(main_channel, at=now)
+    else:
+        fresh_playlist_items = LiveTVPlaylistItem.objects.none()
+        fresh_playlist_duration = 0
+        playlist_state = None
     return JsonResponse(
         {
             "user": {"id": user.pk, "username": user.get_username(), "name": user.get_full_name() or user.get_username()},
@@ -2522,8 +2542,8 @@ def mobile_admin_dashboard_api(request):
             "source_types": list(LiveTVChannel.SourceType.values),
             "live_playlist": {
                 "channel_id": main_channel.pk if main_channel else None,
-                "active_items": main_channel.playlist_items.filter(is_active=True).count() if main_channel else 0,
-                "total_duration_seconds": main_channel.playlist_duration_seconds if main_channel else 0,
+                "active_items": fresh_playlist_items.count() if main_channel else 0,
+                "total_duration_seconds": fresh_playlist_duration,
                 "target_duration_seconds": main_channel.target_playlist_duration_seconds if main_channel else 10800,
                 "playlist_version": main_channel.playlist_version if main_channel else 0,
                 "playback_started_at": main_channel.playback_started_at.isoformat() if main_channel and main_channel.playback_started_at else "",
@@ -3277,11 +3297,22 @@ def dashboard_live_snapshot(request):
     }
     if not channel:
         return data
-    items = list(channel.playlist_items.filter(is_active=True).select_related("video").order_by("position", "pk"))
+    expire_old_live_playlist_items(channel, at=now)
+    items = list(
+        channel.playlist_items.filter(
+            is_active=True,
+            video__created_at__gte=live_playlist_cutoff(now),
+            video__hls_status=LiveTVChannel.HLSStatus.COMPLETED,
+            video__hls_master_url__gt="",
+        )
+        .select_related("video")
+        .order_by("position", "pk")
+    )
+    playlist_duration_seconds = sum(item.duration_seconds for item in items)
     data["playlist"] = {
         "count": len(items),
-        "duration_seconds": channel.playlist_duration_seconds,
-        "duration_display": dashboard_duration(channel.playlist_duration_seconds),
+        "duration_seconds": playlist_duration_seconds,
+        "duration_display": dashboard_duration(playlist_duration_seconds),
         "target_duration_seconds": channel.target_playlist_duration_seconds,
         "target_duration_display": dashboard_duration(channel.target_playlist_duration_seconds),
         "version": channel.playlist_version,
@@ -3343,9 +3374,41 @@ def dashboard_processing_snapshot():
     live_processing = LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.PROCESSING, updated_at__gte=stale_cutoff).order_by("-updated_at")[:10]
     short_processing = ShortsVideo.objects.filter(hls_status=ShortsVideo.HLSStatus.PROCESSING, updated_at__gte=stale_cutoff).order_by("-updated_at")[:10]
     downloads = MediaDownload.objects.filter(status=MediaDownload.Status.PROCESSING).order_by("-updated_at", "-created_at")[:10]
+    now = timezone.now()
+    live_candidates = LiveTVChannel.objects.filter(
+        source_type=LiveTVChannel.SourceType.DIRECT,
+        auto_add_to_live=True,
+        is_active=True,
+        video_file__isnull=False,
+        created_at__gte=live_playlist_cutoff(now),
+    )
+    main_channel = get_main_live_channel(create=False)
+    playlist_missing_count = 0
+    playlist_unstreamable_count = 0
+    if main_channel:
+        playlist_missing_count = live_candidates.filter(
+            hls_status=LiveTVChannel.HLSStatus.COMPLETED,
+            hls_master_url__gt="",
+            duration_seconds__gt=0,
+        ).exclude(included_in_playlists__channel=main_channel, included_in_playlists__is_active=True).count()
+        playlist_unstreamable_count = main_channel.playlist_items.filter(is_active=True).exclude(
+            video__hls_status=LiveTVChannel.HLSStatus.COMPLETED,
+            video__hls_master_url__gt="",
+            video__created_at__gte=live_playlist_cutoff(now),
+        ).count()
+    stale_live_hls_count = LiveTVChannel.objects.filter(
+        hls_status=LiveTVChannel.HLSStatus.PROCESSING,
+        updated_at__lt=stale_cutoff,
+    ).count()
     return {
         "live_hls": dashboard_counts_by_status(LiveTVChannel.objects.all(), "hls_status"),
         "short_hls": dashboard_counts_by_status(ShortsVideo.objects.all(), "hls_status"),
+        "health": {
+            "fresh_uploaded_videos": live_candidates.count(),
+            "playlist_missing_hls_ready": playlist_missing_count,
+            "playlist_unstreamable_items": playlist_unstreamable_count,
+            "stale_live_hls_jobs": stale_live_hls_count,
+        },
         "renders": dashboard_counts_by_status(SocialRenderedVideo.objects.all(), "status"),
         "downloads": dashboard_counts_by_status(MediaDownload.objects.all(), "status"),
         "live_processing": [dashboard_channel_summary(NoneRequest(), item) for item in live_processing],
@@ -3467,7 +3530,12 @@ def live_control_dashboard_payload(request, section="overview"):
         channel = get_main_live_channel(create=False)
         items = []
         if channel:
-            for item in channel.playlist_items.select_related("video").order_by("position", "pk")[:80]:
+            for item in channel.playlist_items.filter(
+                is_active=True,
+                video__created_at__gte=live_playlist_cutoff(timezone.now()),
+                video__hls_status=LiveTVChannel.HLSStatus.COMPLETED,
+                video__hls_master_url__gt="",
+            ).select_related("video").order_by("position", "pk")[:80]:
                 row = dashboard_channel_summary(request, item.video)
                 row.update({"playlist_item_id": item.pk, "position": item.position + 1, "priority": item.priority, "is_active": item.is_active})
                 items.append(row)
@@ -3554,15 +3622,28 @@ def live_control_dashboard_api(request, section="overview"):
 def live_control_dashboard_action_api(request):
     action = (request.POST.get("action") or "").strip()
     if action == "rebuild_playlist":
+        now = timezone.now()
         videos = LiveTVChannel.objects.filter(
             source_type=LiveTVChannel.SourceType.DIRECT,
             auto_add_to_live=True,
             is_active=True,
             video_file__isnull=False,
             duration_seconds__gt=0,
+            created_at__gte=live_playlist_cutoff(now),
+            hls_status=LiveTVChannel.HLSStatus.COMPLETED,
+            hls_master_url__gt="",
         ).order_by("display_order", "created_at", "pk")
         channel = rebuild_live_playlist(videos)
-        return JsonResponse({"ok": True, "message": f"Playlist rebuilt with {channel.playlist_items.filter(is_active=True).count()} videos."})
+        fresh_count = channel.playlist_items.filter(
+            is_active=True,
+            video__created_at__gte=live_playlist_cutoff(now),
+            video__hls_status=LiveTVChannel.HLSStatus.COMPLETED,
+            video__hls_master_url__gt="",
+        ).count()
+        return JsonResponse({"ok": True, "message": f"Playlist rebuilt with {fresh_count} HLS-ready videos."})
+    if action == "repair_live_health":
+        report = repair_live_tv_health()
+        return JsonResponse({"ok": True, "message": "Live TV health repair completed.", "report": report})
     if action == "retry_failed_hls":
         stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
         live_queryset = LiveTVChannel.objects.filter(video_file__isnull=False).filter(
@@ -3635,12 +3716,19 @@ def dashboard(request):
         form = LiveTVChannelForm(instance=instance)
 
     main_playlist_channel = get_main_live_channel(create=False)
-    playlist_state = calculate_current_playback(main_playlist_channel) if main_playlist_channel else None
-    playlist_items = (
-        main_playlist_channel.playlist_items.select_related("video").order_by("position", "pk")
-        if main_playlist_channel
-        else LiveTVPlaylistItem.objects.none()
-    )
+    if main_playlist_channel:
+        now = timezone.now()
+        expire_old_live_playlist_items(main_playlist_channel, at=now)
+        playlist_state = calculate_current_playback(main_playlist_channel, at=now)
+        playlist_items = main_playlist_channel.playlist_items.filter(
+            is_active=True,
+            video__created_at__gte=live_playlist_cutoff(now),
+            video__hls_status=LiveTVChannel.HLSStatus.COMPLETED,
+            video__hls_master_url__gt="",
+        ).select_related("video").order_by("position", "pk")
+    else:
+        playlist_state = None
+        playlist_items = LiveTVPlaylistItem.objects.none()
     preview_channel = instance or main_playlist_channel or channels.first()
     return render(
         request,

@@ -7,6 +7,7 @@ from django.utils import timezone
 from .hls import convert_live_channel_to_hls, convert_short_to_hls
 from .models import LiveTVChannel, ShortsVideo
 from .views import run_media_download_job, run_social_render_job
+from .services import live_playlist_cutoff, repair_live_tv_health
 
 
 @shared_task(name="live_tv.render_social_video")
@@ -40,6 +41,7 @@ def process_short_hls_task(short_id):
 @shared_task(name="live_tv.process_live_channel_hls")
 def process_live_channel_hls_task(channel_id):
     convert_live_channel_to_hls(channel_id)
+    repair_live_tv_health(queue_hls=False, queue_renders=True)
     stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
     if LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.PROCESSING, updated_at__gte=stale_cutoff).exists():
         return
@@ -48,6 +50,9 @@ def process_live_channel_hls_task(channel_id):
             source_type=LiveTVChannel.SourceType.DIRECT,
             video_file__isnull=False,
             hls_status=LiveTVChannel.HLSStatus.PENDING,
+            created_at__gte=live_playlist_cutoff(timezone.now()),
+            auto_add_to_live=True,
+            is_active=True,
         )
         .exclude(pk=channel_id)
         .order_by("display_order", "pk")
@@ -62,3 +67,8 @@ def cleanup_rendered_video_temps_task(hours=24):
     from django.core.management import call_command
 
     call_command("cleanup_rendered_video_temps", hours=hours)
+
+
+@shared_task(name="live_tv.live_tv_health_watchdog")
+def live_tv_health_watchdog_task():
+    return repair_live_tv_health(queue_hls=True, queue_renders=True)

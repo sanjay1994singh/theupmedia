@@ -22,6 +22,76 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 
+LIVE_PLAYLIST_MAX_AGE_HOURS = 48
+
+
+def live_playlist_max_age_hours():
+    try:
+        return max(1, int(getattr(settings, "LIVE_TV_PLAYLIST_MAX_AGE_HOURS", LIVE_PLAYLIST_MAX_AGE_HOURS)))
+    except (TypeError, ValueError):
+        return LIVE_PLAYLIST_MAX_AGE_HOURS
+
+
+def live_playlist_cutoff(at=None):
+    at = at or timezone.now()
+    return at - timedelta(hours=live_playlist_max_age_hours())
+
+
+def live_playlist_video_is_fresh(video, at=None):
+    if not video or not getattr(video, "created_at", None):
+        return True
+    return video.created_at >= live_playlist_cutoff(at)
+
+
+def live_video_hls_ready(video):
+    """True only when a live playlist video has a usable HLS master playlist."""
+    if not video or video.source_type != LiveTVChannel.SourceType.DIRECT:
+        return False
+    if video.hls_status != LiveTVChannel.HLSStatus.COMPLETED or not video.hls_master_url:
+        return False
+    try:
+        from .hls import hls_media_file_exists
+
+        return hls_media_file_exists(video.hls_master_url)
+    except Exception:
+        logger.exception("Live TV HLS readiness check failed for video %s", getattr(video, "pk", None))
+        return False
+
+
+def live_playlist_video_is_streamable(video, at=None):
+    return bool(live_playlist_video_is_fresh(video, at=at) and live_video_hls_ready(video))
+
+
+def expire_old_live_playlist_items(channel, at=None):
+    if not channel or not channel.pk:
+        return 0
+    at = at or timezone.now()
+    cutoff = live_playlist_cutoff(at)
+    with transaction.atomic():
+        locked_channel = LiveTVChannel.objects.select_for_update().get(pk=channel.pk)
+        old_items = list(
+            locked_channel.playlist_items.select_for_update()
+            .filter(is_active=True, video__created_at__lt=cutoff)
+            .select_related("video")
+        )
+        if not old_items:
+            return 0
+        old_item_ids = [item.pk for item in old_items]
+        LiveTVPlaylistItem.objects.filter(pk__in=old_item_ids).update(
+            is_active=False,
+            removed_at=at,
+            updated_at=at,
+        )
+        normalize_playlist_positions(locked_channel)
+        locked_channel.playlist_version += 1
+        locked_channel.last_playlist_update = at
+        if not locked_channel.playlist_items.filter(is_active=True, duration_seconds__gt=0, video__hls_status=LiveTVChannel.HLSStatus.COMPLETED, video__hls_master_url__gt="").exists():
+            locked_channel.playback_started_at = None
+        locked_channel.playlist_cycles.all().delete()
+        locked_channel.save(update_fields=["playlist_version", "last_playlist_update", "playback_started_at", "updated_at"])
+        return len(old_item_ids)
+
+
 def queue_broadcast_render_task(job_id):
     queued_with_celery = False
     if getattr(settings, "LIVE_TV_RENDER_USE_CELERY", True):
@@ -82,6 +152,8 @@ def validate_playlist_video(video, check_storage=True):
         errors.append("Auto-add is disabled for this video.")
     if not video.is_active:
         errors.append("Video is inactive.")
+    if not live_playlist_video_is_fresh(video):
+        errors.append(f"Video is older than {live_playlist_max_age_hours()} hours and cannot stream on Live TV.")
     if not video.video_file or not video.video_file.name:
         errors.append("Video file is missing.")
     elif check_storage:
@@ -92,6 +164,8 @@ def validate_playlist_video(video, check_storage=True):
             errors.append(f"Video storage check failed: {exc}")
     if video.effective_duration_seconds <= 0:
         errors.append("Video duration must be greater than zero.")
+    if not live_video_hls_ready(video):
+        errors.append("Video HLS is not ready yet; Live TV uses HLS only.")
     if errors:
         raise ValidationError(errors)
     return True
@@ -459,6 +533,7 @@ def enqueue_completed_broadcast_renders(channel, at=None, state=None):
 
 def ensure_current_cycle(channel, at=None):
     at = at or timezone.now()
+    expire_old_live_playlist_items(channel, at=at)
     cycle = (
         channel.playlist_cycles.filter(starts_at__lte=at, total_duration_seconds__gt=0)
         .prefetch_related("items__video")
@@ -478,7 +553,7 @@ def ensure_current_cycle(channel, at=None):
         if cycle:
             return cycle
         items = list(
-            channel.playlist_items.filter(is_active=True, duration_seconds__gt=0)
+            channel.playlist_items.filter(is_active=True, duration_seconds__gt=0, video__created_at__gte=live_playlist_cutoff(at), video__hls_status=LiveTVChannel.HLSStatus.COMPLETED, video__hls_master_url__gt="")
             .select_related("video")
             .order_by("position", "pk")
         )
@@ -541,8 +616,9 @@ def _rotate_after(items, playlist_item_id):
 
 def _schedule_updated_cycle(channel, current_state, priority, selected_item=None, at=None):
     at = at or timezone.now()
+    expire_old_live_playlist_items(channel, at=at)
     items = list(
-        channel.playlist_items.filter(is_active=True, duration_seconds__gt=0)
+        channel.playlist_items.filter(is_active=True, duration_seconds__gt=0, video__created_at__gte=live_playlist_cutoff(at), video__hls_status=LiveTVChannel.HLSStatus.COMPLETED, video__hls_master_url__gt="")
         .select_related("video")
         .order_by("position", "pk")
     )
@@ -572,7 +648,8 @@ def _schedule_updated_cycle(channel, current_state, priority, selected_item=None
 def _trim_playlist(channel, protected_item_ids=None, at=None):
     at = at or timezone.now()
     protected_item_ids = set(protected_item_ids or [])
-    items = list(channel.playlist_items.filter(is_active=True).order_by("added_at", "pk"))
+    expire_old_live_playlist_items(channel, at=at)
+    items = list(channel.playlist_items.filter(is_active=True, video__created_at__gte=live_playlist_cutoff(at), video__hls_status=LiveTVChannel.HLSStatus.COMPLETED, video__hls_master_url__gt="").order_by("added_at", "pk"))
     target = max(1, int(channel.target_playlist_duration_seconds or 10800))
     total = sum(item.duration_seconds for item in items)
     while total > target and len(items) > 1:
@@ -605,7 +682,8 @@ def add_uploaded_video_to_live_playlist(video, channel=None, priority=LiveTVPlay
         item = LiveTVPlaylistItem.objects.select_for_update().filter(channel=channel, video=video).first()
         if item and item.is_active and priority == LiveTVPlaylistItem.Priority.NORMAL:
             return item, False
-        max_position = channel.playlist_items.filter(is_active=True).aggregate(value=Max("position"))["value"]
+        expire_old_live_playlist_items(channel, at=now)
+        max_position = channel.playlist_items.filter(is_active=True, video__created_at__gte=live_playlist_cutoff(now), video__hls_status=LiveTVChannel.HLSStatus.COMPLETED, video__hls_master_url__gt="").aggregate(value=Max("position"))["value"]
         if item:
             item.is_active = True
             item.removed_at = None
@@ -647,7 +725,8 @@ def update_playlist_item(item, action):
         channel = LiveTVChannel.objects.select_for_update().get(pk=item.channel_id)
         item = LiveTVPlaylistItem.objects.select_for_update().select_related("video").get(pk=item.pk)
         current_state = calculate_current_playback(channel, at=now)
-        active_items = list(channel.playlist_items.select_for_update().filter(is_active=True).order_by("position", "pk"))
+        expire_old_live_playlist_items(channel, at=now)
+        active_items = list(channel.playlist_items.select_for_update().filter(is_active=True, video__created_at__gte=live_playlist_cutoff(now), video__hls_status=LiveTVChannel.HLSStatus.COMPLETED, video__hls_master_url__gt="").order_by("position", "pk"))
         if action == "remove":
             if len(active_items) <= 1:
                 raise ValidationError("At least one playable item must remain active.")
@@ -672,6 +751,113 @@ def update_playlist_item(item, action):
         channel.playlist_version += 1
         _schedule_updated_cycle(channel, current_state, priority, selected_item=item, at=now)
         return item
+
+
+def deactivate_unstreamable_playlist_items(channel, at=None):
+    if not channel or not channel.pk:
+        return 0
+    at = at or timezone.now()
+    items = list(
+        channel.playlist_items.select_related("video")
+        .filter(is_active=True)
+        .order_by("position", "pk")
+    )
+    remove_ids = [
+        item.pk
+        for item in items
+        if not live_playlist_video_is_streamable(item.video, at=at) or item.duration_seconds <= 0
+    ]
+    if not remove_ids:
+        return 0
+    LiveTVPlaylistItem.objects.filter(pk__in=remove_ids).update(is_active=False, removed_at=at, updated_at=at)
+    normalize_playlist_positions(channel)
+    channel.playlist_version += 1
+    channel.last_playlist_update = at
+    channel.playlist_cycles.all().delete()
+    if not channel.playlist_items.filter(
+        is_active=True,
+        duration_seconds__gt=0,
+        video__hls_status=LiveTVChannel.HLSStatus.COMPLETED,
+        video__hls_master_url__gt="",
+    ).exists():
+        channel.playback_started_at = None
+    channel.save(update_fields=["playlist_version", "last_playlist_update", "playback_started_at", "updated_at"])
+    return len(remove_ids)
+
+
+def repair_live_tv_health(queue_hls=True, queue_renders=True, at=None):
+    """Find stuck/missing Live TV work and move it toward HLS-ready playback/rendering."""
+    at = at or timezone.now()
+    channel = get_main_live_channel(create=True)
+    report = {
+        "expired_playlist_items": expire_old_live_playlist_items(channel, at=at),
+        "removed_unstreamable_items": deactivate_unstreamable_playlist_items(channel, at=at),
+        "hls_queued": 0,
+        "playlist_added": 0,
+        "renders_queued": 0,
+    }
+    stale_cutoff = at - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
+    candidates = LiveTVChannel.objects.filter(
+        source_type=LiveTVChannel.SourceType.DIRECT,
+        auto_add_to_live=True,
+        is_active=True,
+        video_file__isnull=False,
+        created_at__gte=live_playlist_cutoff(at),
+    ).exclude(pk=channel.pk)
+
+    if queue_hls:
+        for video in candidates.order_by("created_at", "pk")[:100]:
+            processing_is_fresh = (
+                video.hls_status == LiveTVChannel.HLSStatus.PROCESSING
+                and video.updated_at
+                and video.updated_at >= stale_cutoff
+            )
+            needs_hls = (
+                video.hls_status in {LiveTVChannel.HLSStatus.PENDING, LiveTVChannel.HLSStatus.FAILED}
+                or not live_video_hls_ready(video)
+                or video.effective_duration_seconds <= 0
+            )
+            if processing_is_fresh or not needs_hls:
+                continue
+            try:
+                from .views import enqueue_live_channel_hls_job
+
+                if video.hls_status != LiveTVChannel.HLSStatus.PENDING:
+                    LiveTVChannel.objects.filter(pk=video.pk).update(
+                        hls_status=LiveTVChannel.HLSStatus.PENDING,
+                        hls_progress_percent=0,
+                        processing_error="Queued by Live TV health repair.",
+                        updated_at=timezone.now(),
+                    )
+                enqueue_live_channel_hls_job(video.pk)
+                report["hls_queued"] += 1
+                if report["hls_queued"] >= 20:
+                    break
+            except Exception:
+                logger.exception("Failed to queue HLS repair for video %s", video.pk)
+
+    ready_videos = list(candidates.filter(
+        hls_status=LiveTVChannel.HLSStatus.COMPLETED,
+        hls_master_url__gt="",
+        duration_seconds__gt=0,
+    ).order_by("display_order", "created_at", "pk"))
+    for video in ready_videos:
+        if channel.playlist_items.filter(video=video, is_active=True).exists():
+            continue
+        try:
+            add_uploaded_video_to_live_playlist(video, channel=channel)
+            report["playlist_added"] += 1
+        except ValidationError:
+            logger.exception("HLS-ready video %s could not be added to live playlist.", video.pk)
+
+    if report["playlist_added"] or report["removed_unstreamable_items"] or report["expired_playlist_items"]:
+        channel.refresh_from_db()
+        ensure_current_cycle(channel, at=at)
+
+    if queue_renders:
+        state = calculate_current_playback(channel, at=at)
+        report["renders_queued"] = len(enqueue_completed_broadcast_renders(channel, at=at, state=state))
+    return report
 
 
 def rebuild_live_playlist(videos, channel=None):

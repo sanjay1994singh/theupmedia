@@ -242,6 +242,7 @@
     return `${pageTitle("Settings", "Live TV controls and broadcast visibility", {})}<div class="grid lower-grid">
       <section class="dashboard-card controls-card"><div class="card-head"><h2>Live Controls</h2></div><div class="actions">
         <button class="action-btn" data-action="rebuild_playlist">Rebuild Playlist</button>
+        <button class="action-btn" data-action="repair_live_health">Repair Live Health</button>
         <button class="action-btn" data-action="retry_failed_hls">Retry Failed HLS</button>
         <button class="action-btn" data-action="retry_failed_renders">Retry Failed Renders</button>
         <button class="action-btn" data-action="toggle_ticker">Ticker: ${setting.show_ticker ? "ON" : "OFF"}</button>
