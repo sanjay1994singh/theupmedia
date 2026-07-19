@@ -106,38 +106,6 @@
   {% include "advertisements/gen_ai_course.html" %}
 </section>
 
-<section class="content-band muted">
-  <div class="section-heading">
-    <div>
-      <p class="eyebrow">Software Business</p>
-      <h2>Services</h2>
-      <p>Django websites, Python automation, SEO-ready pages, news portals, and Gen AI web apps.</p>
-    </div>
-    <a href="{% url 'services:service_list' %}">View services</a>
-  </div>
-  <div class="service-grid">
-    {% for service in business_services|slice:":3" %}
-      <article class="service-card">
-        {% if service.icon_label %}<span class="service-icon">{{ service.icon_label }}</span>{% endif %}
-        <h3>
-          <a href="{{ service.get_absolute_url }}">
-            {% if service.name_hi %}<span class="service-title-hi">{{ service.name_hi }}</span>{% endif %}
-            <span>{{ service.name }}</span>
-          </a>
-        </h3>
-        {% if service.short_description_hi %}<p class="service-hi">{{ service.short_description_hi }}</p>{% endif %}
-        <p>{{ service.short_description }}</p>
-        <div class="service-actions">
-          <a class="text-link" href="{{ service.get_absolute_url }}">View details</a>
-          <a class="whatsapp-cta" href="{{ service.whatsapp_url }}" target="_blank" rel="noopener">WhatsApp Chat</a>
-        </div>
-      </article>
-    {% empty %}
-      <p>Add featured services from Django admin.</p>
-    {% endfor %}
-  </div>
-</section>
-
 <section class="content-band">
   <div class="section-heading">
     <div>
