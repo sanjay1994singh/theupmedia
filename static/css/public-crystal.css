@@ -510,6 +510,66 @@ select:focus {
   overflow-wrap: anywhere;
 }
 
+/* Homepage broadcast ticker: compact news-channel strip kept inside the TV frame. */
+.home-showcase-main .web-live-ticker {
+  height: 40px;
+  background: #fff;
+  border-top: 1px solid rgba(0, 0, 0, .14);
+}
+
+.home-showcase-main .web-live-ticker-label {
+  flex-basis: 142px;
+  padding: 0 14px;
+  background: linear-gradient(180deg, #d71920, #ae0006);
+}
+
+.home-showcase-main .web-live-ticker-label i {
+  display: none;
+}
+
+.home-showcase-main .web-live-ticker-label span {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.home-showcase-main .web-live-ticker-chevrons {
+  flex-basis: 40px;
+  gap: 0;
+  margin-left: 0;
+}
+
+.home-showcase-main .web-live-ticker-chevrons i {
+  width: auto;
+  transform: none;
+}
+
+.home-showcase-main .web-live-ticker-chevrons .is-dark {
+  flex: 0 0 14px;
+}
+
+.home-showcase-main .web-live-ticker-chevrons .is-red {
+  flex: 0 0 14px;
+}
+
+.home-showcase-main .web-live-ticker-chevrons .is-white {
+  flex: 1 1 auto;
+}
+
+.home-showcase-main .web-live-ticker-marquee {
+  border: 0;
+  gap: 42px;
+}
+
+.home-showcase-main .web-live-ticker-marquee p {
+  font-size: 16px;
+  line-height: 1.15;
+  padding: 2px 14px 0;
+}
+
+.home-showcase-main .web-live-ticker-cap {
+  display: none;
+}
+
 @media (min-width: 841px) {
   .home-showcase {
     align-items: stretch;
@@ -556,6 +616,29 @@ select:focus {
 }
 
 @media (max-width: 840px) {
+  .home-showcase-main .web-live-ticker {
+    height: 32px;
+  }
+
+  .home-showcase-main .web-live-ticker-label {
+    flex-basis: 105px;
+    padding-inline: 8px;
+  }
+
+  .home-showcase-main .web-live-ticker-label span,
+  .home-showcase-main .web-live-ticker-marquee p {
+    font-size: 13px;
+  }
+
+  .home-showcase-main .web-live-ticker-chevrons {
+    flex-basis: 32px;
+  }
+
+  .home-showcase-main .web-live-ticker-chevrons .is-dark,
+  .home-showcase-main .web-live-ticker-chevrons .is-red {
+    flex-basis: 11px;
+  }
+
   .home-ad-sidebar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: none;
@@ -563,6 +646,28 @@ select:focus {
 }
 
 @media (max-width: 620px) {
+  .home-showcase-main .web-live-ticker {
+    height: 29px;
+  }
+
+  .home-showcase-main .web-live-ticker-label {
+    flex-basis: 92px;
+  }
+
+  .home-showcase-main .web-live-ticker-label span,
+  .home-showcase-main .web-live-ticker-marquee p {
+    font-size: 11px;
+  }
+
+  .home-showcase-main .web-live-ticker-chevrons {
+    flex-basis: 26px;
+  }
+
+  .home-showcase-main .web-live-ticker-chevrons .is-dark,
+  .home-showcase-main .web-live-ticker-chevrons .is-red {
+    flex-basis: 9px;
+  }
+
   .home-ad-sidebar {
     grid-template-columns: 1fr;
   }
