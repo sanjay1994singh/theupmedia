@@ -1583,3 +1583,152 @@ select:focus {
     flex-direction: column;
   }
 }
+
+
+/* compact-public-spacing-v1 */
+.home-hero {
+  padding-top: 24px;
+  padding-bottom: 28px;
+}
+
+.content-band {
+  width: min(1120px, calc(100% - 36px));
+  max-width: 1120px;
+  padding: 38px 0;
+}
+
+.content-band + .content-band {
+  margin-top: 0;
+}
+
+.section-heading {
+  margin-bottom: 22px;
+}
+
+.section-heading h1,
+.section-heading h2 {
+  font-size: clamp(28px, 3.4vw, 42px);
+}
+
+.card-grid,
+.service-grid,
+.home-plan-grid {
+  gap: 18px;
+}
+
+.story-card .story-body {
+  min-height: 218px;
+  padding: 18px;
+}
+
+.story-kicker {
+  margin-bottom: 10px;
+}
+
+.story-footer {
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.subscription-home-band {
+  width: min(1160px, calc(100% - 36px));
+  max-width: 1160px;
+}
+
+.subscription-intro {
+  min-height: 500px;
+  padding: clamp(28px, 4vw, 44px);
+}
+
+.subscription-intro h2 {
+  font-size: clamp(36px, 4.2vw, 54px);
+}
+
+.subscription-plan-area {
+  padding: clamp(22px, 3vw, 36px);
+}
+
+.premium-plan-card {
+  padding: 20px;
+}
+
+.listing-hero,
+.listing-page > .section-heading {
+  margin-bottom: 28px;
+  padding: 26px;
+}
+
+.listing-hero h1,
+.listing-page > .section-heading h1 {
+  font-size: clamp(34px, 4.6vw, 60px);
+}
+
+.article-page,
+.page-shell,
+.auth-panel,
+.subscription-page {
+  width: min(940px, calc(100% - 36px));
+  margin-top: 34px;
+  margin-bottom: 46px;
+}
+
+.editorial-detail {
+  max-width: 980px;
+  padding: clamp(22px, 3vw, 42px);
+}
+
+.editorial-detail .article-header h1 {
+  font-size: clamp(36px, 5vw, 62px);
+}
+
+.account-page,
+.profile-page {
+  width: min(980px, calc(100% - 36px));
+  margin-top: 36px;
+  margin-bottom: 52px;
+}
+
+.site-footer {
+  margin-top: 36px;
+}
+
+.footer-shell {
+  width: min(1080px, calc(100% - 36px));
+  padding-top: 40px;
+  padding-bottom: 22px;
+}
+
+@media (max-width: 680px) {
+  .home-hero {
+    padding-top: 16px;
+    padding-bottom: 20px;
+  }
+
+  .content-band,
+  .subscription-home-band {
+    width: min(100% - 24px, 1120px);
+    padding-top: 28px;
+    padding-bottom: 28px;
+  }
+
+  .section-heading {
+    margin-bottom: 18px;
+  }
+
+  .listing-hero,
+  .listing-page > .section-heading {
+    margin-bottom: 22px;
+    padding: 20px;
+  }
+
+  .article-page,
+  .page-shell,
+  .auth-panel,
+  .subscription-page,
+  .account-page,
+  .profile-page {
+    width: calc(100% - 24px);
+    margin-top: 22px;
+    margin-bottom: 32px;
+  }
+}
