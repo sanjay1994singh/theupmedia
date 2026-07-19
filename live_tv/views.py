@@ -3579,6 +3579,8 @@ def live_control_dashboard_payload(request, section="overview"):
         return {"section": section, "renders": dashboard_renders_snapshot(request)}
     if section == "users":
         return {"section": section, "users": dashboard_users_devices_snapshot(), "uploads": dashboard_uploads_snapshot(request)}
+    if section == "blogs":
+        return {"section": section, "blogs": dashboard_blog_snapshot()}
     if section == "analytics":
         return {
             "section": section,
@@ -3590,7 +3592,6 @@ def live_control_dashboard_payload(request, section="overview"):
             "uploads": dashboard_uploads_snapshot(request),
             "renders": dashboard_renders_snapshot(request),
             "users": dashboard_users_devices_snapshot(),
-            "blogs": dashboard_blog_snapshot(),
         }
     if section == "bandwidth":
         return {"section": section, "bandwidth": dashboard_parse_apache_logs(), "server": dashboard_server_stats(), "processing": processing}
@@ -3622,7 +3623,6 @@ def live_control_dashboard_payload(request, section="overview"):
             "playlist_items": live["playlist"]["count"],
         },
         "users": dashboard_users_devices_snapshot(),
-        "blogs": dashboard_blog_snapshot(),
     }
 
 @superuser_required

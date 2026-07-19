@@ -242,12 +242,8 @@
     const uploads = payload.uploads || {};
     const renders = payload.renders || {};
     const users = payload.users || {};
-    const blogs = payload.blogs || {};
     return `${pageTitle("Analytics", "Project level live TV, render, viewer and upload analysis", live)}
       <div class="grid kpi-grid">
-        ${kpi("Blogs Today", blogs.today || 0, "published today", "green")}
-        ${kpi("Blogs Yesterday", blogs.yesterday || 0, "published yesterday", "blue")}
-        ${kpi("Blogs This Month", blogs.this_month || 0, "published this month", "orange")}
         ${kpi("Playlist Videos", (live.playlist || {}).count || 0, (live.playlist || {}).duration_display || "00:00")}
         ${kpi("Live Uploads", (uploads.videos || []).length, "latest loaded", "green")}
         ${kpi("Shorts", (uploads.shorts || []).length, "latest loaded", "blue")}
@@ -256,6 +252,16 @@
       </div>
       <div class="grid lower-grid">${renderLive(live)}${renderProcessingCard(processing)}${renderAnalyticsCard(payload)}</div>
       ${renderTables(payload)}`;
+  }
+
+  function renderBlogs(payload) {
+    const blogs = payload.blogs || {};
+    return `${pageTitle("Blog Publishing", "Published blog activity by date", {})}
+      <div class="grid kpi-grid">
+        ${kpi("Blogs Today", blogs.today || 0, "published today", "green")}
+        ${kpi("Blogs Yesterday", blogs.yesterday || 0, "published yesterday", "blue")}
+        ${kpi("Blogs This Month", blogs.this_month || 0, "published this month", "orange")}
+      </div>`;
   }
 
   function renderSettings(payload) {
@@ -284,12 +290,8 @@
     const processing = payload.processing || {};
     const server = payload.server || {};
     const uploads = payload.uploads || {};
-    const blogs = payload.blogs || {};
     return `${pageTitle("Dashboard Overview", "Real-time overview of your Live TV platform", live)}
       <div class="grid kpi-grid">
-        ${kpi("Blogs Today", blogs.today || 0, "published today", "green")}
-        ${kpi("Blogs Yesterday", blogs.yesterday || 0, "published yesterday", "blue")}
-        ${kpi("Blogs This Month", blogs.this_month || 0, "published this month", "orange")}
         ${kpi("Live TV Channels", (live.playlist || {}).count || 0, "+ playlist items")}
         ${kpi("On Air Now", live.current ? "01" : "00", live.current?.title || "No live video", "green")}
         ${kpi("Total Uploads", (uploads.videos_total || 0) + (uploads.shorts_total || 0), `${uploads.shorts_total || 0} shorts`, "blue")}
@@ -309,6 +311,7 @@
     else if (currentSection === "processing") content.innerHTML = renderProcessing(payload.processing || {});
     else if (currentSection === "uploads") content.innerHTML = renderUploads(payload.uploads || {});
     else if (currentSection === "users") content.innerHTML = renderUsers(payload);
+    else if (currentSection === "blogs") content.innerHTML = renderBlogs(payload);
     else if (currentSection === "library" || currentSection === "renders") content.innerHTML = renderRenders(payload.renders || {});
     else if (currentSection === "analytics") content.innerHTML = renderAnalyticsSection(payload);
     else if (currentSection === "bandwidth") content.innerHTML = renderBandwidth(payload);
