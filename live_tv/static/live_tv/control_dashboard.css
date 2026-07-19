@@ -28,6 +28,15 @@
   min-width: 0;
 }
 
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.table-scroll .table {
+  min-width: 720px;
+}
+
 .card-head {
   gap: 10px;
 }

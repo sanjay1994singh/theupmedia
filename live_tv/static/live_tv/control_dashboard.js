@@ -256,12 +256,26 @@
 
   function renderBlogs(payload) {
     const blogs = payload.blogs || {};
+    const items = blogs.items || [];
     return `${pageTitle("Blog Publishing", "Published blog activity by date", {})}
       <div class="grid kpi-grid">
         ${kpi("Blogs Today", blogs.today || 0, "published today", "green")}
         ${kpi("Blogs Yesterday", blogs.yesterday || 0, "published yesterday", "blue")}
         ${kpi("Blogs This Month", blogs.this_month || 0, "published this month", "orange")}
-      </div>`;
+      </div>
+      <section class="dashboard-card">
+        <div class="card-head"><h2>Published Blogs — Latest First</h2><span class="muted">Current month</span></div>
+        <div class="table-scroll"><table class="table">
+          <thead><tr><th>#</th><th>Blog Title</th><th>Author</th><th>Period</th><th>Published Date & Time</th></tr></thead>
+          <tbody>${items.map((item, index) => `<tr>
+            <td>${index + 1}</td>
+            <td><strong>${esc(item.title)}</strong></td>
+            <td>${esc(item.author)}</td>
+            <td>${status(item.period)}</td>
+            <td>${esc(item.published_at)}</td>
+          </tr>`).join("") || `<tr><td colspan="5" class="muted">No blogs published this month</td></tr>`}</tbody>
+        </table></div>
+      </section>`;
   }
 
   function renderSettings(payload) {

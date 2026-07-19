@@ -3537,6 +3537,9 @@ def dashboard_blog_snapshot():
         status=BlogPost.Status.PUBLISHED,
         published_at__lte=now,
     )
+    recent_posts = published.filter(
+        published_at__gte=month_start,
+    ).select_related("author").order_by("-published_at", "-pk")[:100]
     return {
         "today": published.filter(published_at__gte=today_start).count(),
         "yesterday": published.filter(
@@ -3544,6 +3547,25 @@ def dashboard_blog_snapshot():
             published_at__lt=today_start,
         ).count(),
         "this_month": published.filter(published_at__gte=month_start).count(),
+        "items": [
+            {
+                "id": post.pk,
+                "title": post.title,
+                "author": post.author.get_username() if post.author_id else "-",
+                "published_at": timezone.localtime(
+                    post.published_at,
+                    current_timezone,
+                ).strftime("%d %b %Y, %I:%M:%S %p"),
+                "period": (
+                    "Today"
+                    if post.published_at >= today_start
+                    else "Yesterday"
+                    if post.published_at >= yesterday_start
+                    else "This Month"
+                ),
+            }
+            for post in recent_posts
+        ],
     }
 
 
