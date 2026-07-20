@@ -3120,7 +3120,11 @@ def dashboard_project_storage_stats():
 
     live_media = media_root / "live-tv"
     shorts_media = media_root / "shorts"
-    rendered_paths = [media_root / "rendered", media_root / "live-tv" / "rendered"]
+    rendered_paths = [
+        media_root / "social-render",
+        media_root / "rendered",
+        media_root / "live-tv" / "rendered",
+    ]
     downloads_media = media_root / "media-downloads"
     mobile_uploads_media = media_root / "mobile-video-uploads"
     social_downloads_media = media_root / "social_downloads"
