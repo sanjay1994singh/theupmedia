@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from .models import LiveTVChannel, LiveTVPlaylistItem, SocialRenderedVideo
 from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, enqueue_completed_broadcast_renders, rebuild_live_playlist
+from .tasks import process_live_channel_hls_task
 
 
 class ControlDashboardTests(TestCase):
@@ -34,6 +35,35 @@ class ControlDashboardTests(TestCase):
         response = self.client.get(reverse("live_tv:api_control_dashboard_action"))
         self.assertEqual(response.status_code, 405)
         payload.assert_not_called()
+
+
+class LiveTVHLSTaskTests(TestCase):
+    @patch("live_tv.tasks.process_live_channel_hls_task.delay")
+    @patch("live_tv.tasks.repair_live_tv_health")
+    @patch("live_tv.tasks.convert_live_channel_to_hls", side_effect=RuntimeError("broken upload"))
+    def test_failed_upload_does_not_block_next_pending_video(self, _convert, _repair, delay):
+        failed_video = LiveTVChannel.objects.create(
+            title="Broken",
+            slug="broken",
+            source_type=LiveTVChannel.SourceType.DIRECT,
+            video_file="live-tv/videos/broken.mp4",
+            hls_status=LiveTVChannel.HLSStatus.PENDING,
+            auto_add_to_live=True,
+            is_active=True,
+        )
+        next_video = LiveTVChannel.objects.create(
+            title="Next",
+            slug="next",
+            source_type=LiveTVChannel.SourceType.DIRECT,
+            video_file="live-tv/videos/next.mp4",
+            hls_status=LiveTVChannel.HLSStatus.PENDING,
+            auto_add_to_live=True,
+            is_active=True,
+        )
+
+        process_live_channel_hls_task(failed_video.pk)
+
+        delay.assert_called_once_with(next_video.pk)
 
 
 class AutoLivePlaylistTests(TestCase):

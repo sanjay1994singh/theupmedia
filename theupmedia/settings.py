@@ -250,9 +250,21 @@ CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", "3600"))
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "3300"))
+CELERY_BEAT_SCHEDULE = {
+    "live-tv-health-watchdog": {
+        "task": "live_tv.live_tv_health_watchdog",
+        "schedule": float(os.getenv("LIVE_TV_HEALTH_WATCHDOG_SECONDS", "60")),
+    },
+    "cleanup-rendered-video-temps": {
+        "task": "live_tv.cleanup_rendered_video_temps",
+        "schedule": float(os.getenv("LIVE_TV_TEMP_CLEANUP_SECONDS", "21600")),
+        "kwargs": {"hours": 24},
+    },
+}
 
 LIVE_TV_RENDER_USE_CELERY = os.getenv("LIVE_TV_RENDER_USE_CELERY", "True").lower() == "true"
 LIVE_TV_RENDER_THREAD_FALLBACK = os.getenv("LIVE_TV_RENDER_THREAD_FALLBACK", "True").lower() == "true"
+LIVE_TV_HLS_FAILED_RETRY_MINUTES = int(os.getenv("LIVE_TV_HLS_FAILED_RETRY_MINUTES", "10"))
 LIVE_TV_RENDER_ENCODER = os.getenv("LIVE_TV_RENDER_ENCODER", "cpu").lower()
 LIVE_TV_RENDER_NVENC_PRESET = os.getenv("LIVE_TV_RENDER_NVENC_PRESET", "p1")
 LIVE_TV_RENDER_NVENC_CQ = os.getenv("LIVE_TV_RENDER_NVENC_CQ", "28")

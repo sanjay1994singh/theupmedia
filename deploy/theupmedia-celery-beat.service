@@ -1,0 +1,17 @@
+[Unit]
+Description=The UP Media Celery Beat Scheduler
+After=network.target redis-server.service
+Requires=redis-server.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/theupmedia
+Environment="DJANGO_SETTINGS_MODULE=theupmedia.settings"
+ExecStart=/var/www/theupmedia/env/bin/celery -A theupmedia beat --loglevel=INFO --pidfile=/run/theupmedia-celery-beat.pid
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -797,6 +797,7 @@ def repair_live_tv_health(queue_hls=True, queue_renders=True, at=None):
         "renders_queued": 0,
     }
     stale_cutoff = at - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
+    failed_retry_cutoff = at - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_FAILED_RETRY_MINUTES", 10))
     candidates = LiveTVChannel.objects.filter(
         source_type=LiveTVChannel.SourceType.DIRECT,
         auto_add_to_live=True,
@@ -812,12 +813,17 @@ def repair_live_tv_health(queue_hls=True, queue_renders=True, at=None):
                 and video.updated_at
                 and video.updated_at >= stale_cutoff
             )
+            failed_retry_is_too_soon = (
+                video.hls_status == LiveTVChannel.HLSStatus.FAILED
+                and video.updated_at
+                and video.updated_at >= failed_retry_cutoff
+            )
             needs_hls = (
                 video.hls_status in {LiveTVChannel.HLSStatus.PENDING, LiveTVChannel.HLSStatus.FAILED}
                 or not live_video_hls_ready(video)
                 or video.effective_duration_seconds <= 0
             )
-            if processing_is_fresh or not needs_hls:
+            if processing_is_fresh or failed_retry_is_too_soon or not needs_hls:
                 continue
             try:
                 from .views import enqueue_live_channel_hls_job
@@ -831,8 +837,9 @@ def repair_live_tv_health(queue_hls=True, queue_renders=True, at=None):
                     )
                 enqueue_live_channel_hls_job(video.pk)
                 report["hls_queued"] += 1
-                if report["hls_queued"] >= 20:
-                    break
+                # HLS is intentionally serial. The task queues the next pending
+                # upload when it finishes, so one seed job is sufficient.
+                break
             except Exception:
                 logger.exception("Failed to queue HLS repair for video %s", video.pk)
 

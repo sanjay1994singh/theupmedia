@@ -163,11 +163,20 @@ def write_master_playlist(output_dir, metadata):
 
 def make_public_media_tree(path):
     for item in path.rglob("*"):
-        if item.is_dir():
-            item.chmod(0o755)
-        else:
-            item.chmod(0o644)
-    path.chmod(0o755)
+        try:
+            if item.is_dir():
+                item.chmod(0o755)
+            else:
+                item.chmod(0o644)
+        except (OSError, PermissionError):
+            # Files are already readable under the service umask. A transient
+            # chmod failure (for example an antivirus/open-file lock) must not
+            # discard an otherwise complete HLS conversion.
+            logger.warning("Could not normalize media permissions for %s.", item, exc_info=True)
+    try:
+        path.chmod(0o755)
+    except (OSError, PermissionError):
+        logger.warning("Could not normalize media directory permissions for %s.", path, exc_info=True)
 
 
 def hls_media_file_exists(media_path):
