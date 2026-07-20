@@ -51,6 +51,28 @@
     });
   }
 
+  function initVideoHeadlines(frame) {
+    const rail = frame.querySelector(".web-live-headlines");
+    if (!rail) return;
+    const items = Array.from(rail.querySelectorAll("[data-video-headline]"));
+    if (!items.length) return;
+    const interval = Math.max(1, Number.parseInt(rail.dataset.interval || "2", 10) || 2);
+    const repeat = rail.dataset.repeat !== "false";
+    const video = frame.querySelector("video");
+    const showCurrent = function () {
+      const seconds = video && Number.isFinite(video.currentTime)
+        ? video.currentTime
+        : Number.parseFloat(frame.dataset.seekPosition || "0") || 0;
+      let index = Math.floor(Math.max(0, seconds) / interval);
+      index = repeat ? index % items.length : Math.min(index, items.length - 1);
+      items.forEach(function (item, itemIndex) {
+        item.classList.toggle("is-active", itemIndex === index);
+      });
+    };
+    showCurrent();
+    window.setInterval(showCurrent, 250);
+  }
+
   function getLiveFrame(element) {
     return element ? element.closest(".web-live-frame, .live-player-frame") : null;
   }
@@ -462,6 +484,7 @@
   function initLiveTvFrames() {
     initWebTickerSpeeds();
     document.querySelectorAll(".web-live-frame, .live-player-frame").forEach(function (frame) {
+      initVideoHeadlines(frame);
       const video = frame.querySelector("video");
       if (video && (frame.classList.contains("web-live-frame--native") || frame.classList.contains("live-player-frame--native-controls"))) {
         video.controls = false;

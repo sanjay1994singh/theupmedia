@@ -2446,6 +2446,55 @@ time {
   z-index: 4;
 }
 
+.web-live-headlines {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.96);
+  bottom: 40px;
+  display: flex;
+  height: 38px;
+  left: 0;
+  overflow: hidden;
+  position: absolute;
+  right: 0;
+  z-index: 4;
+}
+
+.web-live-headlines > span {
+  align-items: center;
+  align-self: stretch;
+  background: #d71920;
+  color: #fff;
+  display: flex;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 0 14px;
+  text-transform: uppercase;
+}
+
+.web-live-headlines > strong {
+  color: #111827;
+  font-size: 14px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.web-live-headlines i {
+  display: none;
+  font-style: normal;
+}
+
+.web-live-headlines i.is-active {
+  display: inline;
+}
+
+.web-live-headlines--no-ticker {
+  bottom: 0;
+}
+
 .web-live-ticker-label {
   align-items: center;
   background: linear-gradient(180deg, #d71920 0%, #990407 100%);

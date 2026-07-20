@@ -12,9 +12,10 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, ShortsVideo, SocialRenderedVideo
+from .models import LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, LiveTVVideoHeadline, ShortsVideo, SocialRenderedVideo
 from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, create_broadcast_render_job, enqueue_completed_broadcast_renders, get_main_live_channel, rebuild_live_playlist, recover_stale_render_jobs
 from .tasks import process_live_channel_hls_task
+from .views import video_headline_payload
 
 
 class CeleryQueueRoutingTests(SimpleTestCase):
@@ -23,6 +24,34 @@ class CeleryQueueRoutingTests(SimpleTestCase):
         self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.process_short_hls"]["queue"], "hls")
         self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.render_social_video"]["queue"], "render")
         self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.render_live_broadcast_video"]["queue"], "render")
+
+
+class VideoHeadlineRotationTests(TestCase):
+    def test_video_headlines_rotate_every_configured_second_and_repeat(self):
+        video = LiveTVChannel.objects.create(
+            title="Headline Video",
+            slug="headline-video",
+            source_type=LiveTVChannel.SourceType.DIRECT,
+            video_file="live-tv/videos/headline.mp4",
+            headline_change_seconds=2,
+            repeat_headlines=True,
+        )
+        for position, text in enumerate(["First", "Second", "Third"]):
+            LiveTVVideoHeadline.objects.create(video=video, position=position, text=text)
+
+        self.assertEqual(video_headline_payload(video, 0)["headline"], "First")
+        self.assertEqual(video_headline_payload(video, 2.1)["headline"], "Second")
+        self.assertEqual(video_headline_payload(video, 4.1)["headline"], "Third")
+        self.assertEqual(video_headline_payload(video, 6.1)["headline"], "First")
+
+    def test_headlines_never_mix_between_videos(self):
+        first = LiveTVChannel.objects.create(title="First News", slug="first-news")
+        second = LiveTVChannel.objects.create(title="Second News", slug="second-news")
+        LiveTVVideoHeadline.objects.create(video=first, position=0, text="First-only headline")
+        LiveTVVideoHeadline.objects.create(video=second, position=0, text="Second-only headline")
+
+        self.assertEqual(video_headline_payload(first)["headlines"], ["First-only headline"])
+        self.assertEqual(video_headline_payload(second)["headlines"], ["Second-only headline"])
 
 
 class PersistentTickerClockTests(TestCase):

@@ -56,6 +56,19 @@
       </div>
     {% endif %}
 
+    {% if live_settings.show_lower_third and live_channel %}
+      <div class="web-live-headlines{% if not live_settings.show_ticker %} web-live-headlines--no-ticker{% endif %}" data-interval="{{ live_channel.headline_change_seconds|default:2 }}" data-repeat="{{ live_channel.repeat_headlines|yesno:'true,false' }}">
+        <span>{{ live_channel.lower_third_label|default:live_settings.default_lower_third_label }}</span>
+        <strong>
+          {% for item in live_channel.rotating_headlines.all %}
+            {% if item.is_active %}<i data-video-headline>{{ item.text }}</i>{% endif %}
+          {% empty %}
+            <i data-video-headline>{{ live_channel.headline|default:live_settings.default_headline }}</i>
+          {% endfor %}
+        </strong>
+      </div>
+    {% endif %}
+
     {% if live_settings.show_ticker %}
       <div class="web-live-ticker">
         <div class="web-live-ticker-label">

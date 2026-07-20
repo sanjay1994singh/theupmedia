@@ -7,7 +7,7 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 
 from .forms import LiveTVChannelForm
-from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistCycle, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, PushDevice, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
+from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistCycle, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, LiveTVVideoHeadline, MediaDownload, MobileAdminToken, PushDevice, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
 from .services import calculate_current_playback, update_playlist_item
 
 
@@ -87,8 +87,16 @@ class LiveTVCityAdmin(admin.ModelAdmin):
     search_fields = ("name", "state__name")
 
 
+class LiveTVVideoHeadlineInline(admin.TabularInline):
+    model = LiveTVVideoHeadline
+    extra = 3
+    fields = ("position", "text", "is_active")
+    ordering = ("position", "pk")
+
+
 @admin.register(LiveTVChannel)
 class LiveTVChannelAdmin(admin.ModelAdmin):
+    inlines = (LiveTVVideoHeadlineInline,)
     form = LiveTVChannelForm
     list_display = ("title", "channel_role", "source_type", "hls_status", "hls_progress_display", "playlist_duration_display", "is_live", "is_active", "display_order", "updated_at")
     # list_filter = ("source_type", "auto_playlist_enabled", "auto_add_to_live", "hls_status", "is_live", "is_active")
@@ -102,7 +110,7 @@ class LiveTVChannelAdmin(admin.ModelAdmin):
         ("HLS Processing", {"fields": ("hls_master_url", "hls_status", "hls_progress_display", "hls_progress_percent", "processing_error", "duration", "duration_seconds")}),
         ("24x7 Auto Playlist", {"fields": ("auto_playlist_enabled", "auto_add_to_live", "loop_enabled", "target_playlist_duration_seconds", "current_playback_display", "playlist_duration_display", "playlist_target_progress", "playlist_version", "playback_started_at", "last_playlist_update", "processing_failures")}),
         ("Category / Location", {"fields": ("category", "state", "city")}),
-        ("Video Text", {"fields": ("lower_third_label", "headline")}),
+        ("Video Text", {"fields": ("lower_third_label", "headline", "headline_change_seconds", "repeat_headlines")}),
         ("SEO", {"fields": ("meta_title", "meta_description")}),
     )
 

@@ -559,6 +559,27 @@ def ticker_items_from_text(text):
     return [item.strip() for item in raw_items if item.strip()]
 
 
+def video_headline_payload(video, seek_position=0):
+    headlines = list(
+        video.rotating_headlines.filter(is_active=True)
+        .order_by("position", "pk")
+        .values_list("text", flat=True)
+    )
+    if not headlines and (video.headline or "").strip():
+        headlines = [video.headline.strip()]
+    interval = max(1, min(60, int(video.headline_change_seconds or 2)))
+    index = int(max(0, float(seek_position or 0)) // interval)
+    if headlines:
+        index = index % len(headlines) if video.repeat_headlines else min(index, len(headlines) - 1)
+    return {
+        "headlines": headlines,
+        "headline_change_seconds": interval,
+        "repeat_headlines": video.repeat_headlines,
+        "current_headline_index": index if headlines else 0,
+        "headline": headlines[index] if headlines else "",
+    }
+
+
 def serialize_channel_for_mobile(request, channel):
     setting = live_tv_setting()
     ticker_setting = news_ticker_setting()
@@ -579,6 +600,7 @@ def serialize_channel_for_mobile(request, channel):
         youtube_embed_url = channel.youtube_embed_url
 
     ticker = ticker_items_from_text(ticker_setting.text)
+    headline_data = video_headline_payload(channel)
 
     return {
         "id": channel.pk,
@@ -593,7 +615,7 @@ def serialize_channel_for_mobile(request, channel):
         "city": {"id": channel.city_id, "name": channel.city.name} if channel.city_id else None,
         "city_id": channel.city_id,
         "city_name": channel.city.name if channel.city_id else "",
-        "headline": channel.headline or "",
+        **headline_data,
         "lower_third_label": channel.lower_third_label or "",
         "ticker_label": ticker_setting.label or setting.default_ticker_label,
         "ticker": ticker,
@@ -616,7 +638,7 @@ def serialize_channel_for_mobile(request, channel):
         "web_live_badge_size_percent": setting.web_live_badge_size_percent,
         "mobile_live_badge_size_percent": setting.mobile_live_badge_size_percent,
         "show_channel_logo": setting.show_channel_logo,
-        "show_lower_third": setting.show_lower_third and bool((channel.lower_third_label or "").strip() or (channel.headline or "").strip()),
+        "show_lower_third": setting.show_lower_third and bool((channel.lower_third_label or "").strip() or headline_data["headlines"]),
         "show_ticker": setting.show_ticker,
         "ticker_speed_seconds": ticker_setting.speed_seconds,
         "mobile_ticker_speed_seconds": ticker_setting.mobile_speed_seconds,
@@ -646,6 +668,7 @@ def serialize_synced_live_state(request, channel, server_time=None):
     ticker_started_at = setting.ticker_started_at or setting.updated_at or server_time
     ticker_offset_seconds = max(0.0, (server_time - ticker_started_at).total_seconds())
     ticker_clock_key = f"live-tv-ticker-{setting.pk}-{ticker_started_at.isoformat()}"
+    headline_data = video_headline_payload(video, state["seek_position"])
     return {
         "is_live": True,
         "is_live_synced": True,
@@ -657,7 +680,7 @@ def serialize_synced_live_state(request, channel, server_time=None):
         "player_type": LiveTVChannel.SourceType.HLS,
         "video_id": video.pk,
         "title": video.title,
-        "headline": video.headline or "",
+        **headline_data,
         "description": video.description or "",
         "video_url": video_url,
         "mp4_url": video_url,
@@ -685,7 +708,7 @@ def serialize_synced_live_state(request, channel, server_time=None):
         "default_ticker_text": ticker_setting.text or setting.default_ticker_text,
         "ticker": ticker,
         "lower_third_label": video.lower_third_label or "",
-        "show_lower_third": setting.show_lower_third and bool((video.lower_third_label or "").strip() or (video.headline or "").strip()),
+        "show_lower_third": setting.show_lower_third and bool((video.lower_third_label or "").strip() or headline_data["headlines"]),
         "show_live_badge": setting.show_live_badge,
         "web_live_badge_size_percent": setting.web_live_badge_size_percent,
         "mobile_live_badge_size_percent": setting.mobile_live_badge_size_percent,
@@ -1769,6 +1792,9 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
     live_label = snapshot.get("live_label") or "LIVE"
     lower_label = snapshot.get("lower_third_label") or snapshot.get("headline_label") or ""
     headline = snapshot.get("headline") or ""
+    headlines = [str(item).strip() for item in (snapshot.get("headlines") or []) if str(item).strip()]
+    if not headlines and headline:
+        headlines = [headline]
     ticker_label = snapshot.get("ticker_label") or ""
     ticker_text = snapshot.get("ticker_text") or ""
     try:
@@ -1794,16 +1820,36 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
         current = next_label
         overlay_index += 1
 
-    if bool_snapshot(snapshot, "show_lower_third") and (lower_label or headline):
+    if bool_snapshot(snapshot, "show_lower_third") and (lower_label or headlines):
         label_file = add_text_file(lower_label, "broadcast-label")
-        headline_file = add_text_file(headline, "broadcast-headline")
         label_font_arg = ffmpeg_font_arg_for_text(lower_label, devanagari_font, latin_font)
-        headline_font_arg = ffmpeg_font_arg_for_text(headline, devanagari_font, latin_font)
+        try:
+            headline_interval = max(1, min(60, int(snapshot.get("headline_change_seconds") or 2)))
+        except (TypeError, ValueError):
+            headline_interval = 2
+        repeat_headlines = bool_snapshot(snapshot, "repeat_headlines", True)
+        headline_filters = []
+        cycle_seconds = headline_interval * max(1, len(headlines))
+        for index, item in enumerate(headlines):
+            headline_file = add_text_file(item, f"broadcast-headline-{index}")
+            headline_font_arg = ffmpeg_font_arg_for_text(item, devanagari_font, latin_font)
+            start = index * headline_interval
+            end = (index + 1) * headline_interval
+            if repeat_headlines:
+                enable = f"between(mod(t\\,{cycle_seconds})\\,{start}\\,{end})"
+            elif index == len(headlines) - 1:
+                enable = f"gte(t\\,{start})"
+            else:
+                enable = f"between(t\\,{start}\\,{end})"
+            headline_filters.append(
+                f"drawtext=textfile='{ffmpeg_path(headline_file)}'{headline_font_arg}:"
+                f"x=330:y={input_height - 136}:fontsize=42:fontcolor=#111827:enable='{enable}'"
+            )
         add_filter(
             f"drawbox=x=0:y={input_height - 158}:w={input_width}:h=78:color=white@0.94:t=fill,"
             f"drawbox=x=0:y={input_height - 158}:w=300:h=78:color=#d71920@1:t=fill,"
-            f"drawtext=textfile='{ffmpeg_path(label_file)}'{label_font_arg}:x=34:y={input_height - 132}:fontsize=38:fontcolor=white,"
-            f"drawtext=textfile='{ffmpeg_path(headline_file)}'{headline_font_arg}:x=330:y={input_height - 136}:fontsize=42:fontcolor=#111827"
+            f"drawtext=textfile='{ffmpeg_path(label_file)}'{label_font_arg}:x=34:y={input_height - 132}:fontsize=38:fontcolor=white"
+            + ("," + ",".join(headline_filters) if headline_filters else "")
         )
 
     if bool_snapshot(snapshot, "show_ticker") and (ticker_label or ticker_text):

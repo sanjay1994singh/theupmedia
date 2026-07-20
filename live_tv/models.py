@@ -142,6 +142,15 @@ class LiveTVChannel(models.Model):
     is_live = models.BooleanField(default=True)
     lower_third_label = models.CharField(max_length=60, blank=True, default="")
     headline = models.CharField(max_length=180, blank=True, default="")
+    headline_change_seconds = models.PositiveSmallIntegerField(
+        default=2,
+        validators=[MinValueValidator(1), MaxValueValidator(60)],
+        help_text="Seconds before the next headline appears.",
+    )
+    repeat_headlines = models.BooleanField(
+        default=True,
+        help_text="Repeat this video's headline sequence until the video ends.",
+    )
     ticker_label = models.CharField(max_length=60, default="TODAY'S NEWS")
     ticker_text = models.TextField(default="Latest updates from The Up Media")
 
@@ -328,6 +337,21 @@ class LiveTVChannel(models.Model):
             "origin": settings.SITE_DOMAIN,
         }
         return f"https://www.youtube-nocookie.com/embed/{video_id}?{urlencode(params)}"
+
+
+class LiveTVVideoHeadline(models.Model):
+    video = models.ForeignKey(LiveTVChannel, on_delete=models.CASCADE, related_name="rotating_headlines")
+    text = models.CharField(max_length=240)
+    position = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["position", "pk"]
+
+    def __str__(self):
+        return f"{self.video}: {self.text[:60]}"
 
 
 class LiveTVPlaylistItem(models.Model):

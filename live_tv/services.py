@@ -225,13 +225,23 @@ def playlist_item_start_offset_seconds(cycle_item):
 
 def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
     setting = LiveTVSetting.get_solo()
-    headline = video.headline or ""
+    headlines = list(
+        video.rotating_headlines.filter(is_active=True)
+        .order_by("position", "pk")
+        .values_list("text", flat=True)
+    )
+    if not headlines and (video.headline or "").strip():
+        headlines = [video.headline.strip()]
+    headline = headlines[0] if headlines else ""
     lower_label = video.lower_third_label or ""
     title = headline or video.title or f"{channel.title} {timezone.localtime().strftime('%Y-%m-%d %H:%M')}"
     ticker_time_offset = playlist_item_start_offset_seconds(cycle_item)
     return {
         "title": title,
         "headline": headline,
+        "headlines": headlines,
+        "headline_change_seconds": max(1, min(60, int(video.headline_change_seconds or 2))),
+        "repeat_headlines": video.repeat_headlines,
         "headline_label": lower_label,
         "lower_third_label": lower_label,
         "ticker_label": setting.default_ticker_label,
@@ -245,7 +255,7 @@ def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
         "live_label": setting.live_label,
         "show_channel_logo": setting.show_channel_logo,
         "show_live_badge": setting.show_live_badge,
-        "show_lower_third": setting.show_lower_third and bool(lower_label or headline),
+        "show_lower_third": setting.show_lower_third and bool(lower_label or headlines),
         "show_ticker": setting.show_ticker,
         "render_format": "16:9",
         "frame_template": "broadcast_live_tv",
@@ -261,6 +271,9 @@ def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
 
 LIVE_BROADCAST_VISUAL_SNAPSHOT_KEYS = (
     "headline",
+    "headlines",
+    "headline_change_seconds",
+    "repeat_headlines",
     "headline_label",
     "lower_third_label",
     "ticker_label",
