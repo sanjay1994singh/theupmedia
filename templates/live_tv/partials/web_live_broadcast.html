@@ -63,7 +63,7 @@
           {% for item in live_channel.rotating_headlines.all %}
             {% if item.is_active %}<i data-video-headline>{{ item.text }}</i>{% endif %}
           {% empty %}
-            <i data-video-headline>{{ live_channel.headline|default:live_settings.default_headline }}</i>
+            {% if live_channel.headline %}<i data-video-headline>{{ live_channel.headline }}</i>{% endif %}
           {% endfor %}
         </strong>
       </div>
