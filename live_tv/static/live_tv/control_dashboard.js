@@ -366,30 +366,6 @@
     </div>`;
   }
 
-  function renderProjectStorage(payload) {
-    const rows = payload.storage || [];
-    const server = payload.server || {};
-    return `<section class="dashboard-card project-storage-card">
-      <div class="card-head">
-        <div>
-          <span class="eyebrow">THE UP MEDIA PROJECT ONLY</span>
-          <h2>Project Storage Detail</h2>
-          <p class="muted">VPS ke doosre projects aur system storage is detail me include nahi hain.</p>
-        </div>
-        <div class="storage-summary">
-          <strong>${esc(server.project_used_display || "-")}</strong>
-          <span>managed content</span>
-        </div>
-      </div>
-      <div class="storage-detail-grid">
-        ${rows.map((row) => `<div class="storage-detail-item">
-          <span>${esc(row.label || "-")}</span>
-          <strong>${esc(row.display || "0 B")}</strong>
-        </div>`).join("") || `<p class="muted">Storage detail unavailable.</p>`}
-      </div>
-    </section>`;
-  }
-
   function renderOverview(payload) {
     const live = payload.live || {};
     const processing = payload.processing || {};
@@ -404,7 +380,6 @@
         ${kpi("Project Used", server.project_used_display || "-", `${server.project_disk_percent || 0}% of project disk`, "pink")}
       </div>
       <div class="grid main-grid">${renderLive(live)}${renderProcessingCard(processing)}${renderSchedule(live.schedule || [])}</div>
-      ${renderProjectStorage(payload)}
       <div class="grid lower-grid">${renderBandwidthCard(payload)}${renderServerCard(server)}${renderSparkline()}</div>
       ${renderTables(payload)}`;
   }
