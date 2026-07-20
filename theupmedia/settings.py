@@ -250,6 +250,15 @@ CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = int(os.getenv("CELERY_TASK_TIME_LIMIT", "3600"))
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "3300"))
+CELERY_TASK_DEFAULT_QUEUE = "celery"
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_ROUTES = {
+    "live_tv.process_live_channel_hls": {"queue": "hls"},
+    "live_tv.process_short_hls": {"queue": "hls"},
+    "live_tv.render_social_video": {"queue": "render"},
+    "live_tv.render_live_broadcast_video": {"queue": "render"},
+    "live_tv.download_media": {"queue": "render"},
+}
 CELERY_BEAT_SCHEDULE = {
     "live-tv-health-watchdog": {
         "task": "live_tv.live_tv_health_watchdog",

@@ -1,5 +1,5 @@
 [Unit]
-Description=The UP Media Celery Render Worker
+Description=The UP Media Celery Main and HLS Worker
 After=network.target redis-server.service
 Requires=redis-server.service
 
@@ -9,9 +9,11 @@ User=www-data
 Group=www-data
 WorkingDirectory=/var/www/theupmedia
 Environment="DJANGO_SETTINGS_MODULE=theupmedia.settings"
-ExecStart=/var/www/theupmedia/env/bin/celery -A theupmedia worker --loglevel=INFO --concurrency=1 --queues=celery
+ExecStart=/var/www/theupmedia/env/bin/celery -A theupmedia worker --loglevel=INFO --concurrency=1 --queues=celery,hls --hostname=hls@%%h
 Restart=always
 RestartSec=10
+Nice=0
+CPUWeight=100
 
 [Install]
 WantedBy=multi-user.target

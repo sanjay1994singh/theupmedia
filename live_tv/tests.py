@@ -3,15 +3,24 @@ from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models.deletion import ProtectedError
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from .models import LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVState, ShortsVideo, SocialRenderedVideo
 from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, enqueue_completed_broadcast_renders, rebuild_live_playlist
 from .tasks import process_live_channel_hls_task
+
+
+class CeleryQueueRoutingTests(SimpleTestCase):
+    def test_hls_and_render_tasks_use_separate_queues(self):
+        self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.process_live_channel_hls"]["queue"], "hls")
+        self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.process_short_hls"]["queue"], "hls")
+        self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.render_social_video"]["queue"], "render")
+        self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.render_live_broadcast_video"]["queue"], "render")
 
 
 class ControlDashboardTests(TestCase):

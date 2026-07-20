@@ -42,14 +42,16 @@ Install both the worker and scheduler services:
 
 ```bash
 sudo cp /var/www/theupmedia/deploy/theupmedia-celery.service /etc/systemd/system/theupmedia-celery.service
+sudo cp /var/www/theupmedia/deploy/theupmedia-celery-render.service /etc/systemd/system/theupmedia-celery-render.service
 sudo cp /var/www/theupmedia/deploy/theupmedia-celery-beat.service /etc/systemd/system/theupmedia-celery-beat.service
 sudo systemctl daemon-reload
 sudo systemctl enable redis-server
 sudo systemctl enable theupmedia-celery
+sudo systemctl enable theupmedia-celery-render
 sudo systemctl enable theupmedia-celery-beat
 sudo systemctl restart redis-server
-sudo systemctl restart gunicorn
 sudo systemctl restart theupmedia-celery
+sudo systemctl restart theupmedia-celery-render
 sudo systemctl restart theupmedia-celery-beat
 sudo systemctl restart apache2
 ```
@@ -58,8 +60,10 @@ Check status/logs:
 
 ```bash
 sudo systemctl status theupmedia-celery
+sudo systemctl status theupmedia-celery-render
 sudo systemctl status theupmedia-celery-beat
 sudo journalctl -u theupmedia-celery -f
+sudo journalctl -u theupmedia-celery-render -f
 sudo journalctl -u theupmedia-celery-beat -f
 ```
 

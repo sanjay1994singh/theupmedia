@@ -1,0 +1,19 @@
+[Unit]
+Description=The UP Media Celery Render Worker
+After=network.target redis-server.service theupmedia-celery.service
+Requires=redis-server.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/theupmedia
+Environment="DJANGO_SETTINGS_MODULE=theupmedia.settings"
+ExecStart=/var/www/theupmedia/env/bin/celery -A theupmedia worker --loglevel=INFO --concurrency=1 --queues=render --hostname=render@%%h
+Restart=always
+RestartSec=10
+Nice=10
+CPUWeight=25
+
+[Install]
+WantedBy=multi-user.target
