@@ -2330,26 +2330,26 @@ time {
 .web-live-badge {
   align-items: center;
   background: #ef1717;
-  border-radius: 6px;
+  border-radius: 4px;
   display: inline-flex;
-  font-size: 14px;
+  font-size: 10px;
   font-weight: 900;
-  gap: 8px;
-  left: 16px;
+  gap: 5px;
+  left: 10px;
   line-height: 1;
-  padding: 9px 12px;
+  padding: 5px 7px;
   pointer-events: none;
   position: absolute;
   text-transform: uppercase;
-  top: 16px;
+  top: 10px;
   z-index: 4;
 }
 
 .web-live-badge span {
   background: #fff;
   border-radius: 999px;
-  height: 9px;
-  width: 9px;
+  height: 6px;
+  width: 6px;
 }
 
 .web-live-logo {
@@ -2567,10 +2567,10 @@ time {
 
 @media (max-width: 900px) {
   .web-live-badge {
-    font-size: 12px;
-    left: 12px;
-    padding: 8px 10px;
-    top: 12px;
+    font-size: 9px;
+    left: 8px;
+    padding: 4px 6px;
+    top: 8px;
   }
 
   .web-live-logo {
@@ -2656,14 +2656,14 @@ time {
   }
 
   .web-live-badge {
-    font-size: 11px;
-    gap: 6px;
-    padding: 7px 9px;
+    font-size: 8px;
+    gap: 4px;
+    padding: 4px 5px;
   }
 
   .web-live-badge span {
-    height: 7px;
-    width: 7px;
+    height: 5px;
+    width: 5px;
   }
 
   .web-live-logo img {
