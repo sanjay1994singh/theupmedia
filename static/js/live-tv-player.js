@@ -1,4 +1,56 @@
 (function () {
+  const WEB_TICKER_GAP_PX = 42;
+
+  function tickerElapsedSeconds(marquee) {
+    const offset = Number.parseFloat(marquee.dataset.tickerOffsetSeconds || "0");
+    if (!Number.isFinite(marquee.liveTickerClockStartedAt)) {
+      marquee.liveTickerClockStartedAt = performance.now();
+    }
+    const elapsedOnPage = (performance.now() - marquee.liveTickerClockStartedAt) / 1000;
+    return Math.max(0, (Number.isFinite(offset) ? offset : 0) + elapsedOnPage);
+  }
+
+  function syncWebTickerSpeed(marquee) {
+    const tickerText = marquee.querySelector("p");
+    if (!tickerText || marquee.clientWidth <= 0) {
+      return;
+    }
+
+    const configuredDuration = Math.max(
+      1,
+      Number.parseFloat(marquee.dataset.tickerBaseDuration || "22") || 22
+    );
+    const baselineDistance = marquee.clientWidth + WEB_TICKER_GAP_PX;
+    const actualDistance = tickerText.getBoundingClientRect().width + WEB_TICKER_GAP_PX;
+    const pixelsPerSecond = baselineDistance / configuredDuration;
+    const actualDuration = Math.max(1, actualDistance / pixelsPerSecond);
+    const elapsed = tickerElapsedSeconds(marquee);
+
+    marquee.style.setProperty("--ticker-speed", actualDuration.toFixed(3) + "s");
+    marquee.style.setProperty("--ticker-delay", "-" + (elapsed % actualDuration).toFixed(3) + "s");
+  }
+
+  function initWebTickerSpeeds() {
+    const marquees = Array.from(document.querySelectorAll(".web-live-ticker-marquee"));
+    if (!marquees.length) {
+      return;
+    }
+
+    const syncAll = function () {
+      marquees.forEach(syncWebTickerSpeed);
+    };
+    syncAll();
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(syncAll);
+    }
+
+    let resizeTimer = null;
+    window.addEventListener("resize", function () {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(syncAll, 120);
+    });
+  }
+
   function getLiveFrame(element) {
     return element ? element.closest(".web-live-frame, .live-player-frame") : null;
   }
@@ -408,6 +460,7 @@
   }
 
   function initLiveTvFrames() {
+    initWebTickerSpeeds();
     document.querySelectorAll(".web-live-frame, .live-player-frame").forEach(function (frame) {
       const video = frame.querySelector("video");
       if (video && (frame.classList.contains("web-live-frame--native") || frame.classList.contains("live-player-frame--native-controls"))) {

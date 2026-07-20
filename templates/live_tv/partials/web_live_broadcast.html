@@ -70,6 +70,8 @@
         <div
           class="web-live-ticker-marquee"
           style="--ticker-speed: {{ live_ticker.speed_seconds|default:live_settings.ticker_speed_seconds }}s; --ticker-delay: -{{ live_ticker.offset_seconds|default:0 }}s"
+          data-ticker-base-duration="{{ live_ticker.speed_seconds|default:live_settings.ticker_speed_seconds }}"
+          data-ticker-offset-seconds="{{ live_ticker.offset_seconds|default:0 }}"
           data-ticker-clock-key="{{ live_ticker.clock_key }}"
           data-ticker-started-at="{{ live_ticker.started_at|date:'c' }}"
           data-ticker-server-time="{{ live_ticker.server_time|date:'c' }}"
