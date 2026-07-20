@@ -83,8 +83,8 @@ class RequiredVideoTaxonomyTests(TestCase):
 class LiveTVHLSTaskTests(TestCase):
     @patch("live_tv.tasks.process_live_channel_hls_task.delay")
     @patch("live_tv.tasks.repair_live_tv_health")
-    @patch("live_tv.tasks.convert_live_channel_to_hls", side_effect=RuntimeError("broken upload"))
-    def test_failed_upload_does_not_block_next_pending_video(self, _convert, _repair, delay):
+    @patch("live_tv.tasks.convert_live_channel_to_hls")
+    def test_failed_upload_does_not_block_next_pending_video(self, convert, _repair, delay):
         failed_video = LiveTVChannel.objects.create(
             title="Broken",
             slug="broken",
@@ -103,10 +103,32 @@ class LiveTVHLSTaskTests(TestCase):
             auto_add_to_live=True,
             is_active=True,
         )
+        def fail_conversion(channel_id):
+            LiveTVChannel.objects.filter(pk=channel_id).update(hls_status=LiveTVChannel.HLSStatus.FAILED)
+            raise RuntimeError("broken upload")
 
+        convert.side_effect = fail_conversion
         process_live_channel_hls_task(failed_video.pk)
 
         delay.assert_called_once_with(next_video.pk)
+
+    @patch("live_tv.tasks.process_live_channel_hls_task.delay")
+    @patch("live_tv.tasks.repair_live_tv_health")
+    @patch("live_tv.tasks.convert_live_channel_to_hls", return_value="")
+    def test_lock_skipped_pending_upload_does_not_chain(self, _convert, _repair, delay):
+        pending_video = LiveTVChannel.objects.create(
+            title="Lock Pending",
+            slug="lock-pending",
+            source_type=LiveTVChannel.SourceType.DIRECT,
+            video_file="live-tv/videos/lock-pending.mp4",
+            hls_status=LiveTVChannel.HLSStatus.PENDING,
+            auto_add_to_live=True,
+            is_active=True,
+        )
+
+        process_live_channel_hls_task(pending_video.pk)
+
+        delay.assert_not_called()
 
 
 class AutoLivePlaylistTests(TestCase):

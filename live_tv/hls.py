@@ -183,6 +183,17 @@ def hls_media_file_exists(media_path):
     return bool(media_path and (Path(settings.MEDIA_ROOT) / media_path).exists())
 
 
+def hls_processing_lock_is_active(name):
+    lock_path = Path(settings.MEDIA_ROOT) / "live-tv" / "hls" / ".locks" / f"{name}.lock"
+    if not lock_path.exists():
+        return False
+    stale_seconds = int(getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20)) * 60
+    try:
+        return (timezone.now().timestamp() - lock_path.stat().st_mtime) <= stale_seconds
+    except OSError:
+        return False
+
+
 def acquire_hls_processing_lock(name):
     lock_dir = Path(settings.MEDIA_ROOT) / "live-tv" / "hls" / ".locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
@@ -374,12 +385,12 @@ def convert_live_channel_to_hls(channel_id):
     channel.processing_error = ""
     channel.save(update_fields=["hls_status", "hls_progress_percent", "processing_error", "updated_at"])
 
-    final_dir = Path(settings.MEDIA_ROOT) / "live-tv" / "hls" / str(channel.pk)
-    tmp_parent = final_dir.parent
-    tmp_parent.mkdir(parents=True, exist_ok=True)
-    tmp_dir = Path(tempfile.mkdtemp(prefix=f"live-hls-{channel.pk}-", dir=str(tmp_parent)))
-
+    tmp_dir = None
     try:
+        final_dir = Path(settings.MEDIA_ROOT) / "live-tv" / "hls" / str(channel.pk)
+        tmp_parent = final_dir.parent
+        tmp_parent.mkdir(parents=True, exist_ok=True)
+        tmp_dir = Path(tempfile.mkdtemp(prefix=f"live-hls-{channel.pk}-", dir=str(tmp_parent)))
         metadata = probe_video(input_path)
         duration = metadata.get("duration") or 0
         update_progress = progress_updater(LiveTVChannel, channel.pk)
@@ -481,7 +492,7 @@ def convert_live_channel_to_hls(channel_id):
             logger.exception("New video push notification failed for channel %s", channel.pk)
         return channel.hls_master_url
     except Exception as exc:
-        if tmp_dir.exists():
+        if tmp_dir and tmp_dir.exists():
             shutil.rmtree(tmp_dir, ignore_errors=True)
         LiveTVChannel.objects.filter(pk=channel.pk).update(
             hls_status=LiveTVChannel.HLSStatus.FAILED,

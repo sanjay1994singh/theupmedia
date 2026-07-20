@@ -44,6 +44,16 @@ def process_short_hls_task(short_id):
 
 @shared_task(name="live_tv.process_live_channel_hls")
 def process_live_channel_hls_task(channel_id):
+    initial_status = (
+        LiveTVChannel.objects.filter(pk=channel_id)
+        .values_list("hls_status", flat=True)
+        .first()
+    )
+    if initial_status in {None, LiveTVChannel.HLSStatus.COMPLETED}:
+        # A task can be restored by Redis after a worker restart. Completed or
+        # deleted uploads must not start/extend the serial queue again.
+        return
+
     try:
         convert_live_channel_to_hls(channel_id)
     except Exception:
@@ -53,6 +63,17 @@ def process_live_channel_hls_task(channel_id):
         repair_live_tv_health(queue_hls=False, queue_renders=True)
     except Exception:
         logger.exception("Live TV health repair failed after channel %s.", channel_id)
+
+    current_status = (
+        LiveTVChannel.objects.filter(pk=channel_id)
+        .values_list("hls_status", flat=True)
+        .first()
+    )
+    if current_status == LiveTVChannel.HLSStatus.PENDING:
+        # The converter intentionally leaves a job pending when another HLS
+        # process/lock is active. Do not bounce between pending channels and
+        # create an unbounded Celery task chain.
+        return
 
     stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
     if LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.PROCESSING, updated_at__gte=stale_cutoff).exists():

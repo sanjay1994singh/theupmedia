@@ -41,7 +41,7 @@ except ImportError:  # pragma: no cover - server requirements include Pillow
     Image = ImageDraw = ImageFont = None
 
 from .forms import LiveTVChannelForm
-from .hls import validate_uploaded_video
+from .hls import hls_processing_lock_is_active, validate_uploaded_video
 from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, PushDevice, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
 from .services import calculate_current_playback, enqueue_completed_broadcast_renders, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
 from blog.models import BlogPost
@@ -194,6 +194,11 @@ def enqueue_live_channel_hls_job(channel_id):
 
     stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
     if channel.hls_status == LiveTVChannel.HLSStatus.PROCESSING and channel.updated_at >= stale_cutoff:
+        return "processing"
+
+    if hls_processing_lock_is_active("live-channel"):
+        # The filesystem lock is authoritative even if a racing health request
+        # has not observed the latest database status yet.
         return "processing"
 
     other_active = (
