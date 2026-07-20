@@ -1,4 +1,6 @@
 from datetime import timedelta
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
@@ -6,12 +8,12 @@ from django.core.management import call_command
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models.deletion import ProtectedError
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from .models import LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, ShortsVideo, SocialRenderedVideo
-from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, enqueue_completed_broadcast_renders, rebuild_live_playlist, recover_stale_render_jobs
+from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, enqueue_completed_broadcast_renders, get_main_live_channel, rebuild_live_playlist, recover_stale_render_jobs
 from .tasks import process_live_channel_hls_task
 
 
@@ -49,6 +51,89 @@ class PersistentTickerClockTests(TestCase):
         self.assertEqual(payload["ticker_started_at"], setting.ticker_started_at.isoformat())
         self.assertIn(setting.ticker_started_at.isoformat(), payload["ticker_clock_key"])
         self.assertGreaterEqual(payload["ticker_offset_seconds"], 0)
+
+
+class DashboardPermanentPurgeTests(TestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_superuser(
+            username="purge-admin",
+            email="purge@example.com",
+            password="test-password",
+        )
+        self.client.force_login(self.admin)
+        self.temp_media = TemporaryDirectory()
+        self.settings_override = override_settings(MEDIA_ROOT=self.temp_media.name)
+        self.settings_override.enable()
+
+    def tearDown(self):
+        self.settings_override.disable()
+        self.temp_media.cleanup()
+
+    def media_file(self, relative_path, content=b"video"):
+        path = Path(self.temp_media.name) / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        return path
+
+    def test_purge_deletes_files_and_records_but_preserves_folders_and_settings(self):
+        main = get_main_live_channel(create=True)
+        source_file = self.media_file("live-tv/videos/2026/07/source.mp4")
+        hls_file = self.media_file("live-tv/hls/34/360p/segment_00000.ts")
+        settings_logo = self.media_file("live-tv/settings/logo.png", b"logo")
+        video = LiveTVChannel.objects.create(
+            title="Delete me",
+            source_type=LiveTVChannel.SourceType.DIRECT,
+            video_file="live-tv/videos/2026/07/source.mp4",
+            hls_status=LiveTVChannel.HLSStatus.COMPLETED,
+            hls_master_url="live-tv/hls/34/master.m3u8",
+            duration_seconds=60,
+            auto_add_to_live=True,
+        )
+        LiveTVPlaylistItem.objects.create(channel=main, video=video, position=0, duration_seconds=60)
+        SocialRenderedVideo.objects.create(
+            title="Delete render",
+            source_video=video,
+            status=SocialRenderedVideo.Status.COMPLETED,
+            rendered_video="social-render/rendered/2026/07/render.mp4",
+        )
+        rendered_file = self.media_file("social-render/rendered/2026/07/render.mp4")
+
+        response = self.client.post(
+            reverse("live_tv:api_control_dashboard_action"),
+            {"action": "purge_live_tv_video_content", "confirmation": "DELETE"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+        self.assertFalse(LiveTVChannel.objects.filter(pk=video.pk).exists())
+        self.assertEqual(LiveTVPlaylistItem.objects.count(), 0)
+        self.assertEqual(SocialRenderedVideo.objects.count(), 0)
+        self.assertFalse(source_file.exists())
+        self.assertFalse(hls_file.exists())
+        self.assertFalse(rendered_file.exists())
+        self.assertTrue(source_file.parent.is_dir())
+        self.assertTrue(hls_file.parent.is_dir())
+        self.assertTrue(settings_logo.exists())
+        self.assertTrue(main.__class__.objects.filter(pk=main.pk).exists())
+
+    def test_purge_refuses_while_hls_processing_is_active(self):
+        source_file = self.media_file("live-tv/videos/2026/07/active.mp4")
+        video = LiveTVChannel.objects.create(
+            title="Active",
+            source_type=LiveTVChannel.SourceType.DIRECT,
+            video_file="live-tv/videos/2026/07/active.mp4",
+            hls_status=LiveTVChannel.HLSStatus.PROCESSING,
+            auto_add_to_live=True,
+        )
+
+        response = self.client.post(
+            reverse("live_tv:api_control_dashboard_action"),
+            {"action": "purge_live_tv_video_content", "confirmation": "DELETE"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertTrue(LiveTVChannel.objects.filter(pk=video.pk).exists())
+        self.assertTrue(source_file.exists())
 
 
 class StaleRenderRecoveryTests(TestCase):

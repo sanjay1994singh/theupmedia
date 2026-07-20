@@ -422,6 +422,44 @@
   color: #f4f8ff;
 }
 
+.danger-zone-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 18px;
+  padding: 20px;
+  border-color: rgba(255, 69, 88, .45);
+  background: linear-gradient(135deg, rgba(91, 13, 27, .42), rgba(24, 10, 19, .86));
+}
+
+.danger-zone-card h2,
+.danger-zone-card p {
+  margin: 0;
+}
+
+.danger-zone-card p {
+  max-width: 850px;
+  margin-top: 7px;
+  color: #c9aeb4;
+}
+
+.danger-eyebrow {
+  display: block;
+  margin-bottom: 6px;
+  color: #ff6675;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .14em;
+}
+
+.danger-action-btn {
+  flex: 0 0 auto;
+  border: 1px solid #ff5364;
+  background: #b40f25;
+  box-shadow: 0 12px 30px rgba(180, 15, 37, .3);
+}
+
 .ghost-btn:disabled,
 .refresh-btn:disabled,
 .action-btn:disabled {
@@ -468,5 +506,10 @@
   .storage-summary {
     margin-top: 14px;
     text-align: left;
+  }
+
+  .danger-zone-card {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

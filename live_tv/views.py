@@ -2198,6 +2198,82 @@ def delete_file_field(file_field):
         file_field.delete(save=False)
 
 
+def delete_live_tv_video_files_preserve_directories():
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    relative_roots = [
+        "live-tv/videos",
+        "live-tv/hls",
+        "live-tv/posters",
+        "shorts",
+        "social-render",
+        "media-downloads",
+        "mobile-video-uploads",
+        "videos",
+    ]
+    deleted_files = 0
+    preserved_directories = 0
+    for relative_root in relative_roots:
+        root = (media_root / relative_root).resolve()
+        if not dashboard_path_is_relative_to(root, media_root):
+            raise ValueError(f"Unsafe Live TV media path: {root}")
+        root.mkdir(parents=True, exist_ok=True)
+        for path in root.rglob("*"):
+            try:
+                if path.is_symlink() or path.is_file():
+                    path.unlink(missing_ok=True)
+                    deleted_files += 1
+                elif path.is_dir():
+                    preserved_directories += 1
+            except OSError:
+                logger.exception("Could not delete Live TV media file %s", path)
+        preserved_directories += 1
+    return {
+        "deleted_files": deleted_files,
+        "preserved_directories": preserved_directories,
+    }
+
+
+def purge_live_tv_video_content():
+    active_counts = {
+        "live_hls": LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.PROCESSING).count(),
+        "shorts_hls": ShortsVideo.objects.filter(hls_status=ShortsVideo.HLSStatus.PROCESSING).count(),
+        "renders": SocialRenderedVideo.objects.filter(status=SocialRenderedVideo.Status.PROCESSING).count(),
+        "downloads": MediaDownload.objects.filter(status=MediaDownload.Status.PROCESSING).count(),
+    }
+    if hls_processing_lock_is_active("live-channel") or any(active_counts.values()):
+        return None, active_counts
+
+    before = {
+        "videos": LiveTVChannel.objects.filter(source_type=LiveTVChannel.SourceType.DIRECT).count(),
+        "playlist_items": LiveTVPlaylistItem.objects.count(),
+        "renders": SocialRenderedVideo.objects.count(),
+        "shorts": ShortsVideo.objects.count(),
+        "downloads": MediaDownload.objects.count(),
+    }
+    now = timezone.now()
+    with transaction.atomic():
+        SocialRenderedVideo.objects.all().delete()
+        MediaDownload.objects.all().delete()
+        ShortsVideo.objects.all().delete()
+        for channel in LiveTVChannel.objects.filter(source_type=LiveTVChannel.SourceType.PLAYLIST):
+            channel.playlist_cycles.all().delete()
+            channel.playlist_items.all().delete()
+        LiveTVChannel.objects.filter(source_type=LiveTVChannel.SourceType.DIRECT).delete()
+        LiveTVChannel.objects.filter(source_type=LiveTVChannel.SourceType.PLAYLIST).update(
+            playback_started_at=None,
+            last_playlist_update=now,
+            playlist_version=F("playlist_version") + 1,
+            hls_status=LiveTVChannel.HLSStatus.PENDING,
+            hls_progress_percent=0,
+            hls_master_url="",
+            processing_error="",
+        )
+
+    file_report = delete_live_tv_video_files_preserve_directories()
+    DASHBOARD_PROJECT_STORAGE_CACHE.update({"timestamp": 0.0, "data": None})
+    return {**before, **file_report}, active_counts
+
+
 def manageable_render_jobs_for(user):
     return SocialRenderedVideo.objects.filter(Q(created_by=user) | Q(created_by__isnull=True))
 
@@ -3901,6 +3977,33 @@ def live_control_dashboard_action_api(request):
             job.save(update_fields=["status", "progress_percent", "error_message", "updated_at"])
             enqueue_social_render_job(job.pk)
         return JsonResponse({"ok": True, "message": f"Retried {len(jobs)} render jobs."})
+    if action == "purge_live_tv_video_content":
+        if request.POST.get("confirmation") != "DELETE":
+            return JsonResponse(
+                {"ok": False, "message": "Permanent delete confirmation missing."},
+                status=400,
+            )
+        report, active_counts = purge_live_tv_video_content()
+        if report is None:
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "message": "Active HLS/render/download processing chal rahi hai. Complete hone ke baad delete karein.",
+                    "active": active_counts,
+                },
+                status=409,
+            )
+        return JsonResponse(
+            {
+                "ok": True,
+                "message": (
+                    f"Permanent cleanup complete: {report['videos']} videos, "
+                    f"{report['renders']} renders, {report['shorts']} shorts aur "
+                    f"{report['deleted_files']} files deleted. Folders preserved."
+                ),
+                "report": report,
+            }
+        )
     if action in {"toggle_ticker", "toggle_live_badge", "toggle_channel_logo", "toggle_lower_third"}:
         setting = live_tv_setting()
         field_map = {

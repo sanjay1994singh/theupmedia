@@ -203,7 +203,16 @@
       ...(processing.render_jobs || []).filter((job) => isActiveState(job.status)).map((job) => ({ ...job, kind: "Render" })),
       ...(processing.downloads_recent || []).filter((job) => isActiveState(job.status)).map((job) => ({ ...job, kind: "Download" })),
     ];
-    return `${pageTitle("Upload & Processing", "Live status of HLS, uploads, downloads and render jobs", {})}<div class="grid main-grid two-col">${renderProcessingCard(processing)}<section class="dashboard-card"><div class="card-head"><h2>Active Jobs</h2></div><table class="table"><thead><tr><th>Type</th><th>Title</th><th>Status</th><th>Progress</th></tr></thead><tbody>${activeRows.map((job) => `<tr><td>${esc(job.kind)}</td><td>${esc(job.title)}</td><td>${status(job.status || job.hls_status)}</td><td>${progress(job.progress_percent ?? job.hls_progress_percent, job.status || job.hls_status)}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No active processing</td></tr>`}</tbody></table></section></div>`;
+    return `${pageTitle("Upload & Processing", "Live status of HLS, uploads, downloads and render jobs", {})}
+      <div class="grid main-grid two-col">${renderProcessingCard(processing)}<section class="dashboard-card"><div class="card-head"><h2>Active Jobs</h2></div><table class="table"><thead><tr><th>Type</th><th>Title</th><th>Status</th><th>Progress</th></tr></thead><tbody>${activeRows.map((job) => `<tr><td>${esc(job.kind)}</td><td>${esc(job.title)}</td><td>${status(job.status || job.hls_status)}</td><td>${progress(job.progress_percent ?? job.hls_progress_percent, job.status || job.hls_status)}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No active processing</td></tr>`}</tbody></table></section></div>
+      <section class="dashboard-card danger-zone-card">
+        <div>
+          <span class="danger-eyebrow">PERMANENT DELETE</span>
+          <h2>Delete All Live TV Video Content</h2>
+          <p>Uploaded videos, HLS files, playlist/cycles, renders, shorts aur download files delete honge. Main channel, settings, logo, categories/state/city aur folders safe rahenge.</p>
+        </div>
+        <button class="action-btn danger-action-btn" data-action="purge_live_tv_video_content">Delete Video Content</button>
+      </section>`;
   }
 
   function renderServer(payload) {
@@ -446,8 +455,16 @@
   }
 
   async function runAction(action) {
+    if (action === "purge_live_tv_video_content") {
+      const confirmation = window.prompt("Permanent delete ke liye DELETE type karein. Ye video content recover nahi hoga.");
+      if (confirmation !== "DELETE") {
+        showAlert("Permanent delete cancelled.", true);
+        return;
+      }
+    }
     const form = new FormData();
     form.append("action", action);
+    if (action === "purge_live_tv_video_content") form.append("confirmation", "DELETE");
     setLoading(true, "Running dashboard action...");
     try {
       const res = await fetch(shell.dataset.actionUrl, { method: "POST", body: form, headers: { "X-CSRFToken": csrf() } });
