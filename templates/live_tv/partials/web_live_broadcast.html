@@ -12,7 +12,7 @@
     data-server-time="{{ live_server_time }}"
   >
     {% if live_channel and live_channel.is_live and live_settings.show_live_badge %}
-      <span class="web-live-badge"><span></span>{{ live_settings.live_label|default:"LIVE" }}</span>
+      <span class="web-live-badge" style="--live-badge-scale: {{ live_settings.web_live_badge_scale|default:'1.00' }}"><span></span>{{ live_settings.live_label|default:"LIVE" }}</span>
     {% endif %}
 
     {% if live_settings.show_channel_logo %}

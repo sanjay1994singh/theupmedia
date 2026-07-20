@@ -52,6 +52,26 @@ class PersistentTickerClockTests(TestCase):
         self.assertIn(setting.ticker_started_at.isoformat(), payload["ticker_clock_key"])
         self.assertGreaterEqual(payload["ticker_offset_seconds"], 0)
 
+    def test_live_badge_sizes_are_exposed_to_clients(self):
+        setting = LiveTVSetting.get_solo()
+        setting.web_live_badge_size_percent = 75
+        setting.mobile_live_badge_size_percent = 60
+        setting.save()
+
+        response = self.client.get(reverse("live_tv:api_live_current"))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["settings"]["web_live_badge_size_percent"], 75)
+        self.assertEqual(payload["settings"]["mobile_live_badge_size_percent"], 60)
+        self.assertEqual(setting.web_live_badge_scale, "0.75")
+
+    def test_live_badge_sizes_validate_admin_range(self):
+        setting = LiveTVSetting.get_solo()
+        setting.web_live_badge_size_percent = 39
+        with self.assertRaises(ValidationError):
+            setting.full_clean()
+
 
 class DashboardPermanentPurgeTests(TestCase):
     def setUp(self):

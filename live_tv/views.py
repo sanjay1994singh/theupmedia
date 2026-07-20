@@ -533,6 +533,8 @@ def serialize_live_tv_setting(request, setting):
         "live_label": setting.live_label,
         "channel_logo": absolute_media_url(request, setting.channel_logo),
         "show_live_badge": setting.show_live_badge,
+        "web_live_badge_size_percent": setting.web_live_badge_size_percent,
+        "mobile_live_badge_size_percent": setting.mobile_live_badge_size_percent,
         "show_channel_logo": setting.show_channel_logo,
         "show_lower_third": setting.show_lower_third,
         "show_ticker": setting.show_ticker,
@@ -611,6 +613,8 @@ def serialize_channel_for_mobile(request, channel):
         "autoplay": setting.autoplay,
         "live_label": setting.live_label,
         "show_live_badge": setting.show_live_badge,
+        "web_live_badge_size_percent": setting.web_live_badge_size_percent,
+        "mobile_live_badge_size_percent": setting.mobile_live_badge_size_percent,
         "show_channel_logo": setting.show_channel_logo,
         "show_lower_third": setting.show_lower_third and bool((channel.lower_third_label or "").strip() or (channel.headline or "").strip()),
         "show_ticker": setting.show_ticker,
@@ -683,6 +687,8 @@ def serialize_synced_live_state(request, channel, server_time=None):
         "lower_third_label": video.lower_third_label or "",
         "show_lower_third": setting.show_lower_third and bool((video.lower_third_label or "").strip() or (video.headline or "").strip()),
         "show_live_badge": setting.show_live_badge,
+        "web_live_badge_size_percent": setting.web_live_badge_size_percent,
+        "mobile_live_badge_size_percent": setting.mobile_live_badge_size_percent,
         "show_channel_logo": setting.show_channel_logo,
         "show_ticker": setting.show_ticker,
         "channel_logo": absolute_media_url(request, setting.channel_logo),
@@ -2712,6 +2718,12 @@ def mobile_admin_settings_save_api(request):
             setting.mobile_ticker_speed_seconds = max(6, min(120, int(request.POST.get("mobile_ticker_speed_seconds") or setting.mobile_ticker_speed_seconds)))
         except (TypeError, ValueError):
             pass
+    for field in ["web_live_badge_size_percent", "mobile_live_badge_size_percent"]:
+        if field in request.POST:
+            try:
+                setattr(setting, field, max(40, min(200, int(request.POST.get(field) or 100))))
+            except (TypeError, ValueError):
+                pass
     for field in ["show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker", "autoplay"]:
         if field in request.POST:
             setattr(setting, field, request.POST.get(field) in {"1", "true", "on", "yes"})

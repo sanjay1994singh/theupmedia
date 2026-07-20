@@ -4,6 +4,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.template.defaultfilters import slugify
@@ -523,6 +524,16 @@ class LiveTVSetting(models.Model):
     show_ticker = models.BooleanField(default=True)
     autoplay = models.BooleanField(default=False)
     show_live_badge = models.BooleanField(default=True)
+    web_live_badge_size_percent = models.PositiveSmallIntegerField(
+        default=100,
+        help_text="Web Live badge size in percent (40-200).",
+        validators=[MinValueValidator(40), MaxValueValidator(200)],
+    )
+    mobile_live_badge_size_percent = models.PositiveSmallIntegerField(
+        default=100,
+        help_text="Mobile app Live badge size in percent (40-200).",
+        validators=[MinValueValidator(40), MaxValueValidator(200)],
+    )
     default_lower_third_label = models.CharField(max_length=60, null=True,blank=True)
     default_headline = models.CharField(max_length=180, null=True,blank=True)
     default_ticker_label = models.CharField(max_length=60, null=True,blank=True)
@@ -538,6 +549,10 @@ class LiveTVSetting(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def web_live_badge_scale(self):
+        return f"{max(40, min(200, self.web_live_badge_size_percent)) / 100:.2f}"
 
     @classmethod
     def get_solo(cls):
