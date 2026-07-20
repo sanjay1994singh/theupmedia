@@ -56,6 +56,10 @@ sudo systemctl restart theupmedia-celery-beat
 sudo systemctl restart apache2
 ```
 
+The HLS worker repairs ownership for `media/live-tv`, `videos`, `hls`, and
+`hls/.locks` before every start. Do not recreate these paths as root-owned
+directories during manual cleanup.
+
 Check status/logs:
 
 ```bash

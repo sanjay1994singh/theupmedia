@@ -9,6 +9,10 @@ User=www-data
 Group=www-data
 WorkingDirectory=/var/www/theupmedia
 Environment="DJANGO_SETTINGS_MODULE=theupmedia.settings"
+ExecStartPre=+/usr/bin/install -d -o www-data -g www-data -m 0755 /var/www/theupmedia/media/live-tv
+ExecStartPre=+/usr/bin/install -d -o www-data -g www-data -m 0755 /var/www/theupmedia/media/live-tv/videos
+ExecStartPre=+/usr/bin/install -d -o www-data -g www-data -m 0755 /var/www/theupmedia/media/live-tv/hls
+ExecStartPre=+/usr/bin/install -d -o www-data -g www-data -m 0755 /var/www/theupmedia/media/live-tv/hls/.locks
 ExecStart=/var/www/theupmedia/env/bin/celery -A theupmedia worker --loglevel=INFO --concurrency=1 --queues=celery,hls --hostname=hls@%%h
 Restart=always
 RestartSec=10
