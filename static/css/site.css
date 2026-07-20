@@ -2519,6 +2519,7 @@ time {
 
 .web-live-ticker-marquee p {
   animation: web-live-ticker-scroll var(--ticker-speed, 22s) linear infinite;
+  animation-delay: var(--ticker-delay, 0s);
   color: #151515;
   flex: 0 0 auto;
   font-family: "Noto Sans Devanagari", "Noto Sans", Arial, sans-serif;

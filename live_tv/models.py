@@ -8,6 +8,7 @@ from django.db import models
 from django.db.models import Q
 from django.template.defaultfilters import slugify
 from django.urls import reverse
+from django.utils import timezone
 
 
 class LiveTVCategory(models.Model):
@@ -528,6 +529,7 @@ class LiveTVSetting(models.Model):
     default_ticker_text = models.TextField(null=True, blank=True)
     ticker_speed_seconds = models.PositiveSmallIntegerField(default=22)
     mobile_ticker_speed_seconds = models.PositiveSmallIntegerField(default=12)
+    ticker_started_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -544,6 +546,17 @@ class LiveTVSetting(models.Model):
 
     def save(self, *args, **kwargs):
         self.pk = 1
+        ticker_fields = (
+            "default_ticker_label",
+            "default_ticker_text",
+            "ticker_speed_seconds",
+            "mobile_ticker_speed_seconds",
+        )
+        previous = type(self).objects.filter(pk=self.pk).values(*ticker_fields).first()
+        if previous and any(previous[field] != getattr(self, field) for field in ticker_fields):
+            self.ticker_started_at = timezone.now()
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = set(kwargs["update_fields"]) | {"ticker_started_at"}
         super().save(*args, **kwargs)
 
 class NewsTickerSetting(models.Model):

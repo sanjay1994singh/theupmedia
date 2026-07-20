@@ -67,7 +67,13 @@
           <i class="is-red"></i>
           <i class="is-white"></i>
         </div>
-        <div class="web-live-ticker-marquee" style="--ticker-speed: {{ live_ticker.speed_seconds|default:live_settings.ticker_speed_seconds }}s" aria-label="{{ live_ticker.text|default:live_settings.default_ticker_text }}">
+        <div
+          class="web-live-ticker-marquee"
+          style="--ticker-speed: {{ live_ticker.speed_seconds|default:live_settings.ticker_speed_seconds }}s; --ticker-delay: -{{ live_ticker.offset_seconds|default:0 }}s"
+          data-ticker-clock-key="{{ live_ticker.clock_key }}"
+          data-ticker-started-at="{{ live_ticker.started_at|date:'c' }}"
+          data-ticker-server-time="{{ live_ticker.server_time|date:'c' }}"
+          aria-label="{{ live_ticker.text|default:live_settings.default_ticker_text }}">
           <p>{{ live_ticker.text|default:live_settings.default_ticker_text }}</p>
           <p aria-hidden="true">{{ live_ticker.text|default:live_settings.default_ticker_text }}</p>
         </div>

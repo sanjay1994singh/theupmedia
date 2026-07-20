@@ -10,7 +10,7 @@ from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVState, ShortsVideo, SocialRenderedVideo
+from .models import LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, ShortsVideo, SocialRenderedVideo
 from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, enqueue_completed_broadcast_renders, rebuild_live_playlist, recover_stale_render_jobs
 from .tasks import process_live_channel_hls_task
 
@@ -21,6 +21,34 @@ class CeleryQueueRoutingTests(SimpleTestCase):
         self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.process_short_hls"]["queue"], "hls")
         self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.render_social_video"]["queue"], "render")
         self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.render_live_broadcast_video"]["queue"], "render")
+
+
+class PersistentTickerClockTests(TestCase):
+    def test_clock_only_resets_when_ticker_configuration_changes(self):
+        setting = LiveTVSetting.get_solo()
+        original_started_at = setting.ticker_started_at
+
+        setting.live_label = "ON AIR"
+        setting.save()
+        setting.refresh_from_db()
+        self.assertEqual(setting.ticker_started_at, original_started_at)
+
+        reset_at = original_started_at + timedelta(minutes=5)
+        with patch("live_tv.models.timezone.now", return_value=reset_at):
+            setting.default_ticker_text = "Updated server ticker"
+            setting.save()
+        setting.refresh_from_db()
+        self.assertEqual(setting.ticker_started_at, reset_at)
+
+    def test_empty_live_api_uses_persistent_server_clock(self):
+        setting = LiveTVSetting.get_solo()
+        response = self.client.get(reverse("live_tv:api_live_current"))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["ticker_started_at"], setting.ticker_started_at.isoformat())
+        self.assertIn(setting.ticker_started_at.isoformat(), payload["ticker_clock_key"])
+        self.assertGreaterEqual(payload["ticker_offset_seconds"], 0)
 
 
 class StaleRenderRecoveryTests(TestCase):

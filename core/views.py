@@ -43,6 +43,10 @@ def home(request):
         mobile_speed_seconds=home_live_settings.mobile_ticker_speed_seconds,
         style="red_white_slant",
         updated_at=home_live_settings.updated_at,
+        started_at=home_live_settings.ticker_started_at,
+        server_time=home_live_server_time,
+        offset_seconds=max(0.0, (home_live_server_time - home_live_settings.ticker_started_at).total_seconds()),
+        clock_key=f"live-tv-ticker-{home_live_settings.pk}-{home_live_settings.ticker_started_at.isoformat()}",
     )
     if home_live_tv and home_live_tv.source_type == LiveTVChannel.SourceType.PLAYLIST:
         playlist_state = calculate_current_playback(home_live_tv, at=home_live_server_time)

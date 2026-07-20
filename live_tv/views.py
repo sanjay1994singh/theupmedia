@@ -510,6 +510,8 @@ def live_tv_setting():
 
 def news_ticker_setting():
     setting = live_tv_setting()
+    server_time = timezone.now()
+    ticker_started_at = setting.ticker_started_at or setting.updated_at or server_time
     return SimpleNamespace(
         label=setting.default_ticker_label,
         text=setting.default_ticker_text,
@@ -517,6 +519,10 @@ def news_ticker_setting():
         mobile_speed_seconds=setting.mobile_ticker_speed_seconds,
         style="red_white_slant",
         updated_at=setting.updated_at,
+        started_at=ticker_started_at,
+        server_time=server_time,
+        offset_seconds=max(0.0, (server_time - ticker_started_at).total_seconds()),
+        clock_key=f"live-tv-ticker-{setting.pk}-{ticker_started_at.isoformat()}",
     )
 
 
@@ -538,6 +544,9 @@ def serialize_live_tv_setting(request, setting):
         "ticker_speed_seconds": setting.ticker_speed_seconds,
         "mobile_ticker_speed_seconds": setting.mobile_ticker_speed_seconds,
         "ticker_style": "red_white_slant",
+        "ticker_started_at": setting.ticker_started_at.isoformat(),
+        "ticker_server_time": timezone.now().isoformat(),
+        "ticker_clock_key": f"live-tv-ticker-{setting.pk}-{setting.ticker_started_at.isoformat()}",
         "updated_at": setting.updated_at.isoformat(),
     }
 
@@ -630,9 +639,9 @@ def serialize_synced_live_state(request, channel, server_time=None):
     stream_url = hls_url
     next_video = state["next_entry"].video if state.get("next_entry") else None
     ticker = ticker_items_from_text(ticker_setting.text)
-    ticker_started_at = channel.playback_started_at or (state["cycle"].starts_at if state.get("cycle") else state["video_started_at"])
+    ticker_started_at = setting.ticker_started_at or setting.updated_at or server_time
     ticker_offset_seconds = max(0.0, (server_time - ticker_started_at).total_seconds())
-    ticker_clock_key = f"live-tv-setting-{setting.pk}-{setting.updated_at.isoformat() if setting.updated_at else ''}"
+    ticker_clock_key = f"live-tv-ticker-{setting.pk}-{ticker_started_at.isoformat()}"
     return {
         "is_live": True,
         "is_live_synced": True,
@@ -691,7 +700,7 @@ def serialize_live_fallback(request, channel, server_time=None):
     server_time = server_time or timezone.now()
     data = serialize_channel_for_mobile(request, channel)
     setting = live_tv_setting()
-    ticker_started_at = setting.updated_at or server_time
+    ticker_started_at = setting.ticker_started_at or setting.updated_at or server_time
     ticker_offset_seconds = max(0.0, (server_time - ticker_started_at).total_seconds())
     data.update(
         {
@@ -710,7 +719,7 @@ def serialize_live_fallback(request, channel, server_time=None):
             "ticker_started_at": ticker_started_at.isoformat(),
             "ticker_server_time": server_time.isoformat(),
             "ticker_offset_seconds": round(ticker_offset_seconds, 3),
-            "ticker_clock_key": f"live-tv-setting-{setting.pk}-{setting.updated_at.isoformat() if setting.updated_at else ''}",
+            "ticker_clock_key": f"live-tv-ticker-{setting.pk}-{ticker_started_at.isoformat()}",
             "playlist_total_duration": 0,
             "playlist_version": channel.playlist_version,
             "loop_enabled": channel.loop_enabled,
@@ -2250,16 +2259,17 @@ def current_live_api(request, slug=None):
 
     data = serialize_empty_live_tv(request)
     setting = live_tv_setting()
+    ticker_started_at = setting.ticker_started_at or setting.updated_at or server_time
     data.update(
         {
             "is_live": False,
             "is_live_synced": False,
             "message": "अभी कोई लाइव प्रसारण उपलब्ध नहीं है",
             "server_time": server_time.isoformat(),
-            "ticker_started_at": (setting.updated_at or server_time).isoformat(),
+            "ticker_started_at": ticker_started_at.isoformat(),
             "ticker_server_time": server_time.isoformat(),
-            "ticker_offset_seconds": round(max(0.0, (server_time - (setting.updated_at or server_time)).total_seconds()), 3),
-            "ticker_clock_key": f"live-tv-setting-{setting.pk}-{setting.updated_at.isoformat() if setting.updated_at else ''}",
+            "ticker_offset_seconds": round(max(0.0, (server_time - ticker_started_at).total_seconds()), 3),
+            "ticker_clock_key": f"live-tv-ticker-{setting.pk}-{ticker_started_at.isoformat()}",
         }
     )
     return JsonResponse(data)
