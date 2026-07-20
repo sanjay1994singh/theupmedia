@@ -531,6 +531,54 @@ def enqueue_completed_broadcast_renders(channel, at=None, state=None):
     return []
 
 
+def recover_stale_render_jobs(at=None):
+    """Requeue one orphaned render without competing with a healthy active render."""
+    at = at or timezone.now()
+    processing_cutoff = at - timedelta(minutes=10)
+    pending_cutoff = at - timedelta(seconds=30)
+
+    healthy_processing_exists = SocialRenderedVideo.objects.filter(
+        status=SocialRenderedVideo.Status.PROCESSING,
+        rendered_video="",
+        updated_at__gte=processing_cutoff,
+    ).exists()
+    if healthy_processing_exists:
+        return []
+
+    job = (
+        SocialRenderedVideo.objects.filter(
+            Q(status=SocialRenderedVideo.Status.PROCESSING, updated_at__lt=processing_cutoff)
+            | Q(status=SocialRenderedVideo.Status.PENDING, updated_at__lt=pending_cutoff),
+            rendered_video="",
+            is_active=True,
+        )
+        .order_by("created_at", "pk")
+        .first()
+    )
+    if not job:
+        return []
+
+    was_processing = job.status == SocialRenderedVideo.Status.PROCESSING
+    job.status = SocialRenderedVideo.Status.PENDING
+    job.progress_percent = 0
+    job.started_at = None
+    job.error_message = "Stale render recovered and queued by health watchdog."
+    if was_processing:
+        job.retry_count += 1
+    job.save(
+        update_fields=[
+            "status",
+            "progress_percent",
+            "started_at",
+            "error_message",
+            "retry_count",
+            "updated_at",
+        ]
+    )
+    queue_broadcast_render_task(job.pk)
+    return [job.pk]
+
+
 def ensure_current_cycle(channel, at=None):
     at = at or timezone.now()
     expire_old_live_playlist_items(channel, at=at)
@@ -795,6 +843,7 @@ def repair_live_tv_health(queue_hls=True, queue_renders=True, at=None):
         "hls_queued": 0,
         "playlist_added": 0,
         "renders_queued": 0,
+        "stale_renders_queued": 0,
     }
     stale_cutoff = at - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
     failed_retry_cutoff = at - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_FAILED_RETRY_MINUTES", 10))
@@ -862,6 +911,7 @@ def repair_live_tv_health(queue_hls=True, queue_renders=True, at=None):
         ensure_current_cycle(channel, at=at)
 
     if queue_renders:
+        report["stale_renders_queued"] = len(recover_stale_render_jobs(at=at))
         state = calculate_current_playback(channel, at=at)
         report["renders_queued"] = len(enqueue_completed_broadcast_renders(channel, at=at, state=state))
     return report

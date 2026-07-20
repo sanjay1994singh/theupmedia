@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVState, ShortsVideo, SocialRenderedVideo
-from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, enqueue_completed_broadcast_renders, rebuild_live_playlist
+from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, enqueue_completed_broadcast_renders, rebuild_live_playlist, recover_stale_render_jobs
 from .tasks import process_live_channel_hls_task
 
 
@@ -21,6 +21,28 @@ class CeleryQueueRoutingTests(SimpleTestCase):
         self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.process_short_hls"]["queue"], "hls")
         self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.render_social_video"]["queue"], "render")
         self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.render_live_broadcast_video"]["queue"], "render")
+
+
+class StaleRenderRecoveryTests(TestCase):
+    @patch("live_tv.services.queue_broadcast_render_task")
+    def test_orphaned_processing_render_is_requeued(self, queue_task):
+        old_time = timezone.now() - timedelta(minutes=20)
+        job = SocialRenderedVideo.objects.create(
+            title="Orphaned render",
+            status=SocialRenderedVideo.Status.PROCESSING,
+            progress_percent=19,
+            is_active=True,
+        )
+        SocialRenderedVideo.objects.filter(pk=job.pk).update(updated_at=old_time)
+
+        recovered = recover_stale_render_jobs(at=timezone.now())
+
+        job.refresh_from_db()
+        self.assertEqual(recovered, [job.pk])
+        self.assertEqual(job.status, SocialRenderedVideo.Status.PENDING)
+        self.assertEqual(job.progress_percent, 0)
+        self.assertEqual(job.retry_count, 1)
+        queue_task.assert_called_once_with(job.pk)
 
 
 class ControlDashboardTests(TestCase):
