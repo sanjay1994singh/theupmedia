@@ -3062,7 +3062,7 @@ def dashboard_dir_size(path, max_files=30000, excluded_dirs=None):
         return 0
     total = 0
     seen = 0
-    excluded = set(excluded_dirs or DASHBOARD_PROJECT_EXCLUDED_DIRS)
+    excluded = set(DASHBOARD_PROJECT_EXCLUDED_DIRS if excluded_dirs is None else excluded_dirs)
     for root, dirs, files in os.walk(path):
         dirs[:] = [name for name in dirs if name not in excluded]
         for filename in files:
@@ -3122,32 +3122,54 @@ def dashboard_project_storage_stats():
     shorts_media = media_root / "shorts"
     rendered_paths = [media_root / "rendered", media_root / "live-tv" / "rendered"]
     downloads_media = media_root / "media-downloads"
+    mobile_uploads_media = media_root / "mobile-video-uploads"
+    social_downloads_media = media_root / "social_downloads"
+    other_videos_media = media_root / "videos"
+    editorial_media_paths = [media_root / "articles", media_root / "blog", media_root / "share"]
+    python_env_paths = [base_dir / "env", base_dir / ".venv", base_dir / "venv"]
+    git_path = base_dir / ".git"
 
     media_size = dashboard_dir_size(media_root)
     live_size = dashboard_dir_size(live_media)
     shorts_size = dashboard_dir_size(shorts_media)
     rendered_size = sum(dashboard_dir_size(path) for path in rendered_paths)
     downloads_size = dashboard_dir_size(downloads_media)
+    mobile_uploads_size = dashboard_dir_size(mobile_uploads_media)
+    social_downloads_size = dashboard_dir_size(social_downloads_media)
+    other_videos_size = dashboard_dir_size(other_videos_media)
+    editorial_media_size = sum(dashboard_dir_size(path) for path in editorial_media_paths)
     static_root_size = dashboard_dir_size(static_root)
     static_source_size = sum(dashboard_dir_size(path) for path in static_dirs)
+    static_total_size = static_root_size + static_source_size
     source_size = dashboard_project_source_size(base_dir, [media_root, static_root, *static_dirs])
+    python_env_size = sum(dashboard_dir_size(path) for path in python_env_paths)
+    git_size = dashboard_dir_size(git_path, excluded_dirs=set())
     project_total = media_size + static_root_size + static_source_size + source_size
+    complete_project_total = project_total + python_env_size + git_size
 
     disk = shutil.disk_usage(base_dir)
     sections = [
-        ("Project source/code", base_dir, source_size),
-        ("Media uploads", media_root, media_size),
-        ("Live TV media", live_media, live_size),
+        ("Project media (total)", media_root, media_size),
+        ("Live TV videos + HLS", live_media, live_size),
+        ("Mobile upload files", mobile_uploads_media, mobile_uploads_size),
+        ("Social downloader files", social_downloads_media, social_downloads_size),
+        ("Other videos / HLS", other_videos_media, other_videos_size),
+        ("Articles / blog / share media", " + ".join(str(path) for path in editorial_media_paths), editorial_media_size),
         ("Shorts media", shorts_media, shorts_size),
         ("Rendered videos", " + ".join(str(path) for path in rendered_paths), rendered_size),
         ("Media downloads", downloads_media, downloads_size),
-        ("Collected static", static_root, static_root_size),
-        ("Source static", " + ".join(str(path) for path in static_dirs) or "-", static_source_size),
+        ("Static files", f"{static_root} + {' + '.join(str(path) for path in static_dirs)}", static_total_size),
+        ("Python environment", " + ".join(str(path) for path in python_env_paths), python_env_size),
+        ("Git repository", git_path, git_size),
+        ("Source code", base_dir, source_size),
+        ("Complete project folder", base_dir, complete_project_total),
     ]
     data = {
         "project_root": str(base_dir),
         "project_total_bytes": project_total,
         "project_total_display": dashboard_human_bytes(project_total),
+        "complete_project_total_bytes": complete_project_total,
+        "complete_project_total_display": dashboard_human_bytes(complete_project_total),
         "project_disk_total": disk.total,
         "project_disk_used": disk.used,
         "project_disk_free": disk.free,
