@@ -1,5 +1,3 @@
-import hashlib
-import json
 import logging
 import threading
 from datetime import timedelta
@@ -289,24 +287,19 @@ def live_broadcast_visual_snapshot(snapshot):
 
 
 def live_broadcast_render_identity(channel, video, playlist_item, snapshot):
-    visual_snapshot = live_broadcast_visual_snapshot(snapshot)
-    fingerprint = hashlib.sha1(json.dumps(visual_snapshot, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:16]
-    playlist_slot = playlist_item.pk if playlist_item else "direct"
-    return f"live:v2:{channel.pk}:{playlist_slot}:{video.pk}:{fingerprint}"
+    # A source upload is rendered only once, regardless of later playlist
+    # cycles, ticker changes, channel changes, rebuilds, or retries.
+    return f"live:source:v3:{video.pk}"
 
 
 def same_live_broadcast_render_jobs(channel, video, playlist_item):
-    queryset = SocialRenderedVideo.objects.filter(
-        live_channel=channel,
+    return SocialRenderedVideo.objects.filter(
         source_video=video,
         frame_category="live_broadcast",
         frame_template="broadcast_live_tv",
         render_format="16:9",
         is_active=True,
     )
-    if playlist_item:
-        queryset = queryset.filter(playlist_item=playlist_item)
-    return queryset
 
 
 def matching_live_broadcast_render_job(queryset, snapshot, render_key=None):
@@ -327,23 +320,21 @@ def completed_live_broadcast_render_job(channel, video, playlist_item, snapshot,
         .filter(status__in=[SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE])
         .exclude(rendered_video="")
     )
-    return matching_live_broadcast_render_job(queryset, snapshot, render_key)
+    return queryset.order_by("completed_at", "created_at", "pk").first()
 
 
 def queueable_live_broadcast_render_job(channel, video, playlist_item, snapshot, render_key):
     queryset = same_live_broadcast_render_jobs(channel, video, playlist_item).filter(
         status__in=[SocialRenderedVideo.Status.PENDING, SocialRenderedVideo.Status.PROCESSING]
     )
-    return matching_live_broadcast_render_job(queryset, snapshot, render_key)
+    return queryset.order_by("created_at", "pk").first()
 
 
 def mark_duplicate_live_render_jobs_skipped(canonical_job):
     if not canonical_job or not canonical_job.source_video_id:
         return 0
     queryset = SocialRenderedVideo.objects.filter(
-        live_channel_id=canonical_job.live_channel_id,
         source_video_id=canonical_job.source_video_id,
-        playlist_item_id=canonical_job.playlist_item_id,
         frame_category=canonical_job.frame_category,
         frame_template=canonical_job.frame_template,
         render_format=canonical_job.render_format,

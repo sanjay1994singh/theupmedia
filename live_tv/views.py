@@ -1683,27 +1683,21 @@ def live_broadcast_visual_snapshot(snapshot):
 
 
 def duplicate_completed_render_for(job):
-    if not job or not job.source_video_id or not job.live_channel_id:
+    if not job or not job.source_video_id:
         return None
-    queryset = SocialRenderedVideo.objects.filter(
-        live_channel_id=job.live_channel_id,
+    return (
+        SocialRenderedVideo.objects.filter(
         source_video_id=job.source_video_id,
-        playlist_item_id=job.playlist_item_id,
-        frame_category=job.frame_category,
-        frame_template=job.frame_template,
-        render_format=job.render_format,
+        frame_category="live_broadcast",
+        frame_template="broadcast_live_tv",
         is_active=True,
         status__in=[SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE],
-    ).exclude(pk=job.pk).exclude(rendered_video="")
-    if job.render_key:
-        keyed = queryset.filter(render_key=job.render_key).first()
-        if keyed:
-            return keyed
-    wanted_snapshot = live_broadcast_visual_snapshot(job.snapshot)
-    for candidate in queryset.order_by("-completed_at", "-updated_at", "-created_at")[:25]:
-        if live_broadcast_visual_snapshot(candidate.snapshot) == wanted_snapshot:
-            return candidate
-    return None
+        )
+        .exclude(pk=job.pk)
+        .exclude(rendered_video="")
+        .order_by("completed_at", "created_at", "pk")
+        .first()
+    )
 
 
 def skip_duplicate_render_job(job, canonical_job):
@@ -3639,7 +3633,7 @@ def dashboard_uploads_snapshot(request):
 
 
 def dashboard_renders_snapshot(request):
-    jobs = SocialRenderedVideo.objects.select_related("source_video", "live_channel").order_by("-created_at")[:40]
+    jobs = SocialRenderedVideo.objects.filter(is_active=True).select_related("source_video", "live_channel").order_by("-created_at")[:40]
     return {
         "items": [
             {

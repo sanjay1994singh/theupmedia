@@ -13,7 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, ShortsVideo, SocialRenderedVideo
-from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, enqueue_completed_broadcast_renders, get_main_live_channel, rebuild_live_playlist, recover_stale_render_jobs
+from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, create_broadcast_render_job, enqueue_completed_broadcast_renders, get_main_live_channel, rebuild_live_playlist, recover_stale_render_jobs
 from .tasks import process_live_channel_hls_task
 
 
@@ -395,6 +395,29 @@ class AutoLivePlaylistTests(TestCase):
         enqueue_completed_broadcast_renders(self.main, at=started_at + timedelta(seconds=12), state=after_first)
         self.assertEqual(SocialRenderedVideo.objects.count(), 1)
         delay.assert_called_once_with(job.pk)
+
+    @patch("live_tv.services.live_video_hls_ready", return_value=True)
+    @patch("django.core.files.storage.FileSystemStorage.exists", return_value=True)
+    def test_same_source_video_is_never_rendered_again_in_a_new_cycle(self, _exists, _hls_ready):
+        video = self.make_video("Render Once", 10)
+        rebuild_live_playlist([video], self.main)
+        first_cycle_item = self.main.playlist_cycles.latest("pk").items.get()
+        first_job, first_created = create_broadcast_render_job(first_cycle_item)
+        self.assertTrue(first_created)
+        SocialRenderedVideo.objects.filter(pk=first_job.pk).update(
+            status=SocialRenderedVideo.Status.COMPLETED,
+            rendered_video="social-render/rendered/render-once.mp4",
+            completed_at=timezone.now(),
+        )
+
+        rebuild_live_playlist([video], self.main)
+        second_cycle_item = self.main.playlist_cycles.latest("pk").items.get()
+        reused_job, second_created = create_broadcast_render_job(second_cycle_item)
+
+        self.assertFalse(second_created)
+        self.assertEqual(reused_job.pk, first_job.pk)
+        self.assertEqual(SocialRenderedVideo.objects.filter(source_video=video).count(), 1)
+        self.assertEqual(first_job.render_key, f"live:source:v3:{video.pk}")
 
     @patch("django.core.files.storage.FileSystemStorage.exists", return_value=True)
     def test_normal_upload_does_not_interrupt_current_cycle(self, _exists):
