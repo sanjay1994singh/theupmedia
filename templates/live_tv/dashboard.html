@@ -63,7 +63,17 @@
         </div>
 
         <div class="tv-form-section">
-          <h2>3. Graphics Options</h2>
+          <h2>3. Required Location</h2>
+          <div class="tv-form-two">
+            <label>Category * {{ form.category }}</label>
+            <label>State * {{ form.state }}</label>
+            <label>City * {{ form.city }}</label>
+          </div>
+          <p>Uploaded video ke liye Category, State aur City mandatory hain.</p>
+        </div>
+
+        <div class="tv-form-section">
+          <h2>4. Graphics Options</h2>
           <div class="tv-toggle-grid">
             <label>{{ form.is_active }} Active</label>
             <label>{{ form.is_live }} Live Indicator</label>
@@ -71,7 +81,7 @@
         </div>
 
         <div class="tv-form-section">
-          <h2>4. 24x7 Auto Playlist</h2>
+          <h2>5. 24x7 Auto Playlist</h2>
           <div class="tv-toggle-grid">
             <label>{{ form.auto_add_to_live }} Auto-add uploaded video</label>
             <label>{{ form.auto_playlist_enabled }} Main playlist channel</label>

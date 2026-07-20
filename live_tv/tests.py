@@ -9,7 +9,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import LiveTVChannel, LiveTVPlaylistItem, SocialRenderedVideo
+from .models import LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVState, ShortsVideo, SocialRenderedVideo
 from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, enqueue_completed_broadcast_renders, rebuild_live_playlist
 from .tasks import process_live_channel_hls_task
 
@@ -35,6 +35,49 @@ class ControlDashboardTests(TestCase):
         response = self.client.get(reverse("live_tv:api_control_dashboard_action"))
         self.assertEqual(response.status_code, 405)
         payload.assert_not_called()
+
+
+class RequiredVideoTaxonomyTests(TestCase):
+    def setUp(self):
+        self.category = LiveTVCategory.objects.create(name="News", slug="news")
+        self.state = LiveTVState.objects.create(name="Uttar Pradesh", slug="uttar-pradesh")
+        self.city = LiveTVCity.objects.create(name="Lucknow", slug="lucknow", state=self.state)
+
+    def test_direct_video_requires_category_state_and_city(self):
+        video = LiveTVChannel(
+            title="Upload",
+            slug="upload",
+            source_type=LiveTVChannel.SourceType.DIRECT,
+            video_file="live-tv/videos/upload.mp4",
+        )
+        with self.assertRaises(ValidationError) as context:
+            video.full_clean()
+        self.assertIn("category", context.exception.message_dict)
+        self.assertIn("state", context.exception.message_dict)
+        self.assertIn("city", context.exception.message_dict)
+
+    def test_shorts_requires_category(self):
+        short = ShortsVideo(
+            title="Short",
+            video_file="shorts/short.mp4",
+            state=self.state,
+            city=self.city,
+        )
+        with self.assertRaises(ValidationError) as context:
+            short.full_clean()
+        self.assertIn("category", context.exception.message_dict)
+
+    def test_mobile_meta_marks_all_three_fields_required(self):
+        response = self.client.get(reverse("live_tv:api_meta"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["required_fields"]["video_upload"],
+            ["category_id", "state_id", "city_id"],
+        )
+        self.assertEqual(
+            response.json()["required_fields"]["shorts_upload"],
+            ["category_id", "state_id", "city_id"],
+        )
 
 
 class LiveTVHLSTaskTests(TestCase):

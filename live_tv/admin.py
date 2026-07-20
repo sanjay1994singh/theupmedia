@@ -6,6 +6,7 @@ from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 
+from .forms import LiveTVChannelForm
 from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistCycle, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, PushDevice, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
 from .services import calculate_current_playback, update_playlist_item
 
@@ -88,6 +89,7 @@ class LiveTVCityAdmin(admin.ModelAdmin):
 
 @admin.register(LiveTVChannel)
 class LiveTVChannelAdmin(admin.ModelAdmin):
+    form = LiveTVChannelForm
     list_display = ("title", "channel_role", "source_type", "hls_status", "hls_progress_display", "playlist_duration_display", "is_live", "is_active", "display_order", "updated_at")
     # list_filter = ("source_type", "auto_playlist_enabled", "auto_add_to_live", "hls_status", "is_live", "is_active")
     search_fields = ("title", "headline", "ticker_text", "city__name", "state__name", "category__name")

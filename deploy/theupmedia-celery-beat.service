@@ -9,7 +9,11 @@ User=www-data
 Group=www-data
 WorkingDirectory=/var/www/theupmedia
 Environment="DJANGO_SETTINGS_MODULE=theupmedia.settings"
-ExecStart=/var/www/theupmedia/env/bin/celery -A theupmedia beat --loglevel=INFO --pidfile=/run/theupmedia-celery-beat.pid
+RuntimeDirectory=theupmedia
+RuntimeDirectoryMode=0755
+StateDirectory=theupmedia
+StateDirectoryMode=0755
+ExecStart=/var/www/theupmedia/env/bin/celery -A theupmedia beat --loglevel=INFO --pidfile=/run/theupmedia/celery-beat.pid --schedule=/var/lib/theupmedia/celerybeat-schedule
 Restart=always
 RestartSec=10
 

@@ -915,11 +915,14 @@ def parse_required_location(post_data):
     return state_id, city_id, {}
 
 
-def parse_optional_category(post_data):
+def parse_required_category(post_data):
     raw_category_id = post_data.get("category_id", "").strip()
-    if raw_category_id.isdigit() and LiveTVCategory.objects.filter(pk=int(raw_category_id), is_active=True).exists():
-        return int(raw_category_id)
-    return None
+    if not raw_category_id.isdigit():
+        return None, {"category_id": ["Category is required."]}
+    category_id = int(raw_category_id)
+    if not LiveTVCategory.objects.filter(pk=category_id, is_active=True).exists():
+        return None, {"category_id": ["Selected category is not active."]}
+    return category_id, {}
 
 
 def channel_file_url(request, channel, field_name):
@@ -2486,8 +2489,8 @@ def mobile_live_tv_meta_api(request):
         "categories": categories,
         "states": states,
         "required_fields": {
-            "video_upload": ["state_id", "city_id"],
-            "shorts_upload": ["state_id", "city_id"],
+            "video_upload": ["category_id", "state_id", "city_id"],
+            "shorts_upload": ["category_id", "state_id", "city_id"],
         },
     })
 
@@ -2660,7 +2663,10 @@ def mobile_admin_channel_save_api(request):
     state_id, city_id, location_errors = parse_required_location(request.POST)
     if location_errors:
         return JsonResponse({"detail": "State and city are required.", "errors": location_errors}, status=400)
-    channel.category_id = parse_optional_category(request.POST)
+    category_id, category_errors = parse_required_category(request.POST)
+    if category_errors:
+        return JsonResponse({"detail": "Category is required.", "errors": category_errors}, status=400)
+    channel.category_id = category_id
     channel.state_id = state_id
     channel.city_id = city_id
     if video_file:
@@ -2738,7 +2744,9 @@ def mobile_admin_shorts_upload_api(request):
     state_id, city_id, location_errors = parse_required_location(request.POST)
     if location_errors:
         return JsonResponse({"detail": "State and city are required.", "errors": location_errors}, status=400)
-    category_id = parse_optional_category(request.POST)
+    category_id, category_errors = parse_required_category(request.POST)
+    if category_errors:
+        return JsonResponse({"detail": "Category is required.", "errors": category_errors}, status=400)
     frame_template = request.POST.get("frame_template", "").strip() or "normal_black_red"
     raw_display_order = request.POST.get("display_order")
     try:

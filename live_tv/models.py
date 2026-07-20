@@ -190,9 +190,14 @@ class LiveTVChannel(models.Model):
 
     def clean(self):
         errors = {}
-        if self.city_id and not self.state_id:
-            errors["state"] = "State is required when a city is selected."
-        elif self.city_id and self.state_id and self.city and self.city.state_id != self.state_id:
+        if self.source_type != self.SourceType.PLAYLIST:
+            if not self.category_id:
+                errors["category"] = "Category is required."
+            if not self.state_id:
+                errors["state"] = "State is required."
+            if not self.city_id:
+                errors["city"] = "City is required."
+        if self.city_id and self.state_id and self.city and self.city.state_id != self.state_id:
             errors["city"] = "City must belong to selected state."
         if self.auto_playlist_enabled and self.source_type != self.SourceType.PLAYLIST:
             errors["source_type"] = "Main auto playlist channel must use Auto Live Playlist source."
@@ -615,6 +620,8 @@ class ShortsVideo(models.Model):
 
     def clean(self):
         errors = {}
+        if not self.category_id:
+            errors["category"] = "Category is required."
         if not self.state_id:
             errors["state"] = "State is required."
         if not self.city_id:
