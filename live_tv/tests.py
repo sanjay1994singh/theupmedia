@@ -27,6 +27,14 @@ class CeleryQueueRoutingTests(SimpleTestCase):
 
 
 class VideoHeadlineRotationTests(TestCase):
+    def test_empty_video_does_not_show_headline_frame(self):
+        video = LiveTVChannel.objects.create(title="No Headlines", slug="no-headlines")
+        self.assertFalse(video.has_headline_content)
+        LiveTVVideoHeadline.objects.create(video=video, position=0, text="Inactive", is_active=False)
+        self.assertFalse(video.has_headline_content)
+        LiveTVVideoHeadline.objects.create(video=video, position=1, text="Active", is_active=True)
+        self.assertTrue(video.has_headline_content)
+
     def test_video_headlines_rotate_every_configured_second_and_repeat(self):
         video = LiveTVChannel.objects.create(
             title="Headline Video",

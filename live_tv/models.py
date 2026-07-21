@@ -338,6 +338,10 @@ class LiveTVChannel(models.Model):
         }
         return f"https://www.youtube-nocookie.com/embed/{video_id}?{urlencode(params)}"
 
+    @property
+    def has_headline_content(self):
+        return bool((self.headline or "").strip()) or self.rotating_headlines.filter(is_active=True).exists()
+
 
 class LiveTVVideoHeadline(models.Model):
     video = models.ForeignKey(LiveTVChannel, on_delete=models.CASCADE, related_name="rotating_headlines")
