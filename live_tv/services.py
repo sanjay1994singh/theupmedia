@@ -244,6 +244,8 @@ def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
         "repeat_headlines": video.repeat_headlines,
         "headline_label": lower_label,
         "lower_third_label": lower_label,
+        "reporter_label": video.reporter_label or "",
+        "reporter_name": video.reporter_name or "",
         "ticker_label": setting.default_ticker_label,
         "ticker_text": setting.default_ticker_text,
         "ticker_speed_seconds": setting.ticker_speed_seconds,

@@ -110,7 +110,7 @@ class LiveTVChannelAdmin(admin.ModelAdmin):
         ("HLS Processing", {"fields": ("hls_master_url", "hls_status", "hls_progress_display", "hls_progress_percent", "processing_error", "duration", "duration_seconds")}),
         ("24x7 Auto Playlist", {"fields": ("auto_playlist_enabled", "auto_add_to_live", "loop_enabled", "target_playlist_duration_seconds", "current_playback_display", "playlist_duration_display", "playlist_target_progress", "playlist_version", "playback_started_at", "last_playlist_update", "processing_failures")}),
         ("Category / Location", {"fields": ("category", "state", "city")}),
-        ("Video Text", {"fields": ("lower_third_label", "headline", "headline_change_seconds", "repeat_headlines")}),
+        ("Video Text", {"fields": ("lower_third_label", "headline", "headline_change_seconds", "repeat_headlines", "reporter_label", "reporter_name")}),
         ("SEO", {"fields": ("meta_title", "meta_description")}),
     )
 

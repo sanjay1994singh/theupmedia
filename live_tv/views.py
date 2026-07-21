@@ -617,6 +617,8 @@ def serialize_channel_for_mobile(request, channel):
         "city_name": channel.city.name if channel.city_id else "",
         **headline_data,
         "lower_third_label": channel.lower_third_label or "",
+        "reporter_label": channel.reporter_label or "",
+        "reporter_name": channel.reporter_name or "",
         "ticker_label": ticker_setting.label or setting.default_ticker_label,
         "ticker": ticker,
         "player_type": player_type,
@@ -708,6 +710,8 @@ def serialize_synced_live_state(request, channel, server_time=None):
         "default_ticker_text": ticker_setting.text or setting.default_ticker_text,
         "ticker": ticker,
         "lower_third_label": video.lower_third_label or "",
+        "reporter_label": video.reporter_label or "",
+        "reporter_name": video.reporter_name or "",
         "show_lower_third": setting.show_lower_third and bool((video.lower_third_label or "").strip() or headline_data["headlines"]),
         "show_live_badge": setting.show_live_badge,
         "web_live_badge_size_percent": setting.web_live_badge_size_percent,
@@ -2801,6 +2805,8 @@ def mobile_admin_channel_save_api(request):
 
     channel.title = title[:180] or "The Up Media Live TV"
     channel.description = request.POST.get("description", "").strip()
+    channel.reporter_label = request.POST.get("reporter_label", "").strip()[:60]
+    channel.reporter_name = request.POST.get("reporter_name", "").strip()[:120]
     channel.source_type = source_type
     channel.auto_playlist_enabled = False
     channel.auto_add_to_live = source_type == LiveTVChannel.SourceType.DIRECT

@@ -142,6 +142,8 @@ class LiveTVChannel(models.Model):
     is_live = models.BooleanField(default=True)
     lower_third_label = models.CharField(max_length=60, blank=True, default="")
     headline = models.CharField(max_length=180, blank=True, default="")
+    reporter_label = models.CharField(max_length=60, blank=True, default="REPORTER")
+    reporter_name = models.CharField(max_length=120, blank=True, default="")
     headline_change_seconds = models.PositiveSmallIntegerField(
         default=2,
         validators=[MinValueValidator(1), MaxValueValidator(60)],
