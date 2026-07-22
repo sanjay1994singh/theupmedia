@@ -43,7 +43,7 @@ except ImportError:  # pragma: no cover - server requirements include Pillow
 from .forms import LiveTVChannelForm
 from .hls import hls_processing_lock_is_active, validate_uploaded_video
 from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, PushDevice, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
-from .services import calculate_current_playback, enqueue_completed_broadcast_renders, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
+from .services import calculate_current_playback, enqueue_completed_broadcast_renders, expanded_video_headlines, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
 from blog.models import BlogPost
 from news.models import Article
 
@@ -545,6 +545,7 @@ def serialize_live_tv_setting(request, setting):
         "default_ticker_text": setting.default_ticker_text,
         "ticker_speed_seconds": setting.ticker_speed_seconds,
         "mobile_ticker_speed_seconds": setting.mobile_ticker_speed_seconds,
+        "maximum_headline_characters": setting.maximum_headline_characters,
         "ticker_style": "red_white_slant",
         "ticker_started_at": setting.ticker_started_at.isoformat(),
         "ticker_server_time": timezone.now().isoformat(),
@@ -560,13 +561,7 @@ def ticker_items_from_text(text):
 
 
 def video_headline_payload(video, seek_position=0):
-    headlines = list(
-        video.rotating_headlines.filter(is_active=True)
-        .order_by("position", "pk")
-        .values_list("text", flat=True)
-    )
-    if not headlines and (video.headline or "").strip():
-        headlines = [video.headline.strip()]
+    headlines = expanded_video_headlines(video, live_tv_setting().maximum_headline_characters)
     interval = max(1, min(60, int(video.headline_change_seconds or 2)))
     index = int(max(0, float(seek_position or 0)) // interval)
     if headlines:
@@ -2760,6 +2755,11 @@ def mobile_admin_settings_save_api(request):
     if "mobile_ticker_speed_seconds" in request.POST:
         try:
             setting.mobile_ticker_speed_seconds = max(6, min(120, int(request.POST.get("mobile_ticker_speed_seconds") or setting.mobile_ticker_speed_seconds)))
+        except (TypeError, ValueError):
+            pass
+    if "maximum_headline_characters" in request.POST:
+        try:
+            setting.maximum_headline_characters = max(30, min(200, int(request.POST.get("maximum_headline_characters") or 100)))
         except (TypeError, ValueError):
             pass
     for field in ["web_live_badge_size_percent", "mobile_live_badge_size_percent"]:

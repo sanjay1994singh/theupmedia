@@ -54,7 +54,31 @@
   function initVideoHeadlines(frame) {
     const rail = frame.querySelector(".web-live-headlines");
     if (!rail) return;
-    const items = Array.from(rail.querySelectorAll("[data-video-headline]"));
+    const maximum = Math.max(30, Number.parseInt(rail.dataset.maxCharacters || "100", 10) || 100);
+    const originalItems = Array.from(rail.querySelectorAll("[data-video-headline]"));
+    const splitParts = function (text) {
+      const parts = [];
+      let current = "";
+      String(text || "").trim().split(/\s+/).filter(Boolean).forEach(function (word) {
+        const candidate = (current + " " + word).trim();
+        if (current && candidate.length > maximum) {
+          parts.push(current);
+          current = word;
+        } else current = candidate;
+      });
+      if (current) parts.push(current);
+      return parts;
+    };
+    const items = [];
+    originalItems.forEach(function (item) {
+      splitParts(item.textContent).forEach(function (part) {
+        const node = item.cloneNode(false);
+        node.textContent = part;
+        item.parentNode.insertBefore(node, item);
+        items.push(node);
+      });
+      item.remove();
+    });
     if (!items.length) return;
     const interval = Math.max(1, Number.parseInt(rail.dataset.interval || "2", 10) || 2);
     const repeat = rail.dataset.repeat !== "false";

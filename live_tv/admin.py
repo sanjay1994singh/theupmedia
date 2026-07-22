@@ -281,7 +281,7 @@ class LiveTVSettingAdmin(admin.ModelAdmin):
                 )
             },
         ),
-        ("Default Video Text", {"fields": ("default_lower_third_label", "default_headline")}),
+        ("Default Video Text", {"fields": ("default_lower_third_label", "default_headline", "maximum_headline_characters")}),
         ("Ticker", {"fields": ("default_ticker_label", "default_ticker_text", "ticker_speed_seconds", "mobile_ticker_speed_seconds")}),
     )
 

@@ -13,7 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, LiveTVVideoHeadline, ShortsVideo, SocialRenderedVideo
-from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, create_broadcast_render_job, enqueue_completed_broadcast_renders, get_main_live_channel, rebuild_live_playlist, recover_stale_render_jobs
+from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, create_broadcast_render_job, enqueue_completed_broadcast_renders, get_main_live_channel, rebuild_live_playlist, recover_stale_render_jobs, split_headline_parts
 from .tasks import process_live_channel_hls_task
 from .views import video_headline_payload
 
@@ -27,6 +27,13 @@ class CeleryQueueRoutingTests(SimpleTestCase):
 
 
 class VideoHeadlineRotationTests(TestCase):
+    def test_long_headline_splits_on_word_boundary(self):
+        text = " ".join(["headline"] * 30)
+        parts = split_headline_parts(text, 100)
+        self.assertGreater(len(parts), 1)
+        self.assertTrue(all(len(part) <= 100 for part in parts))
+        self.assertEqual(" ".join(parts), text)
+
     def test_empty_video_does_not_show_headline_frame(self):
         video = LiveTVChannel.objects.create(title="No Headlines", slug="no-headlines")
         self.assertFalse(video.has_headline_content)

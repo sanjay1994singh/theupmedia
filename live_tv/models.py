@@ -570,6 +570,11 @@ class LiveTVSetting(models.Model):
     default_ticker_text = models.TextField(null=True, blank=True)
     ticker_speed_seconds = models.PositiveSmallIntegerField(default=22)
     mobile_ticker_speed_seconds = models.PositiveSmallIntegerField(default=12)
+    maximum_headline_characters = models.PositiveSmallIntegerField(
+        default=100,
+        validators=[MinValueValidator(30), MaxValueValidator(200)],
+        help_text="Maximum characters shown in one headline part (30-200).",
+    )
     ticker_started_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -23,6 +23,28 @@ logger = logging.getLogger(__name__)
 LIVE_PLAYLIST_MAX_AGE_HOURS = 48
 
 
+def split_headline_parts(text, maximum_characters=100):
+    maximum = max(30, min(200, int(maximum_characters or 100)))
+    parts, current = [], ""
+    for word in str(text or "").split():
+        candidate = f"{current} {word}".strip()
+        if current and len(candidate) > maximum:
+            parts.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        parts.append(current)
+    return parts
+
+
+def expanded_video_headlines(video, maximum_characters=100):
+    raw = list(video.rotating_headlines.filter(is_active=True).order_by("position", "pk").values_list("text", flat=True))
+    if not raw and (video.headline or "").strip():
+        raw = [video.headline.strip()]
+    return [part for headline in raw for part in split_headline_parts(headline, maximum_characters)]
+
+
 def live_playlist_max_age_hours():
     try:
         return max(1, int(getattr(settings, "LIVE_TV_PLAYLIST_MAX_AGE_HOURS", LIVE_PLAYLIST_MAX_AGE_HOURS)))
@@ -225,13 +247,7 @@ def playlist_item_start_offset_seconds(cycle_item):
 
 def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
     setting = LiveTVSetting.get_solo()
-    headlines = list(
-        video.rotating_headlines.filter(is_active=True)
-        .order_by("position", "pk")
-        .values_list("text", flat=True)
-    )
-    if not headlines and (video.headline or "").strip():
-        headlines = [video.headline.strip()]
+    headlines = expanded_video_headlines(video, setting.maximum_headline_characters)
     headline = headlines[0] if headlines else ""
     lower_label = video.lower_third_label or ""
     title = headline or video.title or f"{channel.title} {timezone.localtime().strftime('%Y-%m-%d %H:%M')}"
