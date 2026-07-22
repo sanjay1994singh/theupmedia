@@ -71,7 +71,7 @@
         <h1>No Live TV Added Yet</h1>
         <p>Live TV will appear here after superuser adds it from dashboard.</p>
         {% if user.is_superuser %}
-          <a href="{% url 'live_tv:dashboard' %}">Add Live TV</a>
+          <a href="{% url 'live_tv:control_dashboard' %}">Open Control Room</a>
         {% endif %}
       </div>
     {% endif %}

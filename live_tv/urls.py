@@ -1,4 +1,5 @@
 from django.urls import path
+from django.views.generic import RedirectView
 
 from . import views
 
@@ -42,8 +43,11 @@ urlpatterns = [
     path("live-tv/control-room/", views.live_control_dashboard, name="control_dashboard"),
     path("api/live-tv/admin/control-room/action/", views.live_control_dashboard_action_api, name="api_control_dashboard_action"),
     path("api/live-tv/admin/control-room/<str:section>/", views.live_control_dashboard_api, name="api_control_dashboard_section"),
-    path("live-tv/dashboard/", views.dashboard, name="dashboard"),
-    path("live-tv/dashboard/<int:pk>/delete/", views.delete_channel, name="delete_channel"),
+    path(
+        "live-tv/dashboard/",
+        RedirectView.as_view(pattern_name="live_tv:control_dashboard", permanent=True),
+        name="dashboard",
+    ),
     path("live-tv/", views.live_tv_home, name="home"),
     path("live-tv/<slug:slug>/", views.live_tv_detail, name="detail"),
 ]

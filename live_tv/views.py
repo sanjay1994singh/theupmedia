@@ -40,7 +40,6 @@ try:
 except ImportError:  # pragma: no cover - server requirements include Pillow
     Image = ImageDraw = ImageFont = None
 
-from .forms import LiveTVChannelForm
 from .hls import hls_processing_lock_is_active, validate_uploaded_video
 from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, PushDevice, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
 from .services import calculate_current_playback, enqueue_completed_broadcast_renders, expanded_video_headlines, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
@@ -4077,65 +4076,6 @@ def live_control_dashboard_action_api(request):
     return JsonResponse({"ok": False, "message": "Unknown dashboard action."}, status=400)
 
 
-@superuser_required
-def dashboard(request):
-    channels = LiveTVChannel.objects.all()
-    selected_id = request.GET.get("edit")
-    instance = channels.filter(pk=selected_id).first() if selected_id else None
-
-    if request.method == "POST":
-        instance = channels.filter(pk=request.POST.get("channel_id")).first() if request.POST.get("channel_id") else None
-        form = LiveTVChannelForm(request.POST, request.FILES, instance=instance)
-        if form.is_valid():
-            channel = form.save()
-            if channel.source_type == LiveTVChannel.SourceType.DIRECT and channel.video_file and channel.hls_status != LiveTVChannel.HLSStatus.COMPLETED:
-                enqueue_live_channel_hls_job(channel.pk)
-            messages.success(request, "Live TV channel saved.")
-            return redirect(f"{request.path}?edit={channel.pk}")
-    else:
-        form = LiveTVChannelForm(instance=instance)
-
-    main_playlist_channel = get_main_live_channel(create=False)
-    if main_playlist_channel:
-        now = timezone.now()
-        expire_old_live_playlist_items(main_playlist_channel, at=now)
-        playlist_state = calculate_current_playback(main_playlist_channel, at=now)
-        playlist_items = main_playlist_channel.playlist_items.filter(
-            is_active=True,
-            video__created_at__gte=live_playlist_cutoff(now),
-            video__hls_status=LiveTVChannel.HLSStatus.COMPLETED,
-            video__hls_master_url__gt="",
-        ).select_related("video").order_by("position", "pk")
-    else:
-        playlist_state = None
-        playlist_items = LiveTVPlaylistItem.objects.none()
-    preview_channel = instance or main_playlist_channel or channels.first()
-    return render(
-        request,
-        "live_tv/dashboard.html",
-        {
-            "channels": channels,
-            "form": form,
-            "selected_channel": instance,
-            "preview_channel": preview_channel,
-            "news_ticker": news_ticker_setting(),
-            "main_playlist_channel": main_playlist_channel,
-            "playlist_state": playlist_state,
-            "playlist_items": playlist_items,
-        },
-    )
-
-
-@superuser_required
-@require_POST
-def delete_channel(request, pk):
-    channel = get_object_or_404(LiveTVChannel, pk=pk)
-    try:
-        channel.delete()
-        messages.success(request, "Live TV channel deleted.")
-    except ProtectedError:
-        messages.error(request, "Channel playlist history me use ho raha hai; playlist references remove kiye bina delete nahi hoga.")
-    return redirect("live_tv:dashboard")
 @csrf_exempt
 @require_POST
 def mobile_admin_facebook_live_save_api(request):

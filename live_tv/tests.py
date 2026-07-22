@@ -18,6 +18,18 @@ from .tasks import process_live_channel_hls_task
 from .views import video_headline_payload
 
 
+class LegacyDashboardRedirectTests(SimpleTestCase):
+    def test_legacy_dashboard_permanently_redirects_to_control_room(self):
+        response = self.client.get(reverse("live_tv:dashboard"))
+
+        self.assertRedirects(
+            response,
+            reverse("live_tv:control_dashboard"),
+            status_code=301,
+            fetch_redirect_response=False,
+        )
+
+
 class CeleryQueueRoutingTests(SimpleTestCase):
     def test_hls_and_render_tasks_use_separate_queues(self):
         self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.process_live_channel_hls"]["queue"], "hls")
