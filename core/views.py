@@ -109,6 +109,15 @@ def robots_txt(request):
     return HttpResponse("\n".join(lines), content_type="text/plain")
 
 
+def ads_txt(request):
+    response = HttpResponse(
+        "google.com, pub-2037181352494119, DIRECT, f08c47fec0942fa0\n",
+        content_type="text/plain; charset=utf-8",
+    )
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 def sitemap_xml(request):
     return sitemap(
         request,
