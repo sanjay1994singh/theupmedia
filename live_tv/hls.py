@@ -410,9 +410,7 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
     secondary = safe_hex_color(short.frame_secondary_color, "#2b0508")
     background = safe_hex_color(short.frame_background_color, "#050505")
     text_color = safe_hex_color(short.frame_text_color, "#ffffff")
-    channel = shorts_brand_name(short)
     headline = short.headline or short.title
-    location = short.location or (short.city.name if short.city_id else "")
     bg = Image.new("RGBA", (SHORTS_RENDER_WIDTH, SHORTS_RENDER_HEIGHT), background)
     fg = Image.new("RGBA", (SHORTS_RENDER_WIDTH, SHORTS_RENDER_HEIGHT), (0, 0, 0, 0))
     bg_draw = ImageDraw.Draw(bg)
@@ -429,17 +427,14 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
             green = int(6 + (13 * ((ratio - 0.28) / 0.72)))
         bg_draw.rectangle((0, step, SHORTS_RENDER_WIDTH, step + 3), fill=(red, green, 10, 255))
 
-    headline_font = shorts_image_font(76)
-    meta_font = shorts_image_font(28)
-    y = 86
-    for line in wrap_text_pixels(fg_draw, headline, headline_font, 920, max_lines=3):
+    headline_font = shorts_image_font(64)
+    y = 66
+    for line in wrap_text_pixels(fg_draw, headline, headline_font, 930, max_lines=3):
         fg_draw.text((96, y), line, font=headline_font, fill=text_color, stroke_width=3, stroke_fill=(0, 0, 0, 150))
-        y += 88
-    if location:
-        fg_draw.text((96, min(y + 12, 324)), location, font=meta_font, fill=(245, 245, 245, 235))
+        y += 74
 
-    video_outer = (18, 342, 1062, 1864)
-    video_inner = (36, 360, 1044, 1846)
+    video_outer = (18, 370, 1062, 1864)
+    video_inner = (36, 388, 1044, 1846)
     fg_draw.rounded_rectangle(video_outer, radius=30, outline=primary, width=15)
     fg_draw.rounded_rectangle(video_inner, radius=24, outline=(255, 255, 255, 230), width=5)
 
@@ -448,10 +443,10 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
         badge = make_short_logo_badge(logo_path, Path(fg_path).with_name("short-logo-badge.png"), size=132)
     if badge and Path(badge).exists():
         logo = Image.open(badge).convert("RGBA")
-        fg.alpha_composite(logo, (474, 276))
+        fg.alpha_composite(logo, (474, 304))
     else:
-        fg_draw.ellipse((474, 276, 606, 408), fill=primary, outline=(255, 255, 255, 220), width=4)
-        draw_centered_text(fg_draw, (474, 276, 606, 408), "UP", shorts_latin_image_font(36), text_color)
+        fg_draw.ellipse((474, 304, 606, 436), fill=primary, outline=(255, 255, 255, 220), width=4)
+        draw_centered_text(fg_draw, (474, 304, 606, 436), "UP", shorts_latin_image_font(36), text_color)
 
     bg.convert("RGB").save(bg_path)
     fg.save(fg_path)
@@ -468,31 +463,29 @@ def shorts_frame_filter(short, metadata, with_logo=False):
     headline_draws = []
     for index, line in enumerate(headline_lines):
         headline_draws.append(
-            f"drawtext=text='{ffmpeg_escape(line)}':x=96:y={86 + (index * 88)}:fontsize=76:fontcolor={text_color}{font_arg}:borderw=3:bordercolor=black@0.55"
+            f"drawtext=text='{ffmpeg_escape(line)}':x=96:y={66 + (index * 74)}:fontsize=64:fontcolor={text_color}{font_arg}:borderw=3:bordercolor=black@0.55"
         )
     headline_filter = ",".join(headline_draws)
     channel = ffmpeg_escape(shorts_brand_name(short))
-    location = ffmpeg_escape(short.location or (short.city.name if short.city_id else ""))
     if short.video_fit == ShortsVideo.VideoFit.COVER:
-        video_scale = "scale=1008:1486:force_original_aspect_ratio=increase,crop=1008:1486"
+        video_scale = "scale=1008:1458:force_original_aspect_ratio=increase,crop=1008:1458"
     else:
-        video_scale = "scale=1008:1486:force_original_aspect_ratio=increase,crop=1008:1486"
+        video_scale = "scale=1008:1458:force_original_aspect_ratio=increase,crop=1008:1458"
     graph = (
         f"color=c={background}:s={SHORTS_RENDER_WIDTH}x{SHORTS_RENDER_HEIGHT}:d={metadata.get('duration') or 1}[bg];"
         f"[0:v]{video_scale},setsar=1[v0];"
         f"[bg]drawbox=x=0:y=0:w=1080:h=120:color=#170303@1:t=fill,"
         f"drawbox=x=0:y=120:w=1080:h=300:color=#6b0c0e@1:t=fill,"
         f"drawbox=x=0:y=260:w=1080:h=160:color={primary}@0.58:t=fill,"
-        f"{headline_filter},"
-        f"drawtext=text='{location}':x=96:y=324:fontsize=26:fontcolor=#f5f5f5{font_arg}[card];"
-        f"[card][v0]overlay=x=36:y=360:shortest=1,"
-        f"drawbox=x=18:y=342:w=1044:h=1522:color={primary}@1:t=15,"
-        f"drawbox=x=36:y=360:w=1008:h=1486:color=white@0.90:t=5[base]"
+        f"{headline_filter}[card];"
+        f"[card][v0]overlay=x=36:y=388:shortest=1,"
+        f"drawbox=x=18:y=370:w=1044:h=1494:color={primary}@1:t=15,"
+        f"drawbox=x=36:y=388:w=1008:h=1458:color=white@0.90:t=5[base]"
     )
     if with_logo:
-        graph += ";[1:v]scale=132:132:force_original_aspect_ratio=increase,crop=132:132,format=rgba[logo];[base][logo]overlay=x=474:y=276:shortest=1[outv]"
+        graph += ";[1:v]scale=132:132:force_original_aspect_ratio=increase,crop=132:132,format=rgba[logo];[base][logo]overlay=x=474:y=304:shortest=1[outv]"
     else:
-        graph += f";[base]drawbox=x=474:y=276:w=132:h=132:color={primary}@1:t=fill,drawtext=text='{channel}':x=492:y=326:fontsize=22:fontcolor=white{font_arg}[outv]"
+        graph += f";[base]drawbox=x=474:y=304:w=132:h=132:color={primary}@1:t=fill,drawtext=text='{channel}':x=492:y=354:fontsize=22:fontcolor=white{font_arg}[outv]"
     return graph
 
 
@@ -547,7 +540,7 @@ def render_short_frame(short_id):
     fg_path = output_dir / f"short-{short.pk}-frame-fg.png"
     use_template = create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=logo_path)
     if use_template:
-        video_scale = "scale=1008:1486:force_original_aspect_ratio=increase,crop=1008:1486,setsar=1"
+        video_scale = "scale=1008:1458:force_original_aspect_ratio=increase,crop=1008:1458,setsar=1"
         args = [
             ffmpeg_binary(),
             "-y",
@@ -566,7 +559,7 @@ def render_short_frame(short_id):
             "-i",
             str(fg_path),
             "-filter_complex",
-            f"[1:v]{video_scale}[v0];[0:v][v0]overlay=x=36:y=360:shortest=1[base];[base][2:v]overlay=0:0:shortest=1[outv]",
+            f"[1:v]{video_scale}[v0];[0:v][v0]overlay=x=36:y=388:shortest=1[base];[base][2:v]overlay=0:0:shortest=1[outv]",
             "-map",
             "[outv]",
             "-map",
