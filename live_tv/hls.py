@@ -385,10 +385,28 @@ def shorts_frame_filter(short, metadata, with_logo=False):
 def generate_short_thumbnail(short, input_path):
     thumb_dir = Path(settings.MEDIA_ROOT) / "shorts" / "thumbnails" / str(short.pk)
     thumb_dir.mkdir(parents=True, exist_ok=True)
-    thumb_path = thumb_dir / f"short-{short.pk}.jpg"
-    run_command([ffmpeg_binary(), "-y", "-ss", "00:00:01", "-i", str(input_path), "-frames:v", "1", "-q:v", "3", str(thumb_path)], timeout=60)
-    with thumb_path.open("rb") as handle:
-        short.thumbnail.save(thumb_path.name, File(handle), save=True)
+    tmp_thumb_path = thumb_dir / f"short-{short.pk}.tmp.jpg"
+    run_command(
+        [
+            ffmpeg_binary(),
+            "-y",
+            "-ss",
+            "00:00:00.300",
+            "-i",
+            str(input_path),
+            "-frames:v",
+            "1",
+            "-q:v",
+            "3",
+            str(tmp_thumb_path),
+        ],
+        timeout=60,
+    )
+    if not tmp_thumb_path.exists():
+        raise HLSProcessingError("Thumbnail frame was not created.")
+    with tmp_thumb_path.open("rb") as handle:
+        short.thumbnail.save(f"short-{short.pk}.jpg", File(handle), save=True)
+    tmp_thumb_path.unlink(missing_ok=True)
 
 
 def render_short_frame(short_id):
@@ -444,7 +462,10 @@ def render_short_frame(short_id):
         short.duration = metadata.get("duration")
         short.hls_progress_percent = 82
         short.save(update_fields=["rendered_video", "video_file", "duration", "hls_progress_percent", "updated_at"])
-        generate_short_thumbnail(short, final_output)
+        try:
+            generate_short_thumbnail(short, final_output)
+        except Exception:
+            logger.exception("Shorts thumbnail generation failed for %s; continuing with rendered video.", short.pk)
         return final_output
     except Exception as exc:
         tmp_output.unlink(missing_ok=True)
