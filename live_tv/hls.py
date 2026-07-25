@@ -399,15 +399,9 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
     bg_draw.rectangle((84, 136, 996, 600), fill=(0, 0, 0, 32))
     bg_draw.rectangle((84, 600, 996, 628), fill=(21, 21, 21, 255))
 
-    top_font = shorts_image_font(39)
-    time_font = shorts_image_font(48)
     headline_font = shorts_image_font(68)
     meta_font = shorts_image_font(28)
     brand_font = shorts_image_font(39)
-    fg_draw.text((126, 172), channel, font=top_font, fill=text_color)
-    if short.show_duration_badge and metadata.get("duration"):
-        total = max(0, int(round(metadata["duration"])))
-        fg_draw.text((848, 172), f"{total // 60}:{total % 60:02d}", font=time_font, fill=text_color)
     y = 316
     for line in wrap_text_pixels(fg_draw, headline, headline_font, 820, max_lines=3):
         fg_draw.text((126, y), line, font=headline_font, fill=text_color, stroke_width=2, stroke_fill=(0, 0, 0, 80))
@@ -458,11 +452,6 @@ def shorts_frame_filter(short, metadata, with_logo=False):
     else:
         video_scale = "scale=872:960:force_original_aspect_ratio=increase,crop=872:960"
 
-    duration_draw = ""
-    if short.show_duration_badge and metadata.get("duration"):
-        total = max(0, int(round(metadata["duration"])))
-        label = f"{total // 60:02d}:{total % 60:02d}"
-        duration_draw = f",drawtext=text='{label}':x=848:y=214:fontsize=46:fontcolor={text_color}{font_arg}"
     branding_draw = ""
     if short.show_branding_strip:
         branding_draw = f",drawbox=x=104:y=1546:w=872:h=76:color={primary}@0.98:t=fill,drawtext=text='The Up Media':x=394:y=1565:fontsize=38:fontcolor=white{font_arg}"
@@ -474,10 +463,9 @@ def shorts_frame_filter(short, metadata, with_logo=False):
         f"drawbox=x=84:y=136:w=912:h=96:color=#100703@1:t=fill,"
         f"drawbox=x=84:y=232:w=912:h=286:color=#3b0708@1:t=fill,"
         f"drawbox=x=84:y=340:w=912:h=178:color={primary}@0.58:t=fill,"
-        f"drawtext=text='{channel}':x=126:y=176:fontsize=38:fontcolor={text_color}{font_arg},"
         f"{headline_filter},"
         f"drawbox=x=84:y=518:w=912:h=90:color=#151515@1:t=fill,"
-        f"drawtext=text='{location}':x=126:y=548:fontsize=26:fontcolor=#f5f5f5{font_arg}{duration_draw}[card];"
+        f"drawtext=text='{location}':x=126:y=548:fontsize=26:fontcolor=#f5f5f5{font_arg}[card];"
         f"[card][v0]overlay=x=104:y=624:shortest=1,"
         f"drawbox=x=96:y=616:w=888:h=982:color={primary}@1:t=10,"
         f"drawbox=x=108:y=628:w=864:h=958:color=white@0.86:t=3{branding_draw}[base]"
