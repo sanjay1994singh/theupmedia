@@ -438,8 +438,14 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
 
     video_outer = (18, 370, 1062, 1864)
     video_inner = (36, 388, 1044, 1846)
+    fg_draw.rounded_rectangle((10, 362, 1070, 1872), radius=34, outline=(0, 0, 0, 110), width=14)
+    fg_draw.rounded_rectangle((14, 366, 1066, 1868), radius=32, outline=(255, 42, 48, 95), width=9)
+    fg_draw.rounded_rectangle(video_outer, radius=30, outline=(118, 0, 0, 255), width=22)
     fg_draw.rounded_rectangle(video_outer, radius=30, outline=primary, width=15)
-    fg_draw.rounded_rectangle(video_inner, radius=24, outline=(255, 255, 255, 230), width=5)
+    fg_draw.rounded_rectangle((27, 379, 1053, 1855), radius=27, outline=(255, 72, 72, 180), width=4)
+    fg_draw.rounded_rectangle(video_inner, radius=24, outline=(255, 255, 255, 250), width=6)
+    fg_draw.line((52, 397, 1028, 397), fill=(255, 255, 255, 135), width=3)
+    fg_draw.line((52, 1837, 1028, 1837), fill=(255, 255, 255, 95), width=2)
 
     badge = None
     if logo_path and Path(logo_path).exists():
@@ -482,8 +488,14 @@ def shorts_frame_filter(short, metadata, with_logo=False):
         f"drawbox=x=0:y=260:w=1080:h=160:color={primary}@0.58:t=fill,"
         f"{headline_filter}[card];"
         f"[card][v0]overlay=x=36:y=388:shortest=1,"
+        f"drawbox=x=10:y=362:w=1060:h=1510:color=black@0.45:t=14,"
+        f"drawbox=x=14:y=366:w=1052:h=1502:color=#ff2a30@0.38:t=9,"
+        f"drawbox=x=18:y=370:w=1044:h=1494:color=#760000@1:t=22,"
         f"drawbox=x=18:y=370:w=1044:h=1494:color={primary}@1:t=15,"
-        f"drawbox=x=36:y=388:w=1008:h=1458:color=white@0.90:t=5[base]"
+        f"drawbox=x=27:y=379:w=1026:h=1476:color=#ff4848@0.70:t=4,"
+        f"drawbox=x=36:y=388:w=1008:h=1458:color=white@0.98:t=6,"
+        f"drawbox=x=52:y=397:w=976:h=3:color=white@0.52:t=fill,"
+        f"drawbox=x=52:y=1837:w=976:h=2:color=white@0.38:t=fill[base]"
     )
     if with_logo:
         graph += ";[1:v]scale=170:170:force_original_aspect_ratio=increase,crop=170:170,format=rgba[logo];[base][logo]overlay=x=455:y=285:shortest=1[outv]"
