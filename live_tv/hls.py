@@ -443,13 +443,13 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
 
     badge = None
     if logo_path and Path(logo_path).exists():
-        badge = make_short_logo_badge(logo_path, Path(fg_path).with_name("short-logo-badge.png"), size=132)
+        badge = make_short_logo_badge(logo_path, Path(fg_path).with_name("short-logo-badge.png"), size=170)
     if badge and Path(badge).exists():
         logo = Image.open(badge).convert("RGBA")
-        fg.alpha_composite(logo, (474, 304))
+        fg.alpha_composite(logo, (455, 285))
     else:
-        fg_draw.ellipse((474, 304, 606, 436), fill=primary, outline=(255, 255, 255, 220), width=4)
-        draw_centered_text(fg_draw, (474, 304, 606, 436), "UP", shorts_latin_image_font(36), text_color)
+        fg_draw.ellipse((455, 285, 625, 455), fill=primary, outline=(255, 255, 255, 220), width=5)
+        draw_centered_text(fg_draw, (455, 285, 625, 455), "UP", shorts_latin_image_font(46), text_color)
 
     bg.convert("RGB").save(bg_path)
     fg.save(fg_path)
@@ -486,9 +486,9 @@ def shorts_frame_filter(short, metadata, with_logo=False):
         f"drawbox=x=36:y=388:w=1008:h=1458:color=white@0.90:t=5[base]"
     )
     if with_logo:
-        graph += ";[1:v]scale=132:132:force_original_aspect_ratio=increase,crop=132:132,format=rgba[logo];[base][logo]overlay=x=474:y=304:shortest=1[outv]"
+        graph += ";[1:v]scale=170:170:force_original_aspect_ratio=increase,crop=170:170,format=rgba[logo];[base][logo]overlay=x=455:y=285:shortest=1[outv]"
     else:
-        graph += f";[base]drawbox=x=474:y=304:w=132:h=132:color={primary}@1:t=fill,drawtext=text='{channel}':x=492:y=354:fontsize=22:fontcolor=white{font_arg}[outv]"
+        graph += f";[base]drawbox=x=455:y=285:w=170:h=170:color={primary}@1:t=fill,drawtext=text='{channel}':x=480:y=350:fontsize=28:fontcolor=white{font_arg}[outv]"
     return graph
 
 
@@ -571,7 +571,7 @@ def render_short_frame(short_id):
     else:
         badge_path = output_dir / f"short-{short.pk}-badge.png"
         if logo_path and logo_path.exists():
-            logo_path = make_short_logo_badge(logo_path, badge_path, size=128) or logo_path
+            logo_path = make_short_logo_badge(logo_path, badge_path, size=170) or logo_path
         args = [ffmpeg_binary(), "-y", "-i", str(input_path)]
         if logo_path and logo_path.exists():
             args += ["-i", str(logo_path)]
