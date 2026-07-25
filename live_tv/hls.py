@@ -420,12 +420,17 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
 
     card = (84, 136, 996, 1668)
     bg_draw.rounded_rectangle(card, radius=34, fill=(21, 21, 21, 255), outline=primary, width=8)
-    bg_draw.rounded_rectangle((84, 136, 996, 635), radius=34, fill=(32, 4, 5, 255))
-    for step in range(0, 330, 6):
-        ratio = step / 330
-        red = int(45 + (130 * ratio))
-        bg_draw.rectangle((84, 245 + step, 996, 251 + step), fill=(red, 10, 12, 255))
-    bg_draw.rectangle((84, 136, 996, 635), fill=(0, 0, 0, 26))
+    bg_draw.rounded_rectangle((84, 136, 996, 635), radius=34, fill=(20, 2, 3, 255))
+    for step in range(0, 499, 3):
+        ratio = step / 499
+        if ratio < 0.28:
+            red = int(23 + (18 * (ratio / 0.28)))
+            green = 3
+        else:
+            red = int(54 + (102 * ((ratio - 0.28) / 0.72)))
+            green = int(6 + (13 * ((ratio - 0.28) / 0.72)))
+        bg_draw.rectangle((84, 136 + step, 996, 139 + step), fill=(red, green, 10, 255))
+    bg_draw.rectangle((84, 136, 996, 245), fill=(8, 6, 4, 255))
     bg_draw.rectangle((84, 635, 996, 675), fill=(21, 21, 21, 255))
 
     headline_font = shorts_image_font(68)
