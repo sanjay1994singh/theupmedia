@@ -16,9 +16,9 @@ from .models import ShortsVideo
 from .models import LiveTVChannel
 
 try:
-    from PIL import Image, ImageDraw, ImageOps
+    from PIL import Image, ImageDraw, ImageFont, ImageOps
 except ImportError:  # pragma: no cover
-    Image = ImageDraw = ImageOps = None
+    Image = ImageDraw = ImageFont = ImageOps = None
 
 
 logger = logging.getLogger(__name__)
@@ -251,13 +251,26 @@ def shorts_font_path():
     ]
     for candidate in candidates:
         if candidate and Path(candidate).exists():
-            return str(candidate).replace("\\", "/").replace(":", "\\:")
+            return str(candidate).replace("\\", "/")
     return ""
 
 
 def shorts_font_arg():
     font_path = shorts_font_path()
-    return f":fontfile='{font_path}'" if font_path else ":font='Arial'"
+    ffmpeg_font = font_path.replace(":", "\\:")
+    return f":fontfile='{ffmpeg_font}'" if ffmpeg_font else ":font='Arial'"
+
+
+def shorts_image_font(size):
+    if ImageFont is None:
+        return None
+    font_path = shorts_font_path()
+    try:
+        if font_path:
+            return ImageFont.truetype(font_path, size=size, layout_engine=ImageFont.Layout.RAQM)
+    except Exception:
+        logger.exception("Could not load shorts font %s.", font_path)
+    return ImageFont.load_default()
 
 
 def wrap_text_lines(text, max_chars=18, max_lines=3):
@@ -278,6 +291,38 @@ def wrap_text_lines(text, max_chars=18, max_lines=3):
     if len(lines) == max_lines and len(words) > len(" ".join(lines).split()):
         lines[-1] = f"{lines[-1].rstrip('!.।')[:max_chars - 1]}..."
     return lines or [text or "The Up Media"]
+
+
+def wrap_text_pixels(draw, text, font, max_width, max_lines=3):
+    words = " ".join((text or "").split()).split()
+    lines = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        bbox = draw.textbbox((0, 0), candidate, font=font)
+        if current and (bbox[2] - bbox[0]) > max_width:
+            lines.append(current)
+            current = word
+            if len(lines) >= max_lines:
+                break
+        else:
+            current = candidate
+    if current and len(lines) < max_lines:
+        lines.append(current)
+    if len(lines) == max_lines and len(words) > len(" ".join(lines).split()):
+        line = lines[-1].rstrip("!.।")
+        while line and (draw.textbbox((0, 0), f"{line}...", font=font)[2] > max_width):
+            line = line[:-1].rstrip()
+        lines[-1] = f"{line}..." if line else "..."
+    return lines or [text or "The Up Media"]
+
+
+def draw_centered_text(draw, box, text, font, fill):
+    left, top, right, bottom = box
+    bbox = draw.textbbox((0, 0), text, font=font)
+    x = left + ((right - left) - (bbox[2] - bbox[0])) / 2
+    y = top + ((bottom - top) - (bbox[3] - bbox[1])) / 2 - bbox[1]
+    draw.text((x, y), text, font=font, fill=fill)
 
 
 def shorts_brand_name(short):
@@ -329,6 +374,68 @@ def make_short_logo_badge(source_path, output_path, size=128):
     except Exception:
         logger.exception("Could not create shorts logo badge.")
         return source_path
+
+
+def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None):
+    if Image is None:
+        return False
+    primary = safe_hex_color(short.frame_primary_color, "#d71920")
+    secondary = safe_hex_color(short.frame_secondary_color, "#2b0508")
+    background = safe_hex_color(short.frame_background_color, "#050505")
+    text_color = safe_hex_color(short.frame_text_color, "#ffffff")
+    channel = shorts_brand_name(short)
+    headline = short.headline or short.title
+    location = short.location or (short.city.name if short.city_id else "")
+    bg = Image.new("RGBA", (SHORTS_RENDER_WIDTH, SHORTS_RENDER_HEIGHT), background)
+    fg = Image.new("RGBA", (SHORTS_RENDER_WIDTH, SHORTS_RENDER_HEIGHT), (0, 0, 0, 0))
+    bg_draw = ImageDraw.Draw(bg)
+    fg_draw = ImageDraw.Draw(fg)
+
+    card = (84, 136, 996, 1668)
+    bg_draw.rounded_rectangle(card, radius=34, fill=(21, 21, 21, 255), outline=primary, width=8)
+    bg_draw.rounded_rectangle((84, 136, 996, 600), radius=34, fill=(22, 4, 4, 255))
+    bg_draw.rectangle((84, 232, 996, 600), fill=secondary)
+    bg_draw.rectangle((84, 342, 996, 600), fill=primary)
+    bg_draw.rectangle((84, 136, 996, 600), fill=(0, 0, 0, 32))
+    bg_draw.rectangle((84, 600, 996, 628), fill=(21, 21, 21, 255))
+
+    top_font = shorts_image_font(39)
+    time_font = shorts_image_font(48)
+    headline_font = shorts_image_font(68)
+    meta_font = shorts_image_font(28)
+    brand_font = shorts_image_font(39)
+    fg_draw.text((126, 172), channel, font=top_font, fill=text_color)
+    if short.show_duration_badge and metadata.get("duration"):
+        total = max(0, int(round(metadata["duration"])))
+        fg_draw.text((848, 172), f"{total // 60:02d}:{total % 60:02d}", font=time_font, fill=text_color)
+    y = 316
+    for line in wrap_text_pixels(fg_draw, headline, headline_font, 820, max_lines=3):
+        fg_draw.text((126, y), line, font=headline_font, fill=text_color, stroke_width=2, stroke_fill=(0, 0, 0, 80))
+        y += 78
+    if location:
+        fg_draw.text((126, 552), location, font=meta_font, fill=(245, 245, 245, 235))
+
+    video_outer = (96, 686, 984, 1650)
+    video_inner = (108, 698, 972, 1638)
+    fg_draw.rounded_rectangle(video_outer, radius=28, outline=primary, width=14)
+    fg_draw.rounded_rectangle(video_inner, radius=24, outline=(255, 255, 255, 220), width=4)
+    if short.show_branding_strip:
+        fg_draw.rectangle((108, 1548, 972, 1626), fill=primary)
+        draw_centered_text(fg_draw, (108, 1548, 972, 1626), "The Up Media", brand_font, text_color)
+
+    badge = None
+    if logo_path and Path(logo_path).exists():
+        badge = make_short_logo_badge(logo_path, Path(fg_path).with_name("short-logo-badge.png"), size=132)
+    if badge and Path(badge).exists():
+        logo = Image.open(badge).convert("RGBA")
+        fg.alpha_composite(logo, (474, 614))
+    else:
+        fg_draw.ellipse((474, 614, 606, 746), fill=primary, outline=(255, 255, 255, 220), width=4)
+        draw_centered_text(fg_draw, (474, 614, 606, 746), "UP", shorts_image_font(36), text_color)
+
+    bg.convert("RGB").save(bg_path)
+    fg.save(fg_path)
+    return True
 
 
 def shorts_frame_filter(short, metadata, with_logo=False):
@@ -424,19 +531,51 @@ def render_short_frame(short_id):
     tmp_output = output_dir / f"short-{short.pk}.tmp.mp4"
     final_output = output_dir / f"short-{short.pk}.mp4"
     logo_path = shorts_logo_path(short)
-    badge_path = output_dir / f"short-{short.pk}-badge.png"
-    if logo_path and logo_path.exists():
-        logo_path = make_short_logo_badge(logo_path, badge_path, size=128) or logo_path
-    args = [ffmpeg_binary(), "-y", "-i", str(input_path)]
-    if logo_path and logo_path.exists():
-        args += ["-i", str(logo_path)]
+    bg_path = output_dir / f"short-{short.pk}-frame-bg.png"
+    fg_path = output_dir / f"short-{short.pk}-frame-fg.png"
+    use_template = create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=logo_path)
+    if use_template:
+        video_scale = "scale=864:940:force_original_aspect_ratio=increase,crop=864:940,setsar=1"
+        args = [
+            ffmpeg_binary(),
+            "-y",
+            "-loop",
+            "1",
+            "-t",
+            str(metadata.get("duration") or 1),
+            "-i",
+            str(bg_path),
+            "-i",
+            str(input_path),
+            "-loop",
+            "1",
+            "-t",
+            str(metadata.get("duration") or 1),
+            "-i",
+            str(fg_path),
+            "-filter_complex",
+            f"[1:v]{video_scale}[v0];[0:v][v0]overlay=x=108:y=698:shortest=1[base];[base][2:v]overlay=0:0:shortest=1[outv]",
+            "-map",
+            "[outv]",
+            "-map",
+            "1:a:0?",
+        ]
+    else:
+        badge_path = output_dir / f"short-{short.pk}-badge.png"
+        if logo_path and logo_path.exists():
+            logo_path = make_short_logo_badge(logo_path, badge_path, size=128) or logo_path
+        args = [ffmpeg_binary(), "-y", "-i", str(input_path)]
+        if logo_path and logo_path.exists():
+            args += ["-i", str(logo_path)]
+        args += [
+            "-filter_complex",
+            shorts_frame_filter(short, metadata, with_logo=bool(logo_path and logo_path.exists())),
+            "-map",
+            "[outv]",
+            "-map",
+            "0:a:0?",
+        ]
     args += [
-        "-filter_complex",
-        shorts_frame_filter(short, metadata, with_logo=bool(logo_path and logo_path.exists())),
-        "-map",
-        "[outv]",
-        "-map",
-        "0:a:0?",
         "-c:v",
         "libx264",
         "-preset",
@@ -460,8 +599,9 @@ def render_short_frame(short_id):
         short.rendered_video.name = rel_path
         short.video_file.name = rel_path
         short.duration = metadata.get("duration")
+        short.hls_status = ShortsVideo.HLSStatus.PENDING
         short.hls_progress_percent = 82
-        short.save(update_fields=["rendered_video", "video_file", "duration", "hls_progress_percent", "updated_at"])
+        short.save(update_fields=["rendered_video", "video_file", "duration", "hls_status", "hls_progress_percent", "updated_at"])
         try:
             generate_short_thumbnail(short, final_output)
         except Exception:
