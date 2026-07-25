@@ -255,6 +255,21 @@ def shorts_font_path():
     return ""
 
 
+def shorts_latin_font_path():
+    candidates = [
+        getattr(settings, "FFMPEG_LATIN_FONT_FILE", ""),
+        "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "C:/Windows/Fonts/arialbd.ttf",
+        "C:/Windows/Fonts/arial.ttf",
+    ]
+    for candidate in candidates:
+        if candidate and Path(candidate).exists():
+            return str(candidate).replace("\\", "/")
+    return shorts_font_path()
+
+
 def shorts_font_arg():
     font_path = shorts_font_path()
     ffmpeg_font = font_path.replace(":", "\\:")
@@ -270,6 +285,18 @@ def shorts_image_font(size):
             return ImageFont.truetype(font_path, size=size, layout_engine=ImageFont.Layout.RAQM)
     except Exception:
         logger.exception("Could not load shorts font %s.", font_path)
+    return ImageFont.load_default()
+
+
+def shorts_latin_image_font(size):
+    if ImageFont is None:
+        return None
+    font_path = shorts_latin_font_path()
+    try:
+        if font_path:
+            return ImageFont.truetype(font_path, size=size)
+    except Exception:
+        logger.exception("Could not load shorts latin font %s.", font_path)
     return ImageFont.load_default()
 
 
@@ -393,39 +420,43 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
 
     card = (84, 136, 996, 1668)
     bg_draw.rounded_rectangle(card, radius=34, fill=(21, 21, 21, 255), outline=primary, width=8)
-    bg_draw.rounded_rectangle((84, 136, 996, 600), radius=34, fill=(22, 4, 4, 255))
-    bg_draw.rectangle((84, 232, 996, 600), fill=secondary)
-    bg_draw.rectangle((84, 342, 996, 600), fill=primary)
-    bg_draw.rectangle((84, 136, 996, 600), fill=(0, 0, 0, 32))
-    bg_draw.rectangle((84, 600, 996, 628), fill=(21, 21, 21, 255))
+    bg_draw.rounded_rectangle((84, 136, 996, 635), radius=34, fill=(32, 4, 5, 255))
+    for step in range(0, 330, 6):
+        ratio = step / 330
+        red = int(45 + (130 * ratio))
+        bg_draw.rectangle((84, 245 + step, 996, 251 + step), fill=(red, 10, 12, 255))
+    bg_draw.rectangle((84, 136, 996, 635), fill=(0, 0, 0, 26))
+    bg_draw.rectangle((84, 635, 996, 675), fill=(21, 21, 21, 255))
 
     headline_font = shorts_image_font(68)
     meta_font = shorts_image_font(28)
-    brand_font = shorts_image_font(39)
-    y = 316
+    top_font = shorts_latin_image_font(40)
+    time_font = shorts_latin_image_font(48)
+    fg_draw.text((126, 185), channel, font=top_font, fill=text_color)
+    if short.show_duration_badge and metadata.get("duration"):
+        total = max(0, int(round(metadata["duration"])))
+        fg_draw.text((844, 184), f"{total // 60}:{total % 60:02d}", font=time_font, fill=text_color)
+    y = 332
     for line in wrap_text_pixels(fg_draw, headline, headline_font, 820, max_lines=3):
         fg_draw.text((126, y), line, font=headline_font, fill=text_color, stroke_width=2, stroke_fill=(0, 0, 0, 80))
-        y += 78
+        y += 82
     if location:
-        fg_draw.text((126, 552), location, font=meta_font, fill=(245, 245, 245, 235))
+        fg_draw.text((126, 572), location, font=meta_font, fill=(245, 245, 245, 235))
 
-    video_outer = (96, 686, 984, 1650)
-    video_inner = (108, 698, 972, 1638)
+    video_outer = (96, 720, 984, 1688)
+    video_inner = (108, 732, 972, 1676)
     fg_draw.rounded_rectangle(video_outer, radius=28, outline=primary, width=14)
     fg_draw.rounded_rectangle(video_inner, radius=24, outline=(255, 255, 255, 220), width=4)
-    if short.show_branding_strip:
-        fg_draw.rectangle((108, 1548, 972, 1626), fill=primary)
-        draw_centered_text(fg_draw, (108, 1548, 972, 1626), "The Up Media", brand_font, text_color)
 
     badge = None
     if logo_path and Path(logo_path).exists():
         badge = make_short_logo_badge(logo_path, Path(fg_path).with_name("short-logo-badge.png"), size=132)
     if badge and Path(badge).exists():
         logo = Image.open(badge).convert("RGBA")
-        fg.alpha_composite(logo, (474, 614))
+        fg.alpha_composite(logo, (474, 648))
     else:
-        fg_draw.ellipse((474, 614, 606, 746), fill=primary, outline=(255, 255, 255, 220), width=4)
-        draw_centered_text(fg_draw, (474, 614, 606, 746), "UP", shorts_image_font(36), text_color)
+        fg_draw.ellipse((474, 648, 606, 780), fill=primary, outline=(255, 255, 255, 220), width=4)
+        draw_centered_text(fg_draw, (474, 648, 606, 780), "UP", shorts_latin_image_font(36), text_color)
 
     bg.convert("RGB").save(bg_path)
     fg.save(fg_path)
@@ -528,7 +559,7 @@ def render_short_frame(short_id):
     fg_path = output_dir / f"short-{short.pk}-frame-fg.png"
     use_template = create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=logo_path)
     if use_template:
-        video_scale = "scale=864:940:force_original_aspect_ratio=increase,crop=864:940,setsar=1"
+        video_scale = "scale=864:944:force_original_aspect_ratio=increase,crop=864:944,setsar=1"
         args = [
             ffmpeg_binary(),
             "-y",
@@ -547,7 +578,7 @@ def render_short_frame(short_id):
             "-i",
             str(fg_path),
             "-filter_complex",
-            f"[1:v]{video_scale}[v0];[0:v][v0]overlay=x=108:y=698:shortest=1[base];[base][2:v]overlay=0:0:shortest=1[outv]",
+            f"[1:v]{video_scale}[v0];[0:v][v0]overlay=x=108:y=732:shortest=1[base];[base][2:v]overlay=0:0:shortest=1[outv]",
             "-map",
             "[outv]",
             "-map",
