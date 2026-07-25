@@ -407,7 +407,7 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
     fg_draw.text((126, 172), channel, font=top_font, fill=text_color)
     if short.show_duration_badge and metadata.get("duration"):
         total = max(0, int(round(metadata["duration"])))
-        fg_draw.text((848, 172), f"{total // 60:02d}:{total % 60:02d}", font=time_font, fill=text_color)
+        fg_draw.text((848, 172), f"{total // 60}:{total % 60:02d}", font=time_font, fill=text_color)
     y = 316
     for line in wrap_text_pixels(fg_draw, headline, headline_font, 820, max_lines=3):
         fg_draw.text((126, y), line, font=headline_font, fill=text_color, stroke_width=2, stroke_fill=(0, 0, 0, 80))
@@ -522,9 +522,10 @@ def generate_short_thumbnail(short, input_path):
 
 def render_short_frame(short_id):
     short = ShortsVideo.objects.select_related("city").get(pk=short_id)
-    if not short.video_file:
+    source_file = short.original_video or short.video_file
+    if not source_file:
         raise HLSProcessingError("Short has no raw video file.")
-    input_path = Path(short.video_file.path)
+    input_path = Path(source_file.path)
     if not input_path.exists():
         raise HLSProcessingError("Raw shorts video file not found.")
 

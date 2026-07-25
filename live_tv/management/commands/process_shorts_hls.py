@@ -11,6 +11,7 @@ class Command(BaseCommand):
         parser.add_argument("--id", type=int, dest="short_id", help="Process one ShortsVideo id.")
         parser.add_argument("--all", action="store_true", help="Process every published shorts video.")
         parser.add_argument("--retry-failed", action="store_true", help="Include failed videos.")
+        parser.add_argument("--rerender", action="store_true", help="Discard rendered/HLS paths and render again from original_video.")
 
     def handle(self, *args, **options):
         queryset = ShortsVideo.objects.filter(is_published=True).order_by("pk")
@@ -29,7 +30,14 @@ class Command(BaseCommand):
         for short in queryset:
             self.stdout.write(f"[{short.pk}] {short.title or short.video_file.name}")
             try:
-                if not short.rendered_video:
+                if options.get("rerender"):
+                    short.rendered_video = None
+                    short.hls_master_url = ""
+                    short.hls_status = ShortsVideo.HLSStatus.PENDING
+                    short.hls_progress_percent = 0
+                    short.processing_error = ""
+                    short.save(update_fields=["rendered_video", "hls_master_url", "hls_status", "hls_progress_percent", "processing_error", "updated_at"])
+                if options.get("rerender") or not short.rendered_video:
                     render_short_frame(short.pk)
                 hls_path = convert_short_to_hls(short.pk)
             except Exception as exc:
