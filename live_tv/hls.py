@@ -418,50 +418,40 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
     bg_draw = ImageDraw.Draw(bg)
     fg_draw = ImageDraw.Draw(fg)
 
-    card = (84, 136, 996, 1668)
-    bg_draw.rounded_rectangle(card, radius=34, fill=(21, 21, 21, 255), outline=primary, width=8)
-    bg_draw.rounded_rectangle((84, 136, 996, 635), radius=34, fill=(20, 2, 3, 255))
-    for step in range(0, 499, 3):
-        ratio = step / 499
+    bg_draw.rectangle((0, 0, SHORTS_RENDER_WIDTH, SHORTS_RENDER_HEIGHT), fill=background)
+    for step in range(0, 420, 3):
+        ratio = step / 420
         if ratio < 0.28:
             red = int(23 + (18 * (ratio / 0.28)))
             green = 3
         else:
             red = int(54 + (102 * ((ratio - 0.28) / 0.72)))
             green = int(6 + (13 * ((ratio - 0.28) / 0.72)))
-        bg_draw.rectangle((84, 136 + step, 996, 139 + step), fill=(red, green, 10, 255))
-    bg_draw.rectangle((84, 136, 996, 245), fill=(8, 6, 4, 255))
-    bg_draw.rectangle((84, 635, 996, 675), fill=(21, 21, 21, 255))
+        bg_draw.rectangle((0, step, SHORTS_RENDER_WIDTH, step + 3), fill=(red, green, 10, 255))
 
-    headline_font = shorts_image_font(68)
+    headline_font = shorts_image_font(76)
     meta_font = shorts_image_font(28)
-    top_font = shorts_latin_image_font(40)
-    time_font = shorts_latin_image_font(48)
-    fg_draw.text((126, 185), channel, font=top_font, fill=text_color)
-    if short.show_duration_badge and metadata.get("duration"):
-        total = max(0, int(round(metadata["duration"])))
-        fg_draw.text((844, 184), f"{total // 60}:{total % 60:02d}", font=time_font, fill=text_color)
-    y = 332
-    for line in wrap_text_pixels(fg_draw, headline, headline_font, 820, max_lines=3):
-        fg_draw.text((126, y), line, font=headline_font, fill=text_color, stroke_width=2, stroke_fill=(0, 0, 0, 80))
-        y += 82
+    y = 86
+    for line in wrap_text_pixels(fg_draw, headline, headline_font, 920, max_lines=3):
+        fg_draw.text((96, y), line, font=headline_font, fill=text_color, stroke_width=3, stroke_fill=(0, 0, 0, 150))
+        y += 88
     if location:
-        fg_draw.text((126, 572), location, font=meta_font, fill=(245, 245, 245, 235))
+        fg_draw.text((96, min(y + 12, 324)), location, font=meta_font, fill=(245, 245, 245, 235))
 
-    video_outer = (96, 720, 984, 1688)
-    video_inner = (108, 732, 972, 1676)
-    fg_draw.rounded_rectangle(video_outer, radius=28, outline=primary, width=14)
-    fg_draw.rounded_rectangle(video_inner, radius=24, outline=(255, 255, 255, 220), width=4)
+    video_outer = (18, 342, 1062, 1864)
+    video_inner = (36, 360, 1044, 1846)
+    fg_draw.rounded_rectangle(video_outer, radius=30, outline=primary, width=15)
+    fg_draw.rounded_rectangle(video_inner, radius=24, outline=(255, 255, 255, 230), width=5)
 
     badge = None
     if logo_path and Path(logo_path).exists():
         badge = make_short_logo_badge(logo_path, Path(fg_path).with_name("short-logo-badge.png"), size=132)
     if badge and Path(badge).exists():
         logo = Image.open(badge).convert("RGBA")
-        fg.alpha_composite(logo, (474, 648))
+        fg.alpha_composite(logo, (474, 276))
     else:
-        fg_draw.ellipse((474, 648, 606, 780), fill=primary, outline=(255, 255, 255, 220), width=4)
-        draw_centered_text(fg_draw, (474, 648, 606, 780), "UP", shorts_latin_image_font(36), text_color)
+        fg_draw.ellipse((474, 276, 606, 408), fill=primary, outline=(255, 255, 255, 220), width=4)
+        draw_centered_text(fg_draw, (474, 276, 606, 408), "UP", shorts_latin_image_font(36), text_color)
 
     bg.convert("RGB").save(bg_path)
     fg.save(fg_path)
@@ -478,38 +468,31 @@ def shorts_frame_filter(short, metadata, with_logo=False):
     headline_draws = []
     for index, line in enumerate(headline_lines):
         headline_draws.append(
-            f"drawtext=text='{ffmpeg_escape(line)}':x=126:y={324 + (index * 74)}:fontsize=64:fontcolor={text_color}{font_arg}:borderw=2:bordercolor=black@0.20"
+            f"drawtext=text='{ffmpeg_escape(line)}':x=96:y={86 + (index * 88)}:fontsize=76:fontcolor={text_color}{font_arg}:borderw=3:bordercolor=black@0.55"
         )
     headline_filter = ",".join(headline_draws)
     channel = ffmpeg_escape(shorts_brand_name(short))
     location = ffmpeg_escape(short.location or (short.city.name if short.city_id else ""))
     if short.video_fit == ShortsVideo.VideoFit.COVER:
-        video_scale = "scale=872:960:force_original_aspect_ratio=increase,crop=872:960"
+        video_scale = "scale=1008:1486:force_original_aspect_ratio=increase,crop=1008:1486"
     else:
-        video_scale = "scale=872:960:force_original_aspect_ratio=increase,crop=872:960"
-
-    branding_draw = ""
-    if short.show_branding_strip:
-        branding_draw = f",drawbox=x=104:y=1546:w=872:h=76:color={primary}@0.98:t=fill,drawtext=text='The Up Media':x=394:y=1565:fontsize=38:fontcolor=white{font_arg}"
+        video_scale = "scale=1008:1486:force_original_aspect_ratio=increase,crop=1008:1486"
     graph = (
         f"color=c={background}:s={SHORTS_RENDER_WIDTH}x{SHORTS_RENDER_HEIGHT}:d={metadata.get('duration') or 1}[bg];"
         f"[0:v]{video_scale},setsar=1[v0];"
-        f"[bg]drawbox=x=84:y=136:w=912:h=1518:color=#151515@1:t=fill,"
-        f"drawbox=x=84:y=136:w=912:h=1518:color={primary}@0.98:t=8,"
-        f"drawbox=x=84:y=136:w=912:h=96:color=#100703@1:t=fill,"
-        f"drawbox=x=84:y=232:w=912:h=286:color=#3b0708@1:t=fill,"
-        f"drawbox=x=84:y=340:w=912:h=178:color={primary}@0.58:t=fill,"
+        f"[bg]drawbox=x=0:y=0:w=1080:h=120:color=#170303@1:t=fill,"
+        f"drawbox=x=0:y=120:w=1080:h=300:color=#6b0c0e@1:t=fill,"
+        f"drawbox=x=0:y=260:w=1080:h=160:color={primary}@0.58:t=fill,"
         f"{headline_filter},"
-        f"drawbox=x=84:y=518:w=912:h=90:color=#151515@1:t=fill,"
-        f"drawtext=text='{location}':x=126:y=548:fontsize=26:fontcolor=#f5f5f5{font_arg}[card];"
-        f"[card][v0]overlay=x=104:y=624:shortest=1,"
-        f"drawbox=x=96:y=616:w=888:h=982:color={primary}@1:t=10,"
-        f"drawbox=x=108:y=628:w=864:h=958:color=white@0.86:t=3{branding_draw}[base]"
+        f"drawtext=text='{location}':x=96:y=324:fontsize=26:fontcolor=#f5f5f5{font_arg}[card];"
+        f"[card][v0]overlay=x=36:y=360:shortest=1,"
+        f"drawbox=x=18:y=342:w=1044:h=1522:color={primary}@1:t=15,"
+        f"drawbox=x=36:y=360:w=1008:h=1486:color=white@0.90:t=5[base]"
     )
     if with_logo:
-        graph += ";[1:v]scale=128:128:force_original_aspect_ratio=increase,crop=128:128,format=rgba[logo];[base][logo]overlay=x=476:y=550:shortest=1[outv]"
+        graph += ";[1:v]scale=132:132:force_original_aspect_ratio=increase,crop=132:132,format=rgba[logo];[base][logo]overlay=x=474:y=276:shortest=1[outv]"
     else:
-        graph += f";[base]drawbox=x=476:y=550:w=128:h=128:color={primary}@1:t=fill,drawtext=text='{channel}':x=492:y=596:fontsize=22:fontcolor=white{font_arg}[outv]"
+        graph += f";[base]drawbox=x=474:y=276:w=132:h=132:color={primary}@1:t=fill,drawtext=text='{channel}':x=492:y=326:fontsize=22:fontcolor=white{font_arg}[outv]"
     return graph
 
 
@@ -564,7 +547,7 @@ def render_short_frame(short_id):
     fg_path = output_dir / f"short-{short.pk}-frame-fg.png"
     use_template = create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=logo_path)
     if use_template:
-        video_scale = "scale=864:944:force_original_aspect_ratio=increase,crop=864:944,setsar=1"
+        video_scale = "scale=1008:1486:force_original_aspect_ratio=increase,crop=1008:1486,setsar=1"
         args = [
             ffmpeg_binary(),
             "-y",
@@ -583,7 +566,7 @@ def render_short_frame(short_id):
             "-i",
             str(fg_path),
             "-filter_complex",
-            f"[1:v]{video_scale}[v0];[0:v][v0]overlay=x=108:y=732:shortest=1[base];[base][2:v]overlay=0:0:shortest=1[outv]",
+            f"[1:v]{video_scale}[v0];[0:v][v0]overlay=x=36:y=360:shortest=1[base];[base][2:v]overlay=0:0:shortest=1[outv]",
             "-map",
             "[outv]",
             "-map",
