@@ -2908,10 +2908,10 @@ def mobile_admin_shorts_upload_api(request):
     except Exception as exc:
         return JsonResponse({"detail": str(exc), "errors": {"video_file": [str(exc)]}}, status=400)
 
-    title = request.POST.get("title", "").strip()
-    if not title:
-        return JsonResponse({"detail": "Title is required.", "errors": {"title": ["This field is required."]}}, status=400)
     headline = request.POST.get("headline", "").strip()
+    title = request.POST.get("title", "").strip() or headline
+    if not headline:
+        return JsonResponse({"detail": "Headline is required.", "errors": {"headline": ["This field is required."]}}, status=400)
     caption = request.POST.get("caption", "").strip()
     location = request.POST.get("location", "").strip()
     state_id, city_id, location_errors = parse_required_location(request.POST)
