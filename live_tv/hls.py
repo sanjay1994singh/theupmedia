@@ -430,7 +430,10 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
     headline_font = shorts_image_font(64)
     y = 66
     for line in wrap_text_pixels(fg_draw, headline, headline_font, 930, max_lines=3):
-        fg_draw.text((96, y), line, font=headline_font, fill=text_color, stroke_width=3, stroke_fill=(0, 0, 0, 150))
+        bbox = fg_draw.textbbox((0, 0), line, font=headline_font, stroke_width=3)
+        line_width = bbox[2] - bbox[0]
+        x = max(60, int((SHORTS_RENDER_WIDTH - line_width) / 2))
+        fg_draw.text((x, y), line, font=headline_font, fill=text_color, stroke_width=3, stroke_fill=(0, 0, 0, 150))
         y += 74
 
     video_outer = (18, 370, 1062, 1864)
@@ -463,7 +466,7 @@ def shorts_frame_filter(short, metadata, with_logo=False):
     headline_draws = []
     for index, line in enumerate(headline_lines):
         headline_draws.append(
-            f"drawtext=text='{ffmpeg_escape(line)}':x=96:y={66 + (index * 74)}:fontsize=64:fontcolor={text_color}{font_arg}:borderw=3:bordercolor=black@0.55"
+            f"drawtext=text='{ffmpeg_escape(line)}':x=(w-text_w)/2:y={66 + (index * 74)}:fontsize=64:fontcolor={text_color}{font_arg}:borderw=3:bordercolor=black@0.55"
         )
     headline_filter = ",".join(headline_draws)
     channel = ffmpeg_escape(shorts_brand_name(short))
