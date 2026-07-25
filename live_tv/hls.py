@@ -15,6 +15,11 @@ from django.utils import timezone
 from .models import ShortsVideo
 from .models import LiveTVChannel
 
+try:
+    from PIL import Image, ImageDraw, ImageOps
+except ImportError:  # pragma: no cover
+    Image = ImageDraw = ImageOps = None
+
 
 logger = logging.getLogger(__name__)
 
@@ -255,7 +260,7 @@ def shorts_font_arg():
     return f":fontfile='{font_path}'" if font_path else ":font='Arial'"
 
 
-def wrap_text_lines(text, max_chars=19, max_lines=3):
+def wrap_text_lines(text, max_chars=18, max_lines=3):
     words = " ".join((text or "").split()).split()
     lines = []
     current = ""
@@ -300,53 +305,80 @@ def shorts_logo_path(short):
     return None
 
 
+def make_short_logo_badge(source_path, output_path, size=128):
+    if not source_path or not Path(source_path).exists() or Image is None:
+        return None
+    try:
+        badge_size = int(size)
+        border = 4
+        inner = badge_size - (border * 2)
+        badge = Image.new("RGBA", (badge_size, badge_size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(badge)
+        draw.ellipse((0, 0, badge_size - 1, badge_size - 1), fill=(255, 255, 255, 245))
+        draw.ellipse((border, border, badge_size - border - 1, badge_size - border - 1), fill=(220, 24, 24, 255))
+        logo = Image.open(source_path).convert("RGBA")
+        logo.thumbnail((inner - 12, inner - 12), Image.Resampling.LANCZOS)
+        canvas = Image.new("RGBA", (inner, inner), (255, 255, 255, 0))
+        canvas.alpha_composite(logo, ((inner - logo.width) // 2, (inner - logo.height) // 2))
+        mask = Image.new("L", (inner, inner), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, inner - 1, inner - 1), fill=255)
+        badge.alpha_composite(ImageOps.fit(canvas, (inner, inner), method=Image.Resampling.LANCZOS), (border, border))
+        badge.putalpha(Image.composite(badge.getchannel("A"), Image.new("L", (badge_size, badge_size), 0), Image.new("L", (badge_size, badge_size), 255)))
+        badge.save(output_path)
+        return output_path
+    except Exception:
+        logger.exception("Could not create shorts logo badge.")
+        return source_path
+
+
 def shorts_frame_filter(short, metadata, with_logo=False):
     primary = safe_hex_color(short.frame_primary_color, "#d71920")
     secondary = safe_hex_color(short.frame_secondary_color, "#2b0508")
     background = safe_hex_color(short.frame_background_color, "#050505")
     text_color = safe_hex_color(short.frame_text_color, "#ffffff")
     font_arg = shorts_font_arg()
-    headline_lines = wrap_text_lines(short.headline or short.title, max_chars=17, max_lines=3)
+    headline_lines = wrap_text_lines(short.headline or short.title, max_chars=18, max_lines=3)
     headline_draws = []
     for index, line in enumerate(headline_lines):
         headline_draws.append(
-            f"drawtext=text='{ffmpeg_escape(line)}':x=126:y={332 + (index * 84)}:fontsize=72:fontcolor={text_color}{font_arg}:borderw=2:bordercolor=black@0.28"
+            f"drawtext=text='{ffmpeg_escape(line)}':x=126:y={324 + (index * 74)}:fontsize=64:fontcolor={text_color}{font_arg}:borderw=2:bordercolor=black@0.20"
         )
     headline_filter = ",".join(headline_draws)
     channel = ffmpeg_escape(shorts_brand_name(short))
     location = ffmpeg_escape(short.location or (short.city.name if short.city_id else ""))
     if short.video_fit == ShortsVideo.VideoFit.COVER:
-        video_scale = "scale=872:1056:force_original_aspect_ratio=increase,crop=872:1056"
+        video_scale = "scale=872:960:force_original_aspect_ratio=increase,crop=872:960"
     else:
-        video_scale = "scale=872:1056:force_original_aspect_ratio=increase,crop=872:1056"
+        video_scale = "scale=872:960:force_original_aspect_ratio=increase,crop=872:960"
 
     duration_draw = ""
     if short.show_duration_badge and metadata.get("duration"):
         total = max(0, int(round(metadata["duration"])))
         label = f"{total // 60:02d}:{total % 60:02d}"
-        duration_draw = f",drawtext=text='{label}':x=840:y=218:fontsize=50:fontcolor={text_color}{font_arg}"
+        duration_draw = f",drawtext=text='{label}':x=848:y=214:fontsize=46:fontcolor={text_color}{font_arg}"
     branding_draw = ""
     if short.show_branding_strip:
-        branding_draw = f",drawbox=x=104:y=1622:w=872:h=82:color={primary}@0.98:t=fill,drawtext=text='The Up Media':x=392:y=1644:fontsize=40:fontcolor=white{font_arg}"
+        branding_draw = f",drawbox=x=104:y=1546:w=872:h=76:color={primary}@0.98:t=fill,drawtext=text='The Up Media':x=394:y=1565:fontsize=38:fontcolor=white{font_arg}"
     graph = (
         f"color=c={background}:s={SHORTS_RENDER_WIDTH}x{SHORTS_RENDER_HEIGHT}:d={metadata.get('duration') or 1}[bg];"
         f"[0:v]{video_scale},setsar=1[v0];"
-        f"[bg]drawbox=x=84:y=174:w=912:h=1548:color=#151515@1:t=fill,"
-        f"drawbox=x=84:y=174:w=912:h=1548:color={primary}@0.98:t=8,"
-        f"drawbox=x=84:y=174:w=912:h=420:color=#160404@1:t=fill,"
-        f"drawbox=x=84:y=314:w=912:h=280:color={primary}@0.66:t=fill,"
-        f"drawbox=x=84:y=174:w=912:h=420:color=black@0.18:t=fill,"
-        f"drawtext=text='{channel}':x=126:y=220:fontsize=44:fontcolor={text_color}{font_arg},"
+        f"[bg]drawbox=x=84:y=136:w=912:h=1518:color=#151515@1:t=fill,"
+        f"drawbox=x=84:y=136:w=912:h=1518:color={primary}@0.98:t=8,"
+        f"drawbox=x=84:y=136:w=912:h=96:color=#100703@1:t=fill,"
+        f"drawbox=x=84:y=232:w=912:h=286:color=#3b0708@1:t=fill,"
+        f"drawbox=x=84:y=340:w=912:h=178:color={primary}@0.58:t=fill,"
+        f"drawtext=text='{channel}':x=126:y=176:fontsize=38:fontcolor={text_color}{font_arg},"
         f"{headline_filter},"
-        f"drawtext=text='{location}':x=126:y=542:fontsize=30:fontcolor=#f5f5f5{font_arg}{duration_draw}[card];"
-        f"[card][v0]overlay=x=104:y=686:shortest=1,"
-        f"drawbox=x=96:y=676:w=888:h=1080:color={primary}@1:t=10,"
-        f"drawbox=x=108:y=688:w=864:h=1056:color=white@0.86:t=3{branding_draw}[base]"
+        f"drawbox=x=84:y=518:w=912:h=90:color=#151515@1:t=fill,"
+        f"drawtext=text='{location}':x=126:y=548:fontsize=26:fontcolor=#f5f5f5{font_arg}{duration_draw}[card];"
+        f"[card][v0]overlay=x=104:y=624:shortest=1,"
+        f"drawbox=x=96:y=616:w=888:h=982:color={primary}@1:t=10,"
+        f"drawbox=x=108:y=628:w=864:h=958:color=white@0.86:t=3{branding_draw}[base]"
     )
     if with_logo:
-        graph += ";[1:v]scale=142:142:force_original_aspect_ratio=increase,crop=142:142,format=rgba[logo];[base][logo]overlay=x=469:y=610:shortest=1[outv]"
+        graph += ";[1:v]scale=128:128:force_original_aspect_ratio=increase,crop=128:128,format=rgba[logo];[base][logo]overlay=x=476:y=550:shortest=1[outv]"
     else:
-        graph += f";[base]drawbox=x=469:y=610:w=142:h=142:color={primary}@1:t=fill,drawtext=text='{channel}':x=486:y=660:fontsize=24:fontcolor=white{font_arg}[outv]"
+        graph += f";[base]drawbox=x=476:y=550:w=128:h=128:color={primary}@1:t=fill,drawtext=text='{channel}':x=492:y=596:fontsize=22:fontcolor=white{font_arg}[outv]"
     return graph
 
 
@@ -374,6 +406,9 @@ def render_short_frame(short_id):
     tmp_output = output_dir / f"short-{short.pk}.tmp.mp4"
     final_output = output_dir / f"short-{short.pk}.mp4"
     logo_path = shorts_logo_path(short)
+    badge_path = output_dir / f"short-{short.pk}-badge.png"
+    if logo_path and logo_path.exists():
+        logo_path = make_short_logo_badge(logo_path, badge_path, size=128) or logo_path
     args = [ffmpeg_binary(), "-y", "-i", str(input_path)]
     if logo_path and logo_path.exists():
         args += ["-i", str(logo_path)]

@@ -3617,6 +3617,7 @@ def dashboard_processing_snapshot():
     render_jobs = SocialRenderedVideo.objects.filter(status__in=[SocialRenderedVideo.Status.PENDING, SocialRenderedVideo.Status.PROCESSING]).select_related("source_video", "live_channel").order_by("-updated_at", "-created_at")[:20]
     live_processing = LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.PROCESSING, updated_at__gte=stale_cutoff).order_by("-updated_at")[:10]
     short_processing = ShortsVideo.objects.filter(hls_status=ShortsVideo.HLSStatus.PROCESSING, updated_at__gte=stale_cutoff).order_by("-updated_at")[:10]
+    short_pending = ShortsVideo.objects.filter(hls_status=ShortsVideo.HLSStatus.PENDING).order_by("-updated_at", "-created_at")[:10]
     downloads = MediaDownload.objects.filter(status=MediaDownload.Status.PROCESSING).order_by("-updated_at", "-created_at")[:10]
     now = timezone.now()
     live_candidates = LiveTVChannel.objects.filter(
@@ -3662,9 +3663,21 @@ def dashboard_processing_snapshot():
                 "title": item.title,
                 "status": item.hls_status,
                 "progress_percent": 100 if item.hls_status == ShortsVideo.HLSStatus.COMPLETED else item.hls_progress_percent,
+                "rendered_ready": bool(item.rendered_video),
                 "updated_at": timezone.localtime(item.updated_at).strftime("%d %b, %I:%M %p"),
             }
             for item in short_processing
+        ],
+        "short_pending": [
+            {
+                "id": item.pk,
+                "title": item.title,
+                "status": item.hls_status,
+                "progress_percent": item.hls_progress_percent,
+                "rendered_ready": bool(item.rendered_video),
+                "updated_at": timezone.localtime(item.updated_at).strftime("%d %b, %I:%M %p"),
+            }
+            for item in short_pending
         ],
         "render_jobs": [
             {

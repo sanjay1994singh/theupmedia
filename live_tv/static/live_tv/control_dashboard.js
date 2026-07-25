@@ -117,14 +117,15 @@
   function renderProcessingCard(processing) {
     const liveJobs = processing.live_processing || [];
     const shortJobs = processing.short_processing || [];
+    const pendingShortJobs = processing.short_pending || [];
     const renderJobs = (processing.render_jobs || []).filter((job) => isActiveState(job.status));
     const downloadJobs = (processing.downloads_recent || []).filter((job) => isActiveState(job.status));
     const pendingRenderCount = count(processing.renders, "pending");
     const pendingDownloadCount = count(processing.downloads, "pending");
-    const activeJobs = [...liveJobs, ...shortJobs, ...renderJobs, ...downloadJobs];
+    const activeJobs = [...liveJobs, ...shortJobs, ...pendingShortJobs, ...renderJobs, ...downloadJobs];
     const rows = [
       ["Live HLS", liveJobs.length || count(processing.live_hls, "processing"), averageProgress(liveJobs)],
-      ["Shorts HLS", shortJobs.length || count(processing.short_hls, "processing"), averageProgress(shortJobs)],
+      ["Shorts Render/HLS", (shortJobs.length + pendingShortJobs.length) || count(processing.short_hls, "processing"), averageProgress([...shortJobs, ...pendingShortJobs])],
       ["Rendering", renderJobs.length || count(processing.renders, "processing"), averageProgress(renderJobs)],
       ["Downloads", downloadJobs.length || count(processing.downloads, "processing"), averageProgress(downloadJobs)],
       ["Pending", pendingRenderCount + pendingDownloadCount, 0],
@@ -199,7 +200,8 @@
   function renderProcessing(processing) {
     const activeRows = [
       ...(processing.live_processing || []).map((job) => ({ ...job, kind: "Live HLS" })),
-      ...(processing.short_processing || []).map((job) => ({ ...job, kind: "Shorts HLS" })),
+      ...(processing.short_processing || []).map((job) => ({ ...job, kind: job.rendered_ready ? "Shorts HLS" : "Shorts Render" })),
+      ...(processing.short_pending || []).map((job) => ({ ...job, kind: job.rendered_ready ? "Shorts HLS Pending" : "Shorts Render Pending" })),
       ...(processing.render_jobs || []).filter((job) => isActiveState(job.status)).map((job) => ({ ...job, kind: "Render" })),
       ...(processing.downloads_recent || []).filter((job) => isActiveState(job.status)).map((job) => ({ ...job, kind: "Download" })),
     ];
@@ -227,7 +229,7 @@
   function renderUploads(uploads) {
     const videos = uploads.videos || [];
     const shorts = uploads.shorts || [];
-    return `${pageTitle("Uploads Library", "Latest uploaded videos and shorts", {})}<div class="grid lower-grid two-col"><section class="dashboard-card"><div class="card-head"><h2>Live Uploads</h2></div><table class="table"><thead><tr><th>Video</th><th>HLS</th><th>Size</th><th>Updated</th></tr></thead><tbody>${videos.map((v) => `<tr><td>${esc(v.title)}</td><td>${status(v.hls_status)} ${progress(v.hls_progress_percent, v.hls_status)}</td><td>${esc(v.file_size_display)}</td><td>${esc(v.updated_at)}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No videos</td></tr>`}</tbody></table></section><section class="dashboard-card"><div class="card-head"><h2>Shorts Uploads</h2></div><table class="table"><thead><tr><th>Short</th><th>HLS</th><th>Duration</th></tr></thead><tbody>${shorts.map((v) => `<tr><td>${esc(v.title)}</td><td>${status(v.status)} ${progress(v.progress_percent, v.status)}</td><td>${esc(v.duration_display)}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">No shorts</td></tr>`}</tbody></table></section></div>`;
+    return `${pageTitle("Uploads Library", "Latest uploaded videos and shorts", {})}<div class="grid lower-grid two-col"><section class="dashboard-card"><div class="card-head"><h2>Live Uploads</h2></div><table class="table"><thead><tr><th>Video</th><th>HLS</th><th>Size</th><th>Updated</th></tr></thead><tbody>${videos.map((v) => `<tr><td>${esc(v.title)}</td><td>${status(v.hls_status)} ${progress(v.hls_progress_percent, v.hls_status)}</td><td>${esc(v.file_size_display)}</td><td>${esc(v.updated_at)}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">No videos</td></tr>`}</tbody></table></section><section class="dashboard-card"><div class="card-head"><h2>Shorts Uploads</h2></div><table class="table"><thead><tr><th>Short</th><th>Render/HLS</th><th>Duration</th></tr></thead><tbody>${shorts.map((v) => `<tr><td>${esc(v.title)}</td><td>${status(v.status)} ${progress(v.progress_percent, v.status)}</td><td>${esc(v.duration_display)}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">No shorts</td></tr>`}</tbody></table></section></div>`;
   }
 
   function renderRenders(renders) {

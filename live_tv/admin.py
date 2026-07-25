@@ -370,11 +370,12 @@ class FacebookLiveSettingAdmin(admin.ModelAdmin):
 
 @admin.register(ShortsVideo)
 class ShortsVideoAdmin(admin.ModelAdmin):
-    list_display = ("title", "frame_template", "category", "state", "city", "location", "hls_status", "hls_progress_display", "download_link", "is_published", "display_order", "views_count", "likes_count", "comments_count", "shares_count", "created_at")
+    list_display = ("title", "processing_state", "hls_progress_display", "rendered_ready", "download_link", "frame_template", "category", "state", "city", "is_published", "display_order", "views_count", "likes_count", "comments_count", "shares_count", "created_at")
     list_filter = ("is_published", "hls_status", "frame_template")
     search_fields = ("title", "headline", "caption", "location", "city__name")
     list_editable = ("is_published", "display_order")
     readonly_fields = ("rendered_preview", "download_link", "hls_master_url", "hls_status", "hls_progress_display", "hls_progress_percent", "processing_error", "duration", "created_at", "updated_at")
+    actions = ("queue_rerender",)
     fieldsets = (
         ("Shorts Video", {"fields": ("title", "headline", "caption", "location", "category", "state", "city", "frame_template", "video_file", "original_video", "rendered_video", "thumbnail")}),
         ("Frame Branding", {"fields": ("channel_name", "channel_logo", "frame_primary_color", "frame_secondary_color", "frame_background_color", "frame_text_color", "video_fit", "show_duration_badge", "show_branding_strip")}),
@@ -387,6 +388,22 @@ class ShortsVideoAdmin(admin.ModelAdmin):
     @admin.display(description="HLS progress")
     def hls_progress_display(self, obj):
         return processing_progress_bar(obj.hls_progress_percent, obj.hls_status)
+
+    @admin.display(description="Processing", ordering="hls_status")
+    def processing_state(self, obj):
+        return format_html(
+            '<strong>{}</strong>{}',
+            obj.get_hls_status_display(),
+            format_html('<br><small style="color:#b91c1c">{}</small>', obj.processing_error[:100]) if obj.processing_error else "",
+        )
+
+    @admin.display(description="Rendered")
+    def rendered_ready(self, obj):
+        if obj.rendered_video:
+            return format_html('<span style="color:#16a34a;font-weight:700">Ready</span>')
+        if obj.hls_status in {ShortsVideo.HLSStatus.PENDING, ShortsVideo.HLSStatus.PROCESSING}:
+            return format_html('<span data-processing-progress="1" style="color:#2563eb;font-weight:700">Processing</span>')
+        return "-"
 
     @admin.display(description="Rendered preview")
     def rendered_preview(self, obj):
@@ -417,6 +434,22 @@ class ShortsVideoAdmin(admin.ModelAdmin):
             from .views import enqueue_short_hls_job
 
             transaction.on_commit(lambda: enqueue_short_hls_job(obj.pk))
+
+    @admin.action(description="Re-render selected shorts")
+    def queue_rerender(self, request, queryset):
+        from .views import enqueue_short_hls_job
+
+        count = 0
+        for obj in queryset:
+            obj.rendered_video = None
+            obj.hls_master_url = ""
+            obj.hls_status = ShortsVideo.HLSStatus.PENDING
+            obj.hls_progress_percent = 0
+            obj.processing_error = ""
+            obj.save(update_fields=["rendered_video", "hls_master_url", "hls_status", "hls_progress_percent", "processing_error", "updated_at"])
+            transaction.on_commit(lambda pk=obj.pk: enqueue_short_hls_job(pk))
+            count += 1
+        self.message_user(request, f"{count} shorts re-render queue me add ho gaye.")
 
     class Media:
         js = ("live_tv/admin_processing_refresh.js",)
