@@ -234,6 +234,26 @@ def safe_hex_color(value, fallback):
     return value if re.fullmatch(r"#[0-9a-fA-F]{6}", value) else fallback
 
 
+def wrap_text_lines(text, max_chars=19, max_lines=3):
+    words = " ".join((text or "").split()).split()
+    lines = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if current and len(candidate) > max_chars:
+            lines.append(current)
+            current = word
+            if len(lines) >= max_lines:
+                break
+        else:
+            current = candidate
+    if current and len(lines) < max_lines:
+        lines.append(current)
+    if len(lines) == max_lines and len(words) > len(" ".join(lines).split()):
+        lines[-1] = f"{lines[-1].rstrip('!.।')[:max_chars - 1]}..."
+    return lines or [text or "The Up Media"]
+
+
 def shorts_brand_name(short):
     if short.channel_name:
         return short.channel_name
@@ -264,40 +284,47 @@ def shorts_frame_filter(short, metadata, with_logo=False):
     secondary = safe_hex_color(short.frame_secondary_color, "#2b0508")
     background = safe_hex_color(short.frame_background_color, "#050505")
     text_color = safe_hex_color(short.frame_text_color, "#ffffff")
-    headline = ffmpeg_escape(short.headline or short.title)
+    headline_lines = wrap_text_lines(short.headline or short.title)
+    headline_draws = []
+    for index, line in enumerate(headline_lines):
+        headline_draws.append(
+            f"drawtext=text='{ffmpeg_escape(line)}':x=126:y={324 + (index * 82)}:fontsize=70:fontcolor={text_color}:font='Arial'"
+        )
+    headline_filter = ",".join(headline_draws)
     channel = ffmpeg_escape(shorts_brand_name(short))
     location = ffmpeg_escape(short.location or (short.city.name if short.city_id else ""))
     if short.video_fit == ShortsVideo.VideoFit.COVER:
-        video_scale = "scale=936:1060:force_original_aspect_ratio=increase,crop=936:1060"
+        video_scale = "scale=890:1080:force_original_aspect_ratio=increase,crop=890:1080"
     else:
-        video_scale = "scale=936:1060:force_original_aspect_ratio=decrease,pad=936:1060:(ow-iw)/2:(oh-ih)/2:#101010"
+        video_scale = "scale=890:1080:force_original_aspect_ratio=decrease,pad=890:1080:(ow-iw)/2:(oh-ih)/2:#101010"
 
     duration_draw = ""
     if short.show_duration_badge and metadata.get("duration"):
         total = max(0, int(round(metadata["duration"])))
         label = f"{total // 60:02d}:{total % 60:02d}"
-        duration_draw = f",drawbox=x=840:y=166:w=138:h=54:color=black@0.55:t=fill,drawtext=text='{label}':x=868:y=180:fontsize=30:fontcolor=white:font='Arial'"
+        duration_draw = f",drawtext=text='{label}':x=842:y=206:fontsize=48:fontcolor={text_color}:font='Arial'"
     branding_draw = ""
     if short.show_branding_strip:
-        branding_draw = f",drawbox=x=78:y=1580:w=924:h=92:color={primary}@0.98:t=fill,drawtext=text='The Up Media':x=388:y=1603:fontsize=42:fontcolor=white:font='Arial'"
+        branding_draw = f",drawbox=x=96:y=1618:w=888:h=84:color={primary}@0.98:t=fill,drawtext=text='The Up Media':x=392:y=1640:fontsize=42:fontcolor=white:font='Arial'"
     graph = (
         f"color=c={background}:s={SHORTS_RENDER_WIDTH}x{SHORTS_RENDER_HEIGHT}:d={metadata.get('duration') or 1}[bg];"
         f"[0:v]{video_scale},setsar=1[v0];"
-        f"[bg]drawbox=x=54:y=110:w=972:h=1700:color=#111111@0.98:t=fill,"
-        f"drawbox=x=54:y=110:w=972:h=1700:color={primary}@0.95:t=6,"
-        f"drawbox=x=78:y=146:w=924:h=250:color={secondary}@1:t=fill,"
-        f"drawbox=x=78:y=146:w=924:h=250:color={primary}@0.45:t=fill,"
-        f"drawtext=text='{channel}':x=104:y=174:fontsize=42:fontcolor={text_color}:font='Arial',"
-        f"drawtext=text='{headline}':x=104:y=246:fontsize=56:fontcolor={text_color}:font='Arial',"
-        f"drawtext=text='{location}':x=104:y=334:fontsize=30:fontcolor=#f5f5f5:font='Arial'[card];"
-        f"[card][v0]overlay=x=72:y=472:shortest=1,"
-        f"drawbox=x=72:y=472:w=936:h=1060:color={primary}@0.98:t=8,"
-        f"drawbox=x=82:y=482:w=916:h=1040:color=white@0.65:t=2{duration_draw}{branding_draw}[base]"
+        f"[bg]drawbox=x=84:y=174:w=912:h=1548:color=#151515@1:t=fill,"
+        f"drawbox=x=84:y=174:w=912:h=1548:color={primary}@0.98:t=8,"
+        f"drawbox=x=84:y=174:w=912:h=430:color={secondary}@1:t=fill,"
+        f"drawbox=x=84:y=330:w=912:h=274:color={primary}@0.72:t=fill,"
+        f"drawbox=x=84:y=174:w=912:h=430:color=black@0.20:t=fill,"
+        f"drawtext=text='{channel}':x=126:y=214:fontsize=44:fontcolor={text_color}:font='Arial',"
+        f"{headline_filter},"
+        f"drawtext=text='{location}':x=126:y=524:fontsize=30:fontcolor=#f5f5f5:font='Arial'{duration_draw}[card];"
+        f"[card][v0]overlay=x=96:y=686:shortest=1,"
+        f"drawbox=x=96:y=686:w=888:h=1080:color={primary}@1:t=10,"
+        f"drawbox=x=108:y=698:w=864:h=1056:color=white@0.86:t=3{branding_draw}[base]"
     )
     if with_logo:
-        graph += ";[1:v]scale=150:150:force_original_aspect_ratio=increase,crop=150:150,format=rgba[logo];[base][logo]overlay=x=465:y=396:shortest=1[outv]"
+        graph += ";[1:v]scale=150:150:force_original_aspect_ratio=increase,crop=150:150,format=rgba[logo];[base][logo]overlay=x=465:y=604:shortest=1[outv]"
     else:
-        graph += ";[base]null[outv]"
+        graph += f";[base]drawbox=x=465:y=604:w=150:h=150:color={primary}@1:t=fill,drawtext=text='{channel}':x=486:y=656:fontsize=26:fontcolor=white:font='Arial'[outv]"
     return graph
 
 
