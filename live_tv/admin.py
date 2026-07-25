@@ -370,14 +370,15 @@ class FacebookLiveSettingAdmin(admin.ModelAdmin):
 
 @admin.register(ShortsVideo)
 class ShortsVideoAdmin(admin.ModelAdmin):
-    list_display = ("title", "frame_template", "category", "state", "city", "location", "hls_status", "hls_progress_display", "is_published", "display_order", "views_count", "likes_count", "comments_count", "shares_count", "created_at")
+    list_display = ("title", "frame_template", "category", "state", "city", "location", "hls_status", "hls_progress_display", "download_link", "is_published", "display_order", "views_count", "likes_count", "comments_count", "shares_count", "created_at")
     list_filter = ("is_published", "hls_status", "frame_template")
     search_fields = ("title", "headline", "caption", "location", "city__name")
     list_editable = ("is_published", "display_order")
-    readonly_fields = ("hls_master_url", "hls_status", "hls_progress_display", "hls_progress_percent", "processing_error", "duration", "created_at", "updated_at")
+    readonly_fields = ("rendered_preview", "download_link", "hls_master_url", "hls_status", "hls_progress_display", "hls_progress_percent", "processing_error", "duration", "created_at", "updated_at")
     fieldsets = (
-        ("Shorts Video", {"fields": ("title", "headline", "caption", "location", "category", "state", "city", "frame_template", "video_file", "original_video", "thumbnail")}),
-        ("HLS Processing", {"fields": ("hls_master_url", "hls_status", "hls_progress_display", "hls_progress_percent", "processing_error", "duration")}),
+        ("Shorts Video", {"fields": ("title", "headline", "caption", "location", "category", "state", "city", "frame_template", "video_file", "original_video", "rendered_video", "thumbnail")}),
+        ("Frame Branding", {"fields": ("channel_name", "channel_logo", "frame_primary_color", "frame_secondary_color", "frame_background_color", "frame_text_color", "video_fit", "show_duration_badge", "show_branding_strip")}),
+        ("Render / HLS Processing", {"fields": ("rendered_preview", "download_link", "hls_master_url", "hls_status", "hls_progress_display", "hls_progress_percent", "processing_error", "duration")}),
         ("Status", {"fields": ("is_published", "display_order", "created_by")}),
         ("Counters", {"fields": ("views_count", "likes_count", "comments_count", "shares_count")}),
         ("Dates", {"fields": ("created_at", "updated_at")}),
@@ -386,6 +387,36 @@ class ShortsVideoAdmin(admin.ModelAdmin):
     @admin.display(description="HLS progress")
     def hls_progress_display(self, obj):
         return processing_progress_bar(obj.hls_progress_percent, obj.hls_status)
+
+    @admin.display(description="Rendered preview")
+    def rendered_preview(self, obj):
+        if not obj or not obj.rendered_video:
+            return "-"
+        return format_html('<video src="{}" controls style="width:220px;max-height:390px;border-radius:8px;background:#111"></video>', obj.rendered_video.url)
+
+    @admin.display(description="Download")
+    def download_link(self, obj):
+        if not obj or not obj.rendered_video:
+            return "-"
+        return format_html('<a class="button" href="{}" download>Download MP4</a>', obj.rendered_video.url)
+
+    def save_model(self, request, obj, form, change):
+        video_changed = "video_file" in form.changed_data
+        frame_changed = bool({"title", "headline", "frame_template", "channel_logo", "channel_name", "frame_primary_color", "frame_secondary_color", "frame_background_color", "frame_text_color", "video_fit", "show_duration_badge", "show_branding_strip"} & set(form.changed_data))
+        if obj.video_file and (video_changed or frame_changed):
+            if video_changed and not obj.original_video:
+                obj.original_video = obj.video_file
+            obj.rendered_video = None
+            obj.hls_master_url = ""
+            obj.hls_status = ShortsVideo.HLSStatus.PENDING
+            obj.hls_progress_percent = 0
+            obj.processing_error = ""
+            obj.duration = None
+        super().save_model(request, obj, form, change)
+        if obj.video_file and (video_changed or frame_changed):
+            from .views import enqueue_short_hls_job
+
+            transaction.on_commit(lambda: enqueue_short_hls_job(obj.pk))
 
     class Media:
         js = ("live_tv/admin_processing_refresh.js",)

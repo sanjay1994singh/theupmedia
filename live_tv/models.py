@@ -641,6 +641,10 @@ class ShortsVideo(models.Model):
         COMPLETED = "completed", "Completed"
         FAILED = "failed", "Failed"
 
+    class VideoFit(models.TextChoices):
+        CONTAIN = "contain", "Contain"
+        COVER = "cover", "Cover"
+
     title = models.CharField(max_length=180, blank=True)
     headline = models.CharField(max_length=180, blank=True)
     caption = models.TextField(blank=True)
@@ -651,12 +655,22 @@ class ShortsVideo(models.Model):
     frame_template = models.CharField(max_length=60, default="normal_black_red")
     video_file = models.FileField(upload_to="shorts/videos/%Y/%m/")
     original_video = models.FileField(upload_to="shorts/original/%Y/%m/", blank=True, null=True)
+    rendered_video = models.FileField(upload_to="shorts/rendered/%Y/%m/", blank=True, null=True)
     hls_master_url = models.CharField(max_length=500, blank=True)
     hls_status = models.CharField(max_length=20, choices=HLSStatus.choices, default=HLSStatus.PENDING)
     hls_progress_percent = models.PositiveSmallIntegerField(default=0)
     processing_error = models.TextField(blank=True)
     duration = models.FloatField(blank=True, null=True)
     thumbnail = models.ImageField(upload_to="shorts/thumbnails/%Y/%m/", blank=True, null=True)
+    channel_logo = models.ImageField(upload_to="shorts/logos/%Y/%m/", blank=True, null=True)
+    channel_name = models.CharField(max_length=120, blank=True, default="")
+    frame_primary_color = models.CharField(max_length=20, default="#d71920")
+    frame_secondary_color = models.CharField(max_length=20, default="#2b0508")
+    frame_background_color = models.CharField(max_length=20, default="#050505")
+    frame_text_color = models.CharField(max_length=20, default="#ffffff")
+    video_fit = models.CharField(max_length=12, choices=VideoFit.choices, default=VideoFit.CONTAIN)
+    show_duration_badge = models.BooleanField(default=True)
+    show_branding_strip = models.BooleanField(default=True)
     is_published = models.BooleanField(default=True)
     display_order = models.PositiveIntegerField(default=0)
     likes_count = models.PositiveIntegerField(default=0)
@@ -675,6 +689,18 @@ class ShortsVideo(models.Model):
 
     def __str__(self):
         return self.title or Path(self.video_file.name).stem or "Shorts video"
+
+    @property
+    def status(self):
+        return self.hls_status
+
+    @property
+    def error_message(self):
+        return self.processing_error
+
+    @property
+    def raw_video(self):
+        return self.original_video or self.video_file
 
     def save(self, *args, **kwargs):
         if not self.title:
@@ -695,7 +721,7 @@ class ShortsVideo(models.Model):
             raise ValidationError(errors)
 
     def delete(self, *args, **kwargs):
-        files = [self.video_file, self.thumbnail]
+        files = [self.video_file, self.original_video, self.rendered_video, self.thumbnail, self.channel_logo]
         result = super().delete(*args, **kwargs)
         for file_obj in files:
             if file_obj and file_obj.name:

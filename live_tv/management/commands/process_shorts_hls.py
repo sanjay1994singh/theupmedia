@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from live_tv.hls import convert_short_to_hls
+from live_tv.hls import convert_short_to_hls, render_short_frame
 from live_tv.models import ShortsVideo
 
 
@@ -29,6 +29,8 @@ class Command(BaseCommand):
         for short in queryset:
             self.stdout.write(f"[{short.pk}] {short.title or short.video_file.name}")
             try:
+                if not short.rendered_video:
+                    render_short_frame(short.pk)
                 hls_path = convert_short_to_hls(short.pk)
             except Exception as exc:
                 self.stderr.write(self.style.ERROR(f"[{short.pk}] failed: {exc}"))

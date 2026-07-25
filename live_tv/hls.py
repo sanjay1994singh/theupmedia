@@ -9,6 +9,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
+from django.core.files import File
 from django.utils import timezone
 
 from .models import ShortsVideo
@@ -25,6 +26,8 @@ HLS_VARIANTS = (
     {"name": "480p", "short": 480, "video_bitrate": "1100k", "audio_bitrate": "96k", "bandwidth": 1300000},
     {"name": "720p", "short": 720, "video_bitrate": "2200k", "audio_bitrate": "128k", "bandwidth": 2600000},
 )
+SHORTS_RENDER_WIDTH = 1080
+SHORTS_RENDER_HEIGHT = 1920
 
 
 class HLSProcessingError(Exception):
@@ -220,6 +223,149 @@ def release_hls_processing_lock(fd, lock_path):
             lock_path.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+def ffmpeg_escape(text):
+    return " ".join((text or "").split()).replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:")
+
+
+def safe_hex_color(value, fallback):
+    value = (value or "").strip()
+    return value if re.fullmatch(r"#[0-9a-fA-F]{6}", value) else fallback
+
+
+def shorts_brand_name(short):
+    if short.channel_name:
+        return short.channel_name
+    try:
+        from .models import LiveTVSetting
+
+        return LiveTVSetting.get_solo().name or "The Up Media"
+    except Exception:
+        return "The Up Media"
+
+
+def shorts_logo_path(short):
+    if short.channel_logo:
+        return Path(short.channel_logo.path)
+    try:
+        from .models import LiveTVSetting
+
+        setting = LiveTVSetting.get_solo()
+        if setting.channel_logo:
+            return Path(setting.channel_logo.path)
+    except Exception:
+        logger.exception("Could not load default shorts logo.")
+    return None
+
+
+def shorts_frame_filter(short, metadata, with_logo=False):
+    primary = safe_hex_color(short.frame_primary_color, "#d71920")
+    secondary = safe_hex_color(short.frame_secondary_color, "#2b0508")
+    background = safe_hex_color(short.frame_background_color, "#050505")
+    text_color = safe_hex_color(short.frame_text_color, "#ffffff")
+    headline = ffmpeg_escape(short.headline or short.title)
+    channel = ffmpeg_escape(shorts_brand_name(short))
+    location = ffmpeg_escape(short.location or (short.city.name if short.city_id else ""))
+    if short.video_fit == ShortsVideo.VideoFit.COVER:
+        video_scale = "scale=936:1060:force_original_aspect_ratio=increase,crop=936:1060"
+    else:
+        video_scale = "scale=936:1060:force_original_aspect_ratio=decrease,pad=936:1060:(ow-iw)/2:(oh-ih)/2:#101010"
+
+    duration_draw = ""
+    if short.show_duration_badge and metadata.get("duration"):
+        total = max(0, int(round(metadata["duration"])))
+        label = f"{total // 60:02d}:{total % 60:02d}"
+        duration_draw = f",drawbox=x=840:y=166:w=138:h=54:color=black@0.55:t=fill,drawtext=text='{label}':x=868:y=180:fontsize=30:fontcolor=white:font='Arial'"
+    branding_draw = ""
+    if short.show_branding_strip:
+        branding_draw = f",drawbox=x=78:y=1580:w=924:h=92:color={primary}@0.98:t=fill,drawtext=text='The Up Media':x=388:y=1603:fontsize=42:fontcolor=white:font='Arial'"
+    graph = (
+        f"color=c={background}:s={SHORTS_RENDER_WIDTH}x{SHORTS_RENDER_HEIGHT}:d={metadata.get('duration') or 1}[bg];"
+        f"[0:v]{video_scale},setsar=1[v0];"
+        f"[bg]drawbox=x=54:y=110:w=972:h=1700:color=#111111@0.98:t=fill,"
+        f"drawbox=x=54:y=110:w=972:h=1700:color={primary}@0.95:t=6,"
+        f"drawbox=x=78:y=146:w=924:h=250:color={secondary}@1:t=fill,"
+        f"drawbox=x=78:y=146:w=924:h=250:color={primary}@0.45:t=fill,"
+        f"drawtext=text='{channel}':x=104:y=174:fontsize=42:fontcolor={text_color}:font='Arial',"
+        f"drawtext=text='{headline}':x=104:y=246:fontsize=56:fontcolor={text_color}:font='Arial',"
+        f"drawtext=text='{location}':x=104:y=334:fontsize=30:fontcolor=#f5f5f5:font='Arial'[card];"
+        f"[card][v0]overlay=x=72:y=472:shortest=1,"
+        f"drawbox=x=72:y=472:w=936:h=1060:color={primary}@0.98:t=8,"
+        f"drawbox=x=82:y=482:w=916:h=1040:color=white@0.65:t=2{duration_draw}{branding_draw}[base]"
+    )
+    if with_logo:
+        graph += ";[1:v]scale=150:150:force_original_aspect_ratio=increase,crop=150:150,format=rgba[logo];[base][logo]overlay=x=465:y=396:shortest=1[outv]"
+    else:
+        graph += ";[base]null[outv]"
+    return graph
+
+
+def generate_short_thumbnail(short, input_path):
+    thumb_dir = Path(settings.MEDIA_ROOT) / "shorts" / "thumbnails" / str(short.pk)
+    thumb_dir.mkdir(parents=True, exist_ok=True)
+    thumb_path = thumb_dir / f"short-{short.pk}.jpg"
+    run_command([ffmpeg_binary(), "-y", "-ss", "00:00:01", "-i", str(input_path), "-frames:v", "1", "-q:v", "3", str(thumb_path)], timeout=60)
+    with thumb_path.open("rb") as handle:
+        short.thumbnail.save(thumb_path.name, File(handle), save=True)
+
+
+def render_short_frame(short_id):
+    short = ShortsVideo.objects.select_related("city").get(pk=short_id)
+    if not short.video_file:
+        raise HLSProcessingError("Short has no raw video file.")
+    input_path = Path(short.video_file.path)
+    if not input_path.exists():
+        raise HLSProcessingError("Raw shorts video file not found.")
+
+    ShortsVideo.objects.filter(pk=short.pk).update(hls_status=ShortsVideo.HLSStatus.PROCESSING, hls_progress_percent=1, processing_error="", updated_at=timezone.now())
+    metadata = probe_video(input_path)
+    output_dir = Path(settings.MEDIA_ROOT) / "shorts" / "rendered" / str(short.pk)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    tmp_output = output_dir / f"short-{short.pk}.tmp.mp4"
+    final_output = output_dir / f"short-{short.pk}.mp4"
+    logo_path = shorts_logo_path(short)
+    args = [ffmpeg_binary(), "-y", "-i", str(input_path)]
+    if logo_path and logo_path.exists():
+        args += ["-i", str(logo_path)]
+    args += [
+        "-filter_complex",
+        shorts_frame_filter(short, metadata, with_logo=bool(logo_path and logo_path.exists())),
+        "-map",
+        "[outv]",
+        "-map",
+        "0:a:0?",
+        "-c:v",
+        "libx264",
+        "-preset",
+        getattr(settings, "LIVE_TV_HLS_PRESET", "veryfast"),
+        "-pix_fmt",
+        "yuv420p",
+        "-r",
+        "30",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-movflags",
+        "+faststart",
+        str(tmp_output),
+    ]
+    try:
+        run_ffmpeg_command(args, duration=metadata.get("duration") or 0, progress_callback=progress_updater(ShortsVideo, short.pk), timeout=getattr(settings, "LIVE_TV_SHORTS_RENDER_TIMEOUT", 1800))
+        tmp_output.replace(final_output)
+        rel_path = final_output.relative_to(Path(settings.MEDIA_ROOT)).as_posix()
+        short.rendered_video.name = rel_path
+        short.video_file.name = rel_path
+        short.duration = metadata.get("duration")
+        short.hls_progress_percent = 82
+        short.save(update_fields=["rendered_video", "video_file", "duration", "hls_progress_percent", "updated_at"])
+        generate_short_thumbnail(short, final_output)
+        return final_output
+    except Exception as exc:
+        tmp_output.unlink(missing_ok=True)
+        ShortsVideo.objects.filter(pk=short.pk).update(hls_status=ShortsVideo.HLSStatus.FAILED, hls_progress_percent=0, processing_error=str(exc)[-3000:], updated_at=timezone.now())
+        raise
 
 
 def convert_short_to_hls(short_id):

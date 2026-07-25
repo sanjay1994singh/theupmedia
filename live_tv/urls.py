@@ -19,6 +19,7 @@ urlpatterns = [
     path("api/live-tv/shorts/<int:pk>/follow/", views.shorts_follow_api, name="api_shorts_follow"),
     path("api/live-tv/shorts/<int:pk>/view/", views.shorts_view_api, name="api_shorts_view"),
     path("api/live-tv/shorts/<int:pk>/share/", views.shorts_share_api, name="api_shorts_share"),
+    path("api/live-tv/shorts/<int:pk>/download/", views.shorts_download_api, name="api_shorts_download"),
     path("api/live-tv/shorts/<int:pk>/comment/", views.shorts_comment_api, name="api_shorts_comment"),
     path("api/live-tv/meta/", views.mobile_live_tv_meta_api, name="api_meta"),
     path("api/live-tv/admin/login/", views.mobile_admin_login_api, name="api_admin_login"),

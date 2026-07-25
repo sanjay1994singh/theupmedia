@@ -29,6 +29,7 @@ from django.db.models import Count, F, Q
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import FileResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.cache import never_cache
@@ -170,9 +171,15 @@ def enqueue_short_hls_job(short_id):
 
     import threading
 
-    from .hls import convert_short_to_hls
+    from .hls import convert_short_to_hls, render_short_frame
 
-    threading.Thread(target=convert_short_to_hls, args=(short_id,), daemon=True).start()
+    def render_then_hls():
+        short = ShortsVideo.objects.filter(pk=short_id).first()
+        if short and not short.rendered_video:
+            render_short_frame(short_id)
+        convert_short_to_hls(short_id)
+
+    threading.Thread(target=render_then_hls, daemon=True).start()
     return "thread"
 
 
@@ -1019,8 +1026,8 @@ def serialize_shorts_video(request, short):
     ]
     hls_ready = short.hls_status == ShortsVideo.HLSStatus.COMPLETED and bool(short.hls_master_url)
     hls_url = absolute_media_path_url(request, short.hls_master_url) if hls_ready else ""
-    fallback_video_url = ""
-    video_url = hls_url
+    fallback_video_url = absolute_media_url(request, short.rendered_video) if short.rendered_video else ""
+    video_url = hls_url or fallback_video_url
     return {
         "id": short.pk,
         "title": short.title,
@@ -1041,12 +1048,16 @@ def serialize_shorts_video(request, short):
         "video_url": video_url,
         "compressed_video_url": video_url,
         "mp4_url": fallback_video_url,
+        "rendered_video_url": fallback_video_url,
+        "download_url": request.build_absolute_uri(reverse("live_tv:api_shorts_download", args=[short.pk])) if short.rendered_video else "",
         "hls_url": hls_url,
         "thumbnail": absolute_media_url(request, short.thumbnail),
         "thumbnail_url": absolute_media_url(request, short.thumbnail),
         "processing_status": short.hls_status,
+        "status": short.hls_status,
         "hls_status": short.hls_status,
         "processing_error": short.processing_error,
+        "error_message": short.processing_error,
         "duration": short.duration,
         "is_published": short.is_published,
         "display_order": short.display_order,
@@ -2579,6 +2590,15 @@ def shorts_share_api(request, pk):
     return JsonResponse({"id": short.pk, "shares_count": short.shares_count, "shares": short.shares_count})
 
 
+@require_GET
+def shorts_download_api(request, pk):
+    short = get_object_or_404(ShortsVideo, pk=pk, is_published=True)
+    if not short.rendered_video:
+        return JsonResponse({"detail": "Rendered video is not ready yet."}, status=404)
+    filename = f"the-up-media-short-{short.pk}.mp4"
+    return FileResponse(short.rendered_video.open("rb"), as_attachment=True, filename=filename, content_type="video/mp4")
+
+
 @csrf_exempt
 @require_POST
 def shorts_comment_api(request, pk):
@@ -2889,15 +2909,20 @@ def mobile_admin_shorts_upload_api(request):
         return JsonResponse({"detail": str(exc), "errors": {"video_file": [str(exc)]}}, status=400)
 
     title = request.POST.get("title", "").strip()
+    if not title:
+        return JsonResponse({"detail": "Title is required.", "errors": {"title": ["This field is required."]}}, status=400)
     headline = request.POST.get("headline", "").strip()
     caption = request.POST.get("caption", "").strip()
     location = request.POST.get("location", "").strip()
     state_id, city_id, location_errors = parse_required_location(request.POST)
     if location_errors:
         return JsonResponse({"detail": "State and city are required.", "errors": location_errors}, status=400)
-    category_id, category_errors = parse_required_category(request.POST)
-    if category_errors:
-        return JsonResponse({"detail": "Category is required.", "errors": category_errors}, status=400)
+    category_id = None
+    raw_category_id = request.POST.get("category_id", "").strip()
+    if raw_category_id:
+        category_id, category_errors = parse_required_category(request.POST)
+        if category_errors:
+            return JsonResponse({"detail": "Selected category is invalid.", "errors": category_errors}, status=400)
     frame_template = request.POST.get("frame_template", "").strip() or "normal_black_red"
     raw_display_order = request.POST.get("display_order")
     try:
@@ -2919,6 +2944,15 @@ def mobile_admin_shorts_upload_api(request):
         frame_template=frame_template[:60],
         video_file=video_file,
         thumbnail=request.FILES.get("thumbnail"),
+        channel_logo=request.FILES.get("channel_logo"),
+        channel_name=request.POST.get("channel_name", "").strip()[:120],
+        frame_primary_color=request.POST.get("frame_primary_color", "#d71920").strip()[:20] or "#d71920",
+        frame_secondary_color=request.POST.get("frame_secondary_color", "#2b0508").strip()[:20] or "#2b0508",
+        frame_background_color=request.POST.get("frame_background_color", "#050505").strip()[:20] or "#050505",
+        frame_text_color=request.POST.get("frame_text_color", "#ffffff").strip()[:20] or "#ffffff",
+        video_fit=request.POST.get("video_fit", ShortsVideo.VideoFit.CONTAIN).strip()[:12] or ShortsVideo.VideoFit.CONTAIN,
+        show_duration_badge=request.POST.get("show_duration_badge", "1").lower() not in {"0", "false", "off", "no"},
+        show_branding_strip=request.POST.get("show_branding_strip", "1").lower() not in {"0", "false", "off", "no"},
         is_published=True,
         display_order=display_order,
         created_by=user,
