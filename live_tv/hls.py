@@ -234,6 +234,27 @@ def safe_hex_color(value, fallback):
     return value if re.fullmatch(r"#[0-9a-fA-F]{6}", value) else fallback
 
 
+def shorts_font_path():
+    candidates = [
+        getattr(settings, "FFMPEG_FONT_FILE", ""),
+        "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansDevanagariUI-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSerifDevanagari-Bold.ttf",
+        "/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf",
+        "C:/Windows/Fonts/NirmalaB.ttf",
+        "C:/Windows/Fonts/Nirmala.ttf",
+    ]
+    for candidate in candidates:
+        if candidate and Path(candidate).exists():
+            return str(candidate).replace("\\", "/").replace(":", "\\:")
+    return ""
+
+
+def shorts_font_arg():
+    font_path = shorts_font_path()
+    return f":fontfile='{font_path}'" if font_path else ":font='Arial'"
+
+
 def wrap_text_lines(text, max_chars=19, max_lines=3):
     words = " ".join((text or "").split()).split()
     lines = []
@@ -284,47 +305,48 @@ def shorts_frame_filter(short, metadata, with_logo=False):
     secondary = safe_hex_color(short.frame_secondary_color, "#2b0508")
     background = safe_hex_color(short.frame_background_color, "#050505")
     text_color = safe_hex_color(short.frame_text_color, "#ffffff")
-    headline_lines = wrap_text_lines(short.headline or short.title)
+    font_arg = shorts_font_arg()
+    headline_lines = wrap_text_lines(short.headline or short.title, max_chars=17, max_lines=3)
     headline_draws = []
     for index, line in enumerate(headline_lines):
         headline_draws.append(
-            f"drawtext=text='{ffmpeg_escape(line)}':x=126:y={324 + (index * 82)}:fontsize=70:fontcolor={text_color}:font='Arial'"
+            f"drawtext=text='{ffmpeg_escape(line)}':x=126:y={332 + (index * 84)}:fontsize=72:fontcolor={text_color}{font_arg}:borderw=2:bordercolor=black@0.28"
         )
     headline_filter = ",".join(headline_draws)
     channel = ffmpeg_escape(shorts_brand_name(short))
     location = ffmpeg_escape(short.location or (short.city.name if short.city_id else ""))
     if short.video_fit == ShortsVideo.VideoFit.COVER:
-        video_scale = "scale=890:1080:force_original_aspect_ratio=increase,crop=890:1080"
+        video_scale = "scale=872:1056:force_original_aspect_ratio=increase,crop=872:1056"
     else:
-        video_scale = "scale=890:1080:force_original_aspect_ratio=decrease,pad=890:1080:(ow-iw)/2:(oh-ih)/2:#101010"
+        video_scale = "scale=872:1056:force_original_aspect_ratio=increase,crop=872:1056"
 
     duration_draw = ""
     if short.show_duration_badge and metadata.get("duration"):
         total = max(0, int(round(metadata["duration"])))
         label = f"{total // 60:02d}:{total % 60:02d}"
-        duration_draw = f",drawtext=text='{label}':x=842:y=206:fontsize=48:fontcolor={text_color}:font='Arial'"
+        duration_draw = f",drawtext=text='{label}':x=840:y=218:fontsize=50:fontcolor={text_color}{font_arg}"
     branding_draw = ""
     if short.show_branding_strip:
-        branding_draw = f",drawbox=x=96:y=1618:w=888:h=84:color={primary}@0.98:t=fill,drawtext=text='The Up Media':x=392:y=1640:fontsize=42:fontcolor=white:font='Arial'"
+        branding_draw = f",drawbox=x=104:y=1622:w=872:h=82:color={primary}@0.98:t=fill,drawtext=text='The Up Media':x=392:y=1644:fontsize=40:fontcolor=white{font_arg}"
     graph = (
         f"color=c={background}:s={SHORTS_RENDER_WIDTH}x{SHORTS_RENDER_HEIGHT}:d={metadata.get('duration') or 1}[bg];"
         f"[0:v]{video_scale},setsar=1[v0];"
         f"[bg]drawbox=x=84:y=174:w=912:h=1548:color=#151515@1:t=fill,"
         f"drawbox=x=84:y=174:w=912:h=1548:color={primary}@0.98:t=8,"
-        f"drawbox=x=84:y=174:w=912:h=430:color={secondary}@1:t=fill,"
-        f"drawbox=x=84:y=330:w=912:h=274:color={primary}@0.72:t=fill,"
-        f"drawbox=x=84:y=174:w=912:h=430:color=black@0.20:t=fill,"
-        f"drawtext=text='{channel}':x=126:y=214:fontsize=44:fontcolor={text_color}:font='Arial',"
+        f"drawbox=x=84:y=174:w=912:h=420:color=#160404@1:t=fill,"
+        f"drawbox=x=84:y=314:w=912:h=280:color={primary}@0.66:t=fill,"
+        f"drawbox=x=84:y=174:w=912:h=420:color=black@0.18:t=fill,"
+        f"drawtext=text='{channel}':x=126:y=220:fontsize=44:fontcolor={text_color}{font_arg},"
         f"{headline_filter},"
-        f"drawtext=text='{location}':x=126:y=524:fontsize=30:fontcolor=#f5f5f5:font='Arial'{duration_draw}[card];"
-        f"[card][v0]overlay=x=96:y=686:shortest=1,"
-        f"drawbox=x=96:y=686:w=888:h=1080:color={primary}@1:t=10,"
-        f"drawbox=x=108:y=698:w=864:h=1056:color=white@0.86:t=3{branding_draw}[base]"
+        f"drawtext=text='{location}':x=126:y=542:fontsize=30:fontcolor=#f5f5f5{font_arg}{duration_draw}[card];"
+        f"[card][v0]overlay=x=104:y=686:shortest=1,"
+        f"drawbox=x=96:y=676:w=888:h=1080:color={primary}@1:t=10,"
+        f"drawbox=x=108:y=688:w=864:h=1056:color=white@0.86:t=3{branding_draw}[base]"
     )
     if with_logo:
-        graph += ";[1:v]scale=150:150:force_original_aspect_ratio=increase,crop=150:150,format=rgba[logo];[base][logo]overlay=x=465:y=604:shortest=1[outv]"
+        graph += ";[1:v]scale=142:142:force_original_aspect_ratio=increase,crop=142:142,format=rgba[logo];[base][logo]overlay=x=469:y=610:shortest=1[outv]"
     else:
-        graph += f";[base]drawbox=x=465:y=604:w=150:h=150:color={primary}@1:t=fill,drawtext=text='{channel}':x=486:y=656:fontsize=26:fontcolor=white:font='Arial'[outv]"
+        graph += f";[base]drawbox=x=469:y=610:w=142:h=142:color={primary}@1:t=fill,drawtext=text='{channel}':x=486:y=660:fontsize=24:fontcolor=white{font_arg}[outv]"
     return graph
 
 
