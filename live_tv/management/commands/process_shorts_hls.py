@@ -14,12 +14,12 @@ class Command(BaseCommand):
         parser.add_argument("--rerender", action="store_true", help="Discard rendered/HLS paths and render again from original_video.")
 
     def handle(self, *args, **options):
-        queryset = ShortsVideo.objects.filter(is_published=True).order_by("pk")
         if options.get("short_id"):
-            queryset = queryset.filter(pk=options["short_id"])
+            queryset = ShortsVideo.objects.filter(pk=options["short_id"]).order_by("pk")
         elif options.get("all"):
-            pass
+            queryset = ShortsVideo.objects.filter(is_published=True).order_by("pk")
         else:
+            queryset = ShortsVideo.objects.filter(is_published=True).order_by("pk")
             statuses = [ShortsVideo.HLSStatus.PENDING]
             if options.get("retry_failed"):
                 statuses.append(ShortsVideo.HLSStatus.FAILED)
