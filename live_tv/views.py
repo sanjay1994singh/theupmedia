@@ -551,6 +551,7 @@ def serialize_live_tv_setting(request, setting):
         "default_ticker_text": setting.default_ticker_text,
         "ticker_speed_seconds": setting.ticker_speed_seconds,
         "mobile_ticker_speed_seconds": setting.mobile_ticker_speed_seconds,
+        "splash_screen_seconds": setting.splash_screen_seconds,
         "maximum_headline_characters": setting.maximum_headline_characters,
         "ticker_style": "red_white_slant",
         "ticker_started_at": setting.ticker_started_at.isoformat(),
@@ -2774,6 +2775,11 @@ def mobile_admin_settings_save_api(request):
     if "mobile_ticker_speed_seconds" in request.POST:
         try:
             setting.mobile_ticker_speed_seconds = max(6, min(120, int(request.POST.get("mobile_ticker_speed_seconds") or setting.mobile_ticker_speed_seconds)))
+        except (TypeError, ValueError):
+            pass
+    if "splash_screen_seconds" in request.POST:
+        try:
+            setting.splash_screen_seconds = max(0, min(10, int(request.POST.get("splash_screen_seconds") or 3)))
         except (TypeError, ValueError):
             pass
     if "maximum_headline_characters" in request.POST:

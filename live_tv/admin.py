@@ -265,7 +265,7 @@ class LiveTVPlaylistCycleAdmin(admin.ModelAdmin):
 
 @admin.register(LiveTVSetting)
 class LiveTVSettingAdmin(admin.ModelAdmin):
-    list_display = ("name", "live_label", "show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker", "updated_at")
+    list_display = ("name", "live_label", "splash_screen_seconds", "show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker", "updated_at")
     fieldsets = (
         ("Branding", {"fields": ("name", "live_label", "channel_logo", "autoplay")}),
         (
@@ -282,6 +282,7 @@ class LiveTVSettingAdmin(admin.ModelAdmin):
             },
         ),
         ("Default Video Text", {"fields": ("default_lower_third_label", "default_headline", "maximum_headline_characters")}),
+        ("Mobile App", {"fields": ("splash_screen_seconds",)}),
         ("Ticker", {"fields": ("default_ticker_label", "default_ticker_text", "ticker_speed_seconds", "mobile_ticker_speed_seconds")}),
     )
 

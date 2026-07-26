@@ -570,6 +570,11 @@ class LiveTVSetting(models.Model):
     default_ticker_text = models.TextField(null=True, blank=True)
     ticker_speed_seconds = models.PositiveSmallIntegerField(default=22)
     mobile_ticker_speed_seconds = models.PositiveSmallIntegerField(default=12)
+    splash_screen_seconds = models.PositiveSmallIntegerField(
+        default=3,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text="Mobile app splash screen duration in seconds (0-10).",
+    )
     maximum_headline_characters = models.PositiveSmallIntegerField(
         default=100,
         validators=[MinValueValidator(30), MaxValueValidator(200)],
