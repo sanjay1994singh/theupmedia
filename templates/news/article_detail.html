@@ -18,6 +18,7 @@
   <meta name="twitter:image" content="{{ share_image_url }}">
   <meta name="twitter:image:alt" content="{{ article.title }}">
   <script type="application/ld+json">{{ schema_json|safe }}</script>
+  <script type="application/ld+json">{{ breadcrumb_schema_json|safe }}</script>
 {% endblock %}
 
 {% block content %}
@@ -33,6 +34,14 @@
     <div class="byline">
       <span>{{ article.author|default:"The Up Media Desk" }}</span>
       <time datetime="{{ article.published_at|date:'c' }}">{{ article.published_at|date:"M d, Y, h:i A" }}</time>
+      <span>{{ article.estimated_reading_minutes }} min read</span>
+    </div>
+    <div class="editorial-meta">
+      {% if article.reviewed_by %}<span>Reviewed by {{ article.reviewed_by }}</span>{% endif %}
+      {% if article.fact_checked_by %}<span>Fact-checked by {{ article.fact_checked_by }}</span>{% endif %}
+      {% if article.updated_at|date:"U" != article.published_at|date:"U" %}
+        <span>Updated {{ article.updated_at|date:"M d, Y, h:i A" }}</span>
+      {% endif %}
     </div>
     <div class="share-bar" aria-label="Share this news">
       <a class="share-btn whatsapp" href="{{ whatsapp_share_url }}" target="_blank" rel="noopener">WhatsApp</a>
@@ -47,7 +56,12 @@
   {% if article.featured_image %}
     <figure class="article-figure">
       <img class="article-image" src="{{ article.featured_image.url }}" alt="{{ article.image_alt_text|default:article.title }}">
-      {% if article.image_alt_text %}<figcaption>{{ article.image_alt_text }}</figcaption>{% endif %}
+      {% if article.image_caption or article.image_credit %}
+        <figcaption>
+          {% if article.image_caption %}{{ article.image_caption }}{% else %}{{ article.image_alt_text|default:article.title }}{% endif %}
+          {% if article.image_credit %}<span>Photo: {{ article.image_credit }}</span>{% endif %}
+        </figcaption>
+      {% endif %}
     </figure>
   {% endif %}
     {% include "advertisements/news_portal.html" %}
@@ -60,13 +74,22 @@
       <strong>{{ article.category.name }}</strong>
       <span>Reads</span>
       <strong>{{ article.unique_reads }}</strong>
+      {% if article.source_name %}
+        <span>Reference</span>
+        <strong>{{ article.source_name }}</strong>
+      {% endif %}
     </aside>
     <div class="article-content">
       {{ article.content|safe }}
     </div>
   </div>
   {% if article.source_url %}
-    <p class="source">Source: <a href="{{ article.source_url }}" rel="nofollow noopener">{{ article.source_name|default:article.source_url }}</a></p>
+    <p class="source">Reference: <a href="{{ article.source_url }}" target="_blank" rel="nofollow noopener noreferrer">{{ article.source_name|default:article.source_url }}</a></p>
+  {% elif article.source_name %}
+    <p class="source">Reference: {{ article.source_name }}</p>
+  {% endif %}
+  {% if article.correction_note %}
+    <p class="source correction-note"><strong>Correction/Update:</strong> {{ article.correction_note }}</p>
   {% endif %}
 </article>
 

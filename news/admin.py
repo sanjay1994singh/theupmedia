@@ -5,6 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import Article, ArticleRead, ArticleSlugRedirect, Category, City, FetchedNews, NewsSource, State
+from .content_quality import article_quality_warnings
 from .services.ai_writer import build_hindi_news_draft, clean_text, repair_mojibake
 from .services.social_hooks import notify_facebook_page, run_publish_hooks
 
@@ -49,12 +50,12 @@ class ArticleAdmin(admin.ModelAdmin):
     )
     list_filter = ("status", "is_featured", "category", "state", "city")
     search_fields = ("title", "summary", "content", "meta_keywords", "state__name", "city__name")
-    autocomplete_fields = ("state", "city", "author")
+    autocomplete_fields = ("state", "city", "author", "reviewed_by", "fact_checked_by")
     readonly_fields = ("unique_reads", "facebook_post_id", "facebook_posted_at", "facebook_post_error", "created_at", "updated_at")
     actions = ("repair_hindi_encoding", "post_selected_to_facebook", "clear_facebook_post_tracking")
     fieldsets = (
-        ("Article", {"fields": ("title", "slug", "category", "state", "city", "author", "summary", "content", "featured_image", "image_alt_text")}),
-        ("Publishing", {"fields": ("status", "is_featured", "published_at", "source_name", "source_url")}),
+        ("Article", {"fields": ("title", "slug", "category", "state", "city", "author", "summary", "content", "featured_image", "image_alt_text", "image_caption", "image_credit")}),
+        ("Publishing", {"fields": ("status", "is_featured", "published_at", "source_name", "source_url", "reviewed_by", "fact_checked_by", "correction_note")}),
         ("Facebook Auto Post", {"fields": ("facebook_post_id", "facebook_posted_at", "facebook_post_error")}),
         ("Analytics", {"fields": ("unique_reads",)}),
         ("SEO", {"fields": ("meta_title", "meta_description", "meta_keywords", "canonical_url")}),
@@ -95,6 +96,13 @@ class ArticleAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         became_published = obj.status == Article.Status.PUBLISHED and old_status != Article.Status.PUBLISHED
         if became_published:
+            quality_warnings = article_quality_warnings(obj)
+            if quality_warnings:
+                self.message_user(
+                    request,
+                    "Editorial quality warnings: " + " ".join(quality_warnings),
+                    messages.WARNING,
+                )
             article_pk = obj.pk
 
             def post_after_commit():

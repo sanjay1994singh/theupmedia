@@ -14,6 +14,9 @@ class StaticPageSitemap(Sitemap):
             "core:privacy_policy",
             "core:terms",
             "core:disclaimer",
+            "core:editorial_policy",
+            "core:fact_checking_policy",
+            "core:corrections_policy",
             "blog:post_list",
             "services:service_list",
         ]

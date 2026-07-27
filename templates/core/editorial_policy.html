@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Editorial Policy - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}Read the editorial policy of {{ SITE_NAME }}, including sourcing, verification, bylines, corrections, and reader trust standards.{% endblock %}
+{% block canonical %}{{ request.scheme }}://{{ request.get_host }}{% url 'core:editorial_policy' %}{% endblock %}
+{% block og_title %}Editorial Policy - {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<section class="page-shell">
+  <p class="eyebrow">Editorial Standards</p>
+  <h1>Editorial Policy</h1>
+  <p>{{ SITE_NAME }} publishes news, explainers, local updates, and public-interest information for readers who want clear and responsible coverage.</p>
+  <h2>How We Prepare Articles</h2>
+  <p>Our editorial team aims to use verifiable information, official communication where available, direct local inputs, public records, and clearly identified source references. We avoid publishing claims as confirmed facts unless the information has a reliable basis.</p>
+  <h2>Original Writing</h2>
+  <p>Articles published on {{ SITE_NAME }} should be written in original language by our team. We do not allow copying from other publishers, premium reports, social posts, or videos. When outside information helps explain a story, editors must write fresh context and credit the source where appropriate.</p>
+  <h2>Headlines and Images</h2>
+  <p>Headlines should accurately reflect the article. Images must be owned by us, licensed for use, provided with permission, or used only when legally allowed. Captions and credits should be added whenever they help readers understand the source or context.</p>
+  <h2>Updates</h2>
+  <p>News can change quickly. When an article is updated with meaningful new information, the page may show the latest update time or a correction note.</p>
+</section>
+{% endblock %}

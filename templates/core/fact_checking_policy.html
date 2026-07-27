@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Fact-Checking Policy - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}Learn how {{ SITE_NAME }} reviews claims, source references, images, and public-interest information before publication.{% endblock %}
+{% block canonical %}{{ request.scheme }}://{{ request.get_host }}{% url 'core:fact_checking_policy' %}{% endblock %}
+{% block og_title %}Fact-Checking Policy - {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<section class="page-shell">
+  <p class="eyebrow">Verification</p>
+  <h1>Fact-Checking Policy</h1>
+  <p>{{ SITE_NAME }} follows a practical verification process before publishing public-interest news and updates.</p>
+  <h2>Verification Steps</h2>
+  <p>Editors review names, dates, places, claims, official references, and supporting material. For sensitive topics such as crime, health, finance, legal matters, government schemes, elections, and public safety, we prefer official sources or clearly attributed statements.</p>
+  <h2>Unconfirmed Information</h2>
+  <p>If a detail cannot be independently verified at the time of publication, it should be identified as unconfirmed, attributed to the available source, or excluded until stronger confirmation is available.</p>
+  <h2>Reader Reports</h2>
+  <p>Readers can send corrections or supporting documents through the contact page. We review credible requests and update articles when the record requires clarification.</p>
+</section>
+{% endblock %}

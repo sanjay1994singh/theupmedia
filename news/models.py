@@ -2,6 +2,7 @@ from django.conf import settings
 from django.db import models
 from django.db.models import F
 from django.template.defaultfilters import slugify
+from django.utils.html import strip_tags
 from django.urls import reverse
 from django.utils import timezone
 from django_ckeditor_5.fields import CKEditor5Field
@@ -114,10 +115,27 @@ class Article(models.Model):
     content = CKEditor5Field("Content", config_name="article")
     featured_image = models.ImageField(upload_to="articles/%Y/%m/", blank=True, null=True)
     image_alt_text = models.CharField(max_length=180, blank=True)
+    image_caption = models.CharField(max_length=220, blank=True)
+    image_credit = models.CharField(max_length=180, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     is_featured = models.BooleanField(default=False)
     source_name = models.CharField(max_length=120, blank=True)
     source_url = models.URLField(blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="reviewed_articles",
+        null=True,
+        blank=True,
+    )
+    fact_checked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="fact_checked_articles",
+        null=True,
+        blank=True,
+    )
+    correction_note = models.TextField(blank=True)
     meta_title = models.CharField(max_length=160, blank=True)
     meta_description = models.CharField(max_length=220, blank=True)
     meta_keywords = models.CharField(max_length=255, blank=True)
@@ -212,6 +230,12 @@ class Article(models.Model):
 
     def get_absolute_url(self):
         return reverse("news:article_detail", kwargs={"slug": self.slug})
+
+    @property
+    def estimated_reading_minutes(self):
+        text = f"{self.summary} {self.content}"
+        word_count = len(strip_tags(str(text)).split())
+        return max(1, round(word_count / 220))
 
     def __str__(self):
         return self.title

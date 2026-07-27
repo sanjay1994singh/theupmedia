@@ -1450,6 +1450,32 @@ button,
   text-align: center;
 }
 
+.article-figure figcaption span {
+  display: block;
+  margin-top: 4px;
+}
+
+.editorial-meta {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 14px;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.editorial-meta span {
+  background: #f5f5f5;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+
+.correction-note {
+  border-left: 4px solid var(--accent);
+  padding-left: 14px;
+}
+
 .article-content {
   background: var(--surface);
   border-left: 4px solid var(--accent);
@@ -3669,4 +3695,30 @@ time {
   .logout-form button {
     font-size: 13px;
   }
+}
+.contact-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  max-width: 680px;
+}
+
+.contact-form label {
+  display: grid;
+  font-weight: 700;
+  gap: 6px;
+}
+
+.contact-form input,
+.contact-form textarea {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font: inherit;
+  padding: 12px 14px;
+  width: 100%;
+}
+
+.contact-form textarea {
+  min-height: 150px;
+  resize: vertical;
 }

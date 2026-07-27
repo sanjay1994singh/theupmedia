@@ -183,11 +183,37 @@ def article_detail(request, slug):
         schema["image"] = [image_url]
     if article.author:
         schema["author"] = {"@type": "Person", "name": str(article.author)}
+    if article.image_credit:
+        schema["creditText"] = article.image_credit
     if article.city or article.state:
         schema["contentLocation"] = {
             "@type": "Place",
             "name": article.city.name if article.city else article.state.name,
         }
+    breadcrumb_schema = {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+            {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "Home",
+                "item": public_absolute_url(reverse("core:home")),
+            },
+            {
+                "@type": "ListItem",
+                "position": 2,
+                "name": article.category.name,
+                "item": public_absolute_url(article.category.get_absolute_url()),
+            },
+            {
+                "@type": "ListItem",
+                "position": 3,
+                "name": article.title,
+                "item": absolute_url,
+            },
+        ],
+    }
     return render(
         request,
         "news/article_detail.html",
@@ -201,5 +227,6 @@ def article_detail(request, slug):
             "facebook_share_url": f"https://www.facebook.com/sharer/sharer.php?u={quote_plus(public_absolute_url(article.get_absolute_url()))}",
             "twitter_share_url": f"https://twitter.com/intent/tweet?text={quote_plus(article.title)}&url={quote_plus(public_absolute_url(article.get_absolute_url()))}",
             "schema_json": json.dumps(schema),
+            "breadcrumb_schema_json": json.dumps(breadcrumb_schema),
         },
     )

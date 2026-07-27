@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Corrections Policy - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}Read how {{ SITE_NAME }} handles corrections, clarifications, updates, and removal requests for published content.{% endblock %}
+{% block canonical %}{{ request.scheme }}://{{ request.get_host }}{% url 'core:corrections_policy' %}{% endblock %}
+{% block og_title %}Corrections Policy - {{ SITE_NAME }}{% endblock %}
+
+{% block content %}
+<section class="page-shell">
+  <p class="eyebrow">Corrections</p>
+  <h1>Corrections Policy</h1>
+  <p>{{ SITE_NAME }} takes correction requests seriously. Our goal is to keep published information accurate, clear, and fair.</p>
+  <h2>How To Request a Correction</h2>
+  <p>Please send the article URL, the specific issue, and supporting information through the contact page. Requests with documents, official links, or direct evidence can be reviewed faster.</p>
+  <h2>What We May Do</h2>
+  <p>Depending on the review, we may correct a factual error, add clarification, update outdated information, adjust a headline, add source context, or remove content that cannot be responsibly maintained.</p>
+  <h2>Transparency</h2>
+  <p>When a meaningful correction is made, the article may include a correction note or updated timestamp so readers can understand what changed.</p>
+</section>
+{% endblock %}

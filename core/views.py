@@ -1,5 +1,7 @@
 from django.conf import settings
 from django.contrib.sitemaps.views import sitemap
+from django.contrib import messages
+from django.core.mail import send_mail
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -17,6 +19,7 @@ from services.sitemaps import ServiceSitemap
 from subscriptions.models import SubscriptionPlan
 from live_tv.models import LiveTVChannel, LiveTVSetting
 from live_tv.services import calculate_current_playback, get_main_live_channel
+from .forms import ContactForm
 from .sitemaps import StaticPageSitemap
 
 
@@ -84,7 +87,29 @@ def about(request):
 
 
 def contact(request):
-    return render(request, "core/contact.html")
+    form = ContactForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        if form.cleaned_data.get("website"):
+            messages.success(request, "Thank you. Your message has been received.")
+            form = ContactForm()
+        else:
+            try:
+                send_mail(
+                    subject=f"Website contact: {form.cleaned_data['subject']}",
+                    message=(
+                        f"Name: {form.cleaned_data['name']}\n"
+                        f"Email: {form.cleaned_data['email']}\n\n"
+                        f"{form.cleaned_data['message']}"
+                    ),
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[settings.CONTACT_EMAIL],
+                    fail_silently=False,
+                )
+                messages.success(request, "Thank you. Your message has been sent.")
+                form = ContactForm()
+            except Exception:
+                messages.error(request, "Message could not be sent right now. Please email us directly.")
+    return render(request, "core/contact.html", {"form": form})
 
 
 def privacy_policy(request):
@@ -97,6 +122,18 @@ def terms(request):
 
 def disclaimer(request):
     return render(request, "core/disclaimer.html")
+
+
+def editorial_policy(request):
+    return render(request, "core/editorial_policy.html")
+
+
+def fact_checking_policy(request):
+    return render(request, "core/fact_checking_policy.html")
+
+
+def corrections_policy(request):
+    return render(request, "core/corrections_policy.html")
 
 
 def robots_txt(request):

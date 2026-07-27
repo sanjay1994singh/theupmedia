@@ -22,5 +22,31 @@
   <p>If you believe any article contains an error, disputed information, incomplete detail, or misleading source reference, please share the article URL and correction details with supporting information. We review correction requests and update content where required.</p>
   <h2>News Tips</h2>
   <p>For local news tips, send clear details, location, date, supporting images or documents if available, and your contact information.</p>
+  <h2>Send a Message</h2>
+  <form class="contact-form" method="post" action="{% url 'core:contact' %}">
+    {% csrf_token %}
+    {{ form.website }}
+    <label>
+      <span>Name</span>
+      {{ form.name }}
+      {{ form.name.errors }}
+    </label>
+    <label>
+      <span>Email</span>
+      {{ form.email }}
+      {{ form.email.errors }}
+    </label>
+    <label>
+      <span>Subject</span>
+      {{ form.subject }}
+      {{ form.subject.errors }}
+    </label>
+    <label>
+      <span>Message</span>
+      {{ form.message }}
+      {{ form.message.errors }}
+    </label>
+    <button class="primary-button" type="submit">Send Message</button>
+  </form>
 </section>
 {% endblock %}
