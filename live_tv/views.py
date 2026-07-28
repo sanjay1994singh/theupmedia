@@ -1605,8 +1605,7 @@ def update_render_progress(job_id, percent):
 
 
 @contextlib.contextmanager
-def single_live_render_db_lock(timeout_seconds=7200):
-    lock_name = "theupmedia_live_social_render"
+def single_render_db_lock(lock_name, timeout_seconds=7200):
     timeout_seconds = max(1, int(timeout_seconds))
     vendor = connection.vendor
     acquired = False
@@ -1644,8 +1643,8 @@ def single_live_render_db_lock(timeout_seconds=7200):
 
 
 @contextlib.contextmanager
-def single_live_render_file_lock(timeout_seconds=7200):
-    lock_path = Path(tempfile.gettempdir()) / "theupmedia-live-render.lock"
+def single_render_file_lock(lock_filename, timeout_seconds=7200):
+    lock_path = Path(tempfile.gettempdir()) / lock_filename
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock_file = lock_path.open("a+")
     start = time.monotonic()
@@ -1687,8 +1686,15 @@ def single_live_render_file_lock(timeout_seconds=7200):
 
 @contextlib.contextmanager
 def single_live_render_lock(timeout_seconds=7200):
-    with single_live_render_db_lock(timeout_seconds=timeout_seconds):
-        with single_live_render_file_lock(timeout_seconds=timeout_seconds):
+    with single_render_db_lock("theupmedia_live_social_render", timeout_seconds=timeout_seconds):
+        with single_render_file_lock("theupmedia-live-render.lock", timeout_seconds=timeout_seconds):
+            yield
+
+
+@contextlib.contextmanager
+def single_manual_render_lock(timeout_seconds=7200):
+    with single_render_db_lock("theupmedia_manual_social_render", timeout_seconds=timeout_seconds):
+        with single_render_file_lock("theupmedia-manual-render.lock", timeout_seconds=timeout_seconds):
             yield
 
 
@@ -2143,8 +2149,10 @@ def run_social_render_job(job_id, raise_errors=False):
         skip_duplicate_render_job(job, duplicate_job)
         close_old_connections()
         return
+    is_manual_render = job.render_origin == SocialRenderedVideo.Origin.MANUAL_MOBILE
+    render_lock = single_manual_render_lock if is_manual_render else single_live_render_lock
     try:
-        with single_live_render_lock():
+        with render_lock():
             job.refresh_from_db()
             if job.status in {SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE} and job.rendered_video:
                 return
@@ -2152,7 +2160,8 @@ def run_social_render_job(job_id, raise_errors=False):
             if duplicate_job:
                 skip_duplicate_render_job(job, duplicate_job)
                 return
-            normalize_duplicate_processing_render_jobs(job.pk)
+            if not is_manual_render:
+                normalize_duplicate_processing_render_jobs(job.pk)
             update_render_progress(job.pk, 1)
             render_social_video_file(job)
     except Exception as exc:
@@ -2449,7 +2458,12 @@ def rendered_videos_list_api(request):
     except (TypeError, ValueError):
         page_size = 12
     offset = (page - 1) * page_size
-    queryset = completed_rendered_videos().select_related("source_video", "live_channel").order_by("-completed_at", "-created_at", "-pk")
+    queryset = (
+        completed_rendered_videos()
+        .filter(render_origin=SocialRenderedVideo.Origin.LIVE_BROADCAST)
+        .select_related("source_video", "live_channel")
+        .order_by("-completed_at", "-created_at", "-pk")
+    )
     total = queryset.count()
     items = list(queryset[offset : offset + page_size])
     return JsonResponse(
