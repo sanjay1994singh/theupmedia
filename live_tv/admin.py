@@ -8,7 +8,7 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 
 from .forms import LiveTVChannelForm
-from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistCycle, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, LiveTVVideoHeadline, MediaDownload, MobileAdminToken, PushDevice, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
+from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistCycle, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, LiveTVVideoHeadline, MediaDownload, MobileAdminToken, PushDevice, ShortsComment, ShortsCommentLike, ShortsLike, ShortsVideo, SocialRenderedVideo
 from .services import calculate_current_playback, delete_live_video_source, update_playlist_item
 
 
@@ -502,8 +502,15 @@ class ShortsVideoAdmin(admin.ModelAdmin):
 
 @admin.register(ShortsComment)
 class ShortsCommentAdmin(admin.ModelAdmin):
-    list_display = ("short", "name", "created_at")
+    list_display = ("short", "name", "parent", "likes_count", "created_at")
     search_fields = ("short__title", "name", "text")
+    readonly_fields = ("created_at",)
+
+
+@admin.register(ShortsCommentLike)
+class ShortsCommentLikeAdmin(admin.ModelAdmin):
+    list_display = ("comment", "user", "created_at")
+    search_fields = ("comment__text", "user__username", "user__email")
     readonly_fields = ("created_at",)
 
 

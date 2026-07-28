@@ -34,7 +34,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -42,7 +42,7 @@ except ImportError:  # pragma: no cover - server requirements include Pillow
     Image = ImageDraw = ImageFont = None
 
 from .hls import hls_processing_lock_is_active, validate_uploaded_video
-from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, PushDevice, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
+from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, PushDevice, ShortsComment, ShortsCommentLike, ShortsLike, ShortsVideo, SocialRenderedVideo
 from .services import calculate_current_playback, delete_live_video_source, enqueue_completed_broadcast_renders, expanded_video_headlines, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
 from blog.models import BlogPost
 from news.models import Article
@@ -1107,6 +1107,22 @@ def serialize_shorts_video(request, short):
         "created_at": short.created_at.isoformat(),
         "updated_at": short.updated_at.isoformat(),
     }
+
+
+def serialize_shorts_comment(request, comment, include_replies=True):
+    user = shorts_request_user(request)
+    display_name = comment.name or (comment.user.get_full_name() if comment.user_id else "") or (comment.user.username if comment.user_id else "Viewer")
+    data = {
+        "id": comment.pk,
+        "name": display_name,
+        "text": comment.text,
+        "parent_id": comment.parent_id,
+        "likes_count": comment.likes_count,
+        "is_liked": bool(user and ShortsCommentLike.objects.filter(comment=comment, user=user).exists()),
+        "created_at": comment.created_at.isoformat(),
+    }
+    data["replies"] = [serialize_shorts_comment(request, reply, False) for reply in comment.replies.all()] if include_replies else []
+    return data
 
 
 def ffmpeg_binary():
@@ -2557,6 +2573,8 @@ def shorts_list_api(request):
         .select_related("category", "state", "city", "created_by")
         .prefetch_related("comments")
     )
+    if request.GET.get("sort", "").strip().lower() == "latest":
+        shorts_qs = shorts_qs.order_by("-created_at", "-pk")
     total = shorts_qs.count()
     shorts = list(shorts_qs[offset : offset + page_size])
     results = [serialize_shorts_video(request, short) for short in shorts]
@@ -2645,14 +2663,23 @@ def shorts_download_api(request, pk):
 
 
 @csrf_exempt
-@require_POST
+@require_http_methods(["GET", "POST"])
 def shorts_comment_api(request, pk):
     short = get_object_or_404(ShortsVideo, pk=pk, is_published=True)
+    if request.method == "GET":
+        comments = short.comments.filter(parent__isnull=True).select_related("user").prefetch_related("replies__user")[:50]
+        return JsonResponse({"count": short.comments_count, "results": [serialize_shorts_comment(request, item) for item in comments]})
     text = request.POST.get("text", "").strip()
     if not text:
         return JsonResponse({"detail": "Comment text is required.", "errors": {"text": ["This field is required."]}}, status=400)
     name = request.POST.get("name", "").strip()[:80]
-    comment = ShortsComment.objects.create(short=short, name=name, text=text[:1000])
+    user = shorts_request_user(request)
+    parent = None
+    parent_id = request.POST.get("parent_id", "").strip()
+    if parent_id:
+        parent = get_object_or_404(ShortsComment, pk=parent_id, short=short)
+        parent = parent.parent if parent.parent_id else parent
+    comment = ShortsComment.objects.create(short=short, user=user, parent=parent, name=name, text=text[:1000])
     ShortsVideo.objects.filter(pk=short.pk).update(comments_count=F("comments_count") + 1)
     short.refresh_from_db(fields=["comments_count", "updated_at"])
     return JsonResponse(
@@ -2660,12 +2687,7 @@ def shorts_comment_api(request, pk):
             "id": short.pk,
             "comments_count": short.comments_count,
             "comments_total": short.comments_count,
-            "comment": {
-                "id": comment.pk,
-                "name": comment.name or "Viewer",
-                "text": comment.text,
-                "created_at": comment.created_at.isoformat(),
-            },
+            "comment": serialize_shorts_comment(request, comment),
         },
         status=201,
     )
@@ -3122,7 +3144,8 @@ def mobile_admin_shorts_upload_api(request):
         category_id, category_errors = parse_required_category(request.POST)
         if category_errors:
             return JsonResponse({"detail": "Selected category is invalid.", "errors": category_errors}, status=400)
-    frame_template = request.POST.get("frame_template", "").strip() or "normal_black_red"
+    # Mobile upload currently exposes one production frame; keep preview and render identical.
+    frame_template = "normal_black_red"
     raw_display_order = request.POST.get("display_order")
     try:
         display_order = int(raw_display_order) if raw_display_order not in (None, "") else None
@@ -3172,6 +3195,22 @@ def mobile_admin_shorts_status_api(request, pk):
         ShortsVideo.objects.select_related("category", "state", "city", "created_by").prefetch_related("comments"),
         pk=pk,
     )
+
+
+@csrf_exempt
+@require_POST
+def shorts_comment_like_api(request, pk):
+    user = shorts_request_user(request)
+    if not user:
+        return JsonResponse({"detail": "Login required."}, status=401)
+    comment = get_object_or_404(ShortsComment, pk=pk)
+    with transaction.atomic():
+        like, created = ShortsCommentLike.objects.get_or_create(comment=comment, user=user)
+        if not created:
+            like.delete()
+        likes_count = ShortsCommentLike.objects.filter(comment=comment).count()
+        ShortsComment.objects.filter(pk=comment.pk).update(likes_count=likes_count)
+    return JsonResponse({"id": comment.pk, "is_liked": created, "likes_count": likes_count})
     return JsonResponse({"short": serialize_shorts_video(request, short)})
 
 

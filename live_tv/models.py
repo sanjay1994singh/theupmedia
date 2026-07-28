@@ -749,8 +749,11 @@ class ShortsVideo(models.Model):
 
 class ShortsComment(models.Model):
     short = models.ForeignKey(ShortsVideo, on_delete=models.CASCADE, related_name="comments")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name="live_tv_shorts_comments", blank=True, null=True)
+    parent = models.ForeignKey("self", on_delete=models.CASCADE, related_name="replies", blank=True, null=True)
     name = models.CharField(max_length=80, blank=True)
     text = models.TextField()
+    likes_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -761,6 +764,21 @@ class ShortsComment(models.Model):
 
     def __str__(self):
         return f"{self.name or 'Viewer'}: {self.text[:40]}"
+
+
+class ShortsCommentLike(models.Model):
+    comment = models.ForeignKey(ShortsComment, on_delete=models.CASCADE, related_name="comment_likes")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="liked_live_tv_shorts_comments")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["comment", "user"], name="unique_shorts_comment_like_user"),
+        ]
+        indexes = [models.Index(fields=["comment", "user"], name="short_comment_like_idx")]
+
+    def __str__(self):
+        return f"{self.user} liked comment {self.comment_id}"
 
 
 class ShortsLike(models.Model):
