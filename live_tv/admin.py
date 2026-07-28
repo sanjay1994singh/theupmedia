@@ -283,7 +283,7 @@ class LiveTVSettingAdmin(admin.ModelAdmin):
         ),
         ("Default Video Text", {"fields": ("default_lower_third_label", "default_headline", "maximum_headline_characters")}),
         ("Mobile App", {"fields": ("splash_screen_seconds",)}),
-        ("Ticker", {"fields": ("default_ticker_label", "default_ticker_text", "ticker_speed_seconds", "mobile_ticker_speed_seconds")}),
+        ("Ticker", {"fields": ("default_ticker_label", "default_ticker_text", "ticker_speed_seconds", "mobile_ticker_speed_seconds", "ticker_label_width_percent", "ticker_label_height_percent", "ticker_height_percent")}),
     )
 
     def has_add_permission(self, request):

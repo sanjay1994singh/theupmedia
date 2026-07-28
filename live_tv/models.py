@@ -571,6 +571,9 @@ class LiveTVSetting(models.Model):
     default_ticker_text = models.TextField(null=True, blank=True)
     ticker_speed_seconds = models.PositiveSmallIntegerField(default=22)
     mobile_ticker_speed_seconds = models.PositiveSmallIntegerField(default=12)
+    ticker_label_width_percent = models.PositiveSmallIntegerField(default=18, validators=[MinValueValidator(10), MaxValueValidator(40)], help_text="Ticker label width as percentage of video width (10-40).")
+    ticker_label_height_percent = models.PositiveSmallIntegerField(default=100, validators=[MinValueValidator(50), MaxValueValidator(100)], help_text="Ticker label height relative to full ticker height (50-100).")
+    ticker_height_percent = models.PositiveSmallIntegerField(default=100, validators=[MinValueValidator(60), MaxValueValidator(160)], help_text="Complete ticker height scale in percent (60-160).")
     splash_screen_seconds = models.PositiveSmallIntegerField(
         default=3,
         validators=[MinValueValidator(0), MaxValueValidator(10)],
@@ -607,6 +610,9 @@ class LiveTVSetting(models.Model):
             "default_ticker_text",
             "ticker_speed_seconds",
             "mobile_ticker_speed_seconds",
+            "ticker_label_width_percent",
+            "ticker_label_height_percent",
+            "ticker_height_percent",
         )
         previous = type(self).objects.filter(pk=self.pk).values(*ticker_fields).first()
         if previous and any(previous[field] != getattr(self, field) for field in ticker_fields):

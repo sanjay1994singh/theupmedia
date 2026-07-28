@@ -560,6 +560,9 @@ def serialize_live_tv_setting(request, setting):
         "default_ticker_text": setting.default_ticker_text,
         "ticker_speed_seconds": setting.ticker_speed_seconds,
         "mobile_ticker_speed_seconds": setting.mobile_ticker_speed_seconds,
+        "ticker_label_width_percent": setting.ticker_label_width_percent,
+        "ticker_label_height_percent": setting.ticker_label_height_percent,
+        "ticker_height_percent": setting.ticker_height_percent,
         "splash_screen_seconds": setting.splash_screen_seconds,
         "maximum_headline_characters": setting.maximum_headline_characters,
         "ticker_style": "red_white_slant",
@@ -655,6 +658,9 @@ def serialize_channel_for_mobile(request, channel):
         "show_ticker": setting.show_ticker,
         "ticker_speed_seconds": ticker_setting.speed_seconds,
         "mobile_ticker_speed_seconds": ticker_setting.mobile_speed_seconds,
+        "ticker_label_width_percent": setting.ticker_label_width_percent,
+        "ticker_label_height_percent": setting.ticker_label_height_percent,
+        "ticker_height_percent": setting.ticker_height_percent,
         "ticker_style": ticker_setting.style,
         "settings": serialize_live_tv_setting(request, setting),
         "web_url": request.build_absolute_uri(channel.get_absolute_url()),
@@ -734,6 +740,9 @@ def serialize_synced_live_state(request, channel, server_time=None):
         "autoplay": setting.autoplay,
         "ticker_speed_seconds": ticker_setting.speed_seconds,
         "mobile_ticker_speed_seconds": ticker_setting.mobile_speed_seconds,
+        "ticker_label_width_percent": setting.ticker_label_width_percent,
+        "ticker_label_height_percent": setting.ticker_label_height_percent,
+        "ticker_height_percent": setting.ticker_height_percent,
         "ticker_style": ticker_setting.style,
         "settings": serialize_live_tv_setting(request, setting),
         "ads": mobile_live_tv_ads(),
@@ -1705,6 +1714,9 @@ LIVE_BROADCAST_VISUAL_SNAPSHOT_KEYS = (
     "ticker_text",
     "ticker_speed_seconds",
     "mobile_ticker_speed_seconds",
+    "ticker_label_width_percent",
+    "ticker_label_height_percent",
+    "ticker_height_percent",
     "ticker_style",
     "channel_name",
     "channel_logo",
@@ -1872,8 +1884,10 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
         )
 
     if bool_snapshot(snapshot, "show_ticker") and (ticker_label or ticker_text):
-        ticker_height = 128
-        label_width = 450
+        ticker_height = max(77, min(205, round(128 * float(snapshot.get("ticker_height_percent") or 100) / 100)))
+        label_width = max(round(input_width * 0.10), min(round(input_width * 0.40), round(input_width * float(snapshot.get("ticker_label_width_percent") or 18) / 100)))
+        label_height = max(round(ticker_height * 0.50), min(ticker_height, round(ticker_height * float(snapshot.get("ticker_label_height_percent") or 100) / 100)))
+        label_top = input_height - label_height
         black_bar_width = 46
         red_bar_width = 40
         mask_width = label_width + black_bar_width + red_bar_width
@@ -1897,9 +1911,9 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
             filters.append(
                 f"[{current}]drawbox=x=0:y={ticker_top}:w={input_width}:h={ticker_height}:color=white@0.97:t=fill[vtickerbg];"
                 f"[vtickerbg][{ticker_input}:v]overlay=x={ticker_start}-mod({ticker_time_expr}*{ticker_speed}\\,{ticker_loop_width}):y={ticker_top}:shortest=0:repeatlast=1[vtickertext];"
-                f"[vtickertext]drawbox=x=0:y={ticker_top}:w={label_width}:h={ticker_height}:color=#c80d13@1:t=fill,"
-                f"drawbox=x={label_width}:y={ticker_top}:w={black_bar_width}:h={ticker_height}:color=#111111@1:t=fill,"
-                f"drawbox=x={label_width + black_bar_width}:y={ticker_top}:w={red_bar_width}:h={ticker_height}:color=#ef1717@1:t=fill[vlabelbg];"
+                f"[vtickertext]drawbox=x=0:y={label_top}:w={label_width}:h={label_height}:color=#c80d13@1:t=fill,"
+                f"drawbox=x={label_width}:y={label_top}:w={black_bar_width}:h={label_height}:color=#111111@1:t=fill,"
+                f"drawbox=x={label_width + black_bar_width}:y={label_top}:w={red_bar_width}:h={label_height}:color=#ef1717@1:t=fill[vlabelbg];"
                 f"[vlabelbg][{label_input}:v]overlay=x=24:y={ticker_top}:shortest=0:repeatlast=1[{next_label}]"
             )
             current = next_label
@@ -1912,9 +1926,9 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
             add_filter(
                 f"drawbox=x=0:y={ticker_top}:w={input_width}:h={ticker_height}:color=white@0.97:t=fill,"
                 f"drawtext=textfile='{ffmpeg_path(ticker_file)}'{ticker_font_arg}:x={ticker_start}-mod({ticker_time_expr}*{ticker_speed}\\,tw/4):y={ticker_text_y}:fontsize={ticker_font_size}:fontcolor=#111111,"
-                f"drawbox=x=0:y={ticker_top}:w={label_width}:h={ticker_height}:color=#c80d13@1:t=fill,"
-                f"drawbox=x={label_width}:y={ticker_top}:w={black_bar_width}:h={ticker_height}:color=#111111@1:t=fill,"
-                f"drawbox=x={label_width + black_bar_width}:y={ticker_top}:w={red_bar_width}:h={ticker_height}:color=#ef1717@1:t=fill,"
+                f"drawbox=x=0:y={label_top}:w={label_width}:h={label_height}:color=#c80d13@1:t=fill,"
+                f"drawbox=x={label_width}:y={label_top}:w={black_bar_width}:h={label_height}:color=#111111@1:t=fill,"
+                f"drawbox=x={label_width + black_bar_width}:y={label_top}:w={red_bar_width}:h={label_height}:color=#ef1717@1:t=fill,"
                 f"drawtext=textfile='{ffmpeg_path(ticker_label_file)}'{ticker_label_font_arg}:x=48:y={ticker_text_y}:fontsize={ticker_font_size}:fontcolor=white"
             )
 
@@ -2703,6 +2717,50 @@ def mobile_admin_logout_api(request):
     return JsonResponse({"ok": True})
 
 
+def serialize_mobile_user(user):
+    return {"id": user.pk, "username": user.get_username(), "name": user.get_full_name() or user.get_username(), "email": user.email, "is_superuser": user.is_superuser, "role": getattr(user, "role", "reader")}
+
+
+@csrf_exempt
+@require_POST
+def mobile_user_register_api(request):
+    username = request.POST.get("username", "").strip()
+    email = request.POST.get("email", "").strip().lower()
+    password = request.POST.get("password", "")
+    password_confirm = request.POST.get("password_confirm", "")
+    if not re.fullmatch(r"[\w.@+-]{3,150}", username):
+        return JsonResponse({"detail": "Username 3-150 valid characters ka hona chahiye."}, status=400)
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        return JsonResponse({"detail": "Valid email enter kare."}, status=400)
+    if len(password) < 8:
+        return JsonResponse({"detail": "Password kam se kam 8 characters ka hona chahiye."}, status=400)
+    if password != password_confirm:
+        return JsonResponse({"detail": "Password confirmation match nahi karta."}, status=400)
+    User = get_user_model()
+    if User.objects.filter(username__iexact=username).exists() or User.objects.filter(email__iexact=email).exists():
+        return JsonResponse({"detail": "Username ya email already registered hai."}, status=409)
+    with transaction.atomic():
+        user = User.objects.create_user(username=username, email=email, password=password)
+        token = MobileAdminToken.create_for_user(user, request.POST.get("device_name", "Mobile App"))
+    return JsonResponse({"token": token.key, "user": serialize_mobile_user(user)}, status=201)
+
+
+@csrf_exempt
+@require_POST
+def mobile_user_login_api(request):
+    user = authenticate(request, username=request.POST.get("username", "").strip(), password=request.POST.get("password", ""))
+    if not user or not user.is_active:
+        return JsonResponse({"detail": "Invalid username or password."}, status=400)
+    token = MobileAdminToken.create_for_user(user, request.POST.get("device_name", "Mobile App"))
+    return JsonResponse({"token": token.key, "user": serialize_mobile_user(user)})
+
+
+@require_GET
+def mobile_google_auth_config_api(request):
+    configured = bool(getattr(settings, "SOCIAL_AUTH_GOOGLE_OAUTH2_KEY", ""))
+    return JsonResponse({"configured": configured, "authorize_url": request.build_absolute_uri("/auth/login/google-oauth2/") if configured else ""})
+
+
 @require_GET
 def mobile_admin_dashboard_api(request):
     user, error = mobile_admin_required(request)
@@ -2881,10 +2939,17 @@ def mobile_admin_settings_save_api(request):
             setting.maximum_headline_characters = max(30, min(200, int(request.POST.get("maximum_headline_characters") or 100)))
         except (TypeError, ValueError):
             pass
-    for field in ["web_live_badge_size_percent", "mobile_live_badge_size_percent"]:
+    numeric_limits = {
+        "web_live_badge_size_percent": (40, 200, 100),
+        "mobile_live_badge_size_percent": (40, 200, 100),
+        "ticker_label_width_percent": (10, 40, 18),
+        "ticker_label_height_percent": (50, 100, 100),
+        "ticker_height_percent": (60, 160, 100),
+    }
+    for field, (minimum, maximum, fallback) in numeric_limits.items():
         if field in request.POST:
             try:
-                setattr(setting, field, max(40, min(200, int(request.POST.get(field) or 100))))
+                setattr(setting, field, max(minimum, min(maximum, int(request.POST.get(field) or fallback))))
             except (TypeError, ValueError):
                 pass
     for field in ["show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker", "autoplay"]:
@@ -3218,6 +3283,9 @@ def mobile_admin_render_social_video_api(request):
         "ticker_text": ticker_text if include_ticker else "",
         "ticker_speed_seconds": setting.ticker_speed_seconds,
         "mobile_ticker_speed_seconds": setting.mobile_ticker_speed_seconds,
+        "ticker_label_width_percent": setting.ticker_label_width_percent,
+        "ticker_label_height_percent": setting.ticker_label_height_percent,
+        "ticker_height_percent": setting.ticker_height_percent,
         "channel_name": setting.name,
         "channel_logo": logo_name,
         "show_channel_logo": bool(logo_name),
