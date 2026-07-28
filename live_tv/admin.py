@@ -103,6 +103,49 @@ class LiveTVChannelAdmin(admin.ModelAdmin):
     # list_filter = ("source_type", "auto_playlist_enabled", "auto_add_to_live", "hls_status", "is_live", "is_active")
     search_fields = ("title", "headline", "ticker_text", "city__name", "state__name", "category__name")
     prepopulated_fields = {"slug": ("title",)}
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(
+            models.Q(pending_delete=False) | models.Q(auto_playlist_enabled=True)
+        )
+
+    def has_delete_permission(self, request, obj=None):
+        if obj and (obj.auto_playlist_enabled or obj.source_type == LiveTVChannel.SourceType.PLAYLIST):
+            return False
+        return super().has_delete_permission(request, obj)
+
+    def get_deleted_objects(self, objs, request):
+        uploaded = [
+            obj for obj in objs
+            if not obj.auto_playlist_enabled and obj.source_type != LiveTVChannel.SourceType.PLAYLIST
+        ]
+        protected = [
+            f"Main Live TV playlist channel: {obj}"
+            for obj in objs
+            if obj.auto_playlist_enabled or obj.source_type == LiveTVChannel.SourceType.PLAYLIST
+        ]
+        return (
+            [f"Uploaded Live TV video: {obj}" for obj in uploaded],
+            {"uploaded Live TV videos": len(uploaded)},
+            set(),
+            protected,
+        )
+
+    def delete_model(self, request, obj):
+        result = delete_live_video_source(obj, defer_processing=True)
+        if result["deferred"]:
+            messages.info(request, "Video playlist se hata di gayi; active processing rukte hi files auto-delete hongi.")
+
+    def delete_queryset(self, request, queryset):
+        deleted = deferred = skipped = 0
+        for obj in queryset.order_by("pk"):
+            if obj.auto_playlist_enabled or obj.source_type == LiveTVChannel.SourceType.PLAYLIST:
+                skipped += 1
+                continue
+            result = delete_live_video_source(obj, defer_processing=True)
+            deleted += int(result["deleted"])
+            deferred += int(result["deferred"])
+        messages.info(request, f"Deleted: {deleted}; processing ke baad delete: {deferred}; skipped main channels: {skipped}.")
     list_editable = ("is_live", "is_active", "display_order")
     readonly_fields = ("hls_master_url", "hls_status", "hls_progress_display", "hls_progress_percent", "processing_error", "duration", "duration_seconds", "current_playback_display", "playlist_duration_display", "playlist_target_progress", "playlist_version", "playback_started_at", "last_playlist_update", "processing_failures")
     fieldsets = (
@@ -386,35 +429,6 @@ class ShortsVideoAdmin(admin.ModelAdmin):
         ("Counters", {"fields": ("views_count", "likes_count", "comments_count", "shares_count")}),
         ("Dates", {"fields": ("created_at", "updated_at")}),
     )
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).filter(
-            models.Q(pending_delete=False) | models.Q(auto_playlist_enabled=True)
-        )
-
-    def has_delete_permission(self, request, obj=None):
-        if obj and (obj.auto_playlist_enabled or obj.source_type == LiveTVChannel.SourceType.PLAYLIST):
-            return False
-        return super().has_delete_permission(request, obj)
-
-    def delete_model(self, request, obj):
-        if obj.auto_playlist_enabled or obj.source_type == LiveTVChannel.SourceType.PLAYLIST:
-            messages.error(request, "Main Live TV playlist channel delete nahi kiya ja sakta.")
-            return
-        result = delete_live_video_source(obj, defer_processing=True)
-        if result["deferred"]:
-            messages.info(request, "Video playlist se hata di gayi; active processing rukte hi files auto-delete hongi.")
-
-    def delete_queryset(self, request, queryset):
-        deleted = deferred = skipped = 0
-        for obj in queryset.order_by("pk"):
-            if obj.auto_playlist_enabled or obj.source_type == LiveTVChannel.SourceType.PLAYLIST:
-                skipped += 1
-                continue
-            result = delete_live_video_source(obj, defer_processing=True)
-            deleted += int(result["deleted"])
-            deferred += int(result["deferred"])
-        messages.info(request, f"Deleted: {deleted}; processing ke baad delete: {deferred}; skipped main channels: {skipped}.")
 
     @admin.display(description="HLS progress")
     def hls_progress_display(self, obj):
