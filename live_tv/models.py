@@ -549,6 +549,7 @@ class LiveTVSetting(models.Model):
     name = models.CharField(max_length=120, default="The Up Media Live TV")
     live_label = models.CharField(max_length=40, default="LIVE")
     channel_logo = models.ImageField(upload_to="live-tv/settings/", blank=True, null=True)
+    channel_logo_updated_at = models.DateTimeField(blank=True, null=True, editable=False)
     show_channel_logo = models.BooleanField(default=True)
     show_lower_third = models.BooleanField(default=True)
     show_ticker = models.BooleanField(default=True)

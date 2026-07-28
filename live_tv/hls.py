@@ -389,9 +389,17 @@ def make_short_logo_badge(source_path, output_path, size=128):
         draw.ellipse((0, 0, badge_size - 1, badge_size - 1), fill=(255, 255, 255, 245))
         draw.ellipse((border, border, badge_size - border - 1, badge_size - border - 1), fill=(220, 24, 24, 255))
         logo = Image.open(source_path).convert("RGBA")
-        logo.thumbnail((inner - 12, inner - 12), Image.Resampling.LANCZOS)
+        alpha_bbox = logo.getchannel("A").getbbox()
+        if alpha_bbox:
+            logo = logo.crop(alpha_bbox)
+        logo = ImageOps.fit(
+            logo,
+            (inner, inner),
+            method=Image.Resampling.LANCZOS,
+            centering=(0.5, 0.5),
+        )
         canvas = Image.new("RGBA", (inner, inner), (255, 255, 255, 0))
-        canvas.alpha_composite(logo, ((inner - logo.width) // 2, (inner - logo.height) // 2))
+        canvas.alpha_composite(logo, (0, 0))
         mask = Image.new("L", (inner, inner), 0)
         ImageDraw.Draw(mask).ellipse((0, 0, inner - 1, inner - 1), fill=255)
         badge.alpha_composite(ImageOps.fit(canvas, (inner, inner), method=Image.Resampling.LANCZOS), (border, border))

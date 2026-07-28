@@ -25,7 +25,7 @@ from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
 from django.db import close_old_connections, connection, transaction
 from django.db.models.deletion import ProtectedError
-from django.db.models import Count, F, Q
+from django.db.models import Count, F, Q, Sum
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import FileResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -533,11 +533,20 @@ def news_ticker_setting():
 
 
 def serialize_live_tv_setting(request, setting):
+    logo_next_change_at = (
+        setting.channel_logo_updated_at + timedelta(days=7)
+        if setting.channel_logo_updated_at
+        else None
+    )
+    logo_change_allowed = not logo_next_change_at or timezone.now() >= logo_next_change_at
     return {
         "id": setting.pk,
         "name": setting.name,
         "live_label": setting.live_label,
         "channel_logo": absolute_media_url(request, setting.channel_logo),
+        "channel_logo_updated_at": setting.channel_logo_updated_at.isoformat() if setting.channel_logo_updated_at else "",
+        "channel_logo_change_allowed": logo_change_allowed,
+        "channel_logo_next_change_at": logo_next_change_at.isoformat() if logo_next_change_at else "",
         "show_live_badge": setting.show_live_badge,
         "web_live_badge_size_percent": setting.web_live_badge_size_percent,
         "mobile_live_badge_size_percent": setting.mobile_live_badge_size_percent,
@@ -2717,9 +2726,50 @@ def mobile_admin_dashboard_api(request):
         fresh_playlist_items = LiveTVPlaylistItem.objects.none()
         fresh_playlist_duration = 0
         playlist_state = None
+    today = timezone.localdate()
+    uploaded_channels = channels.exclude(source_type=LiveTVChannel.SourceType.PLAYLIST)
+    shorts_qs = ShortsVideo.objects.filter(is_published=True)
+    total_views = shorts_qs.aggregate(total=Sum("views_count"))["total"] or 0
+    follower_count = ChannelFollow.objects.filter(channel_user=user).count()
+    processing_count = channels.filter(hls_status=LiveTVChannel.HLSStatus.PROCESSING).count()
+    failed_count = channels.filter(hls_status=LiveTVChannel.HLSStatus.FAILED).count()
+    pending_count = channels.filter(hls_status=LiveTVChannel.HLSStatus.PENDING).count()
+    notifications = []
+    if failed_count:
+        notifications.append({"id": "hls-failed", "level": "error", "title": "HLS processing failed", "message": f"{failed_count} video processing dobara check kare."})
+    if processing_count:
+        notifications.append({"id": "hls-processing", "level": "info", "title": "Video processing", "message": f"{processing_count} video abhi process ho rahe hain."})
+    if pending_count:
+        notifications.append({"id": "hls-pending", "level": "warning", "title": "Videos pending", "message": f"{pending_count} video queue me hain."})
+    if not notifications:
+        notifications.append({"id": "system-ok", "level": "success", "title": "System ready", "message": "Koi processing alert nahi hai."})
+    avatar_url = absolute_media_url(request, getattr(user, "avatar", None))
     return JsonResponse(
         {
-            "user": {"id": user.pk, "username": user.get_username(), "name": user.get_full_name() or user.get_username()},
+            "user": {
+                "id": user.pk,
+                "username": user.get_username(),
+                "name": user.get_full_name() or user.get_username(),
+                "email": user.email,
+                "phone_number": getattr(user, "phone_number", ""),
+                "role": getattr(user, "role", "admin"),
+                "designation": getattr(user, "designation", ""),
+                "organization": getattr(user, "organization", ""),
+                "city": getattr(user, "city", ""),
+                "state": getattr(user, "state", ""),
+                "avatar": avatar_url,
+                "is_superuser": user.is_superuser,
+                "is_staff": user.is_staff,
+            },
+            "profile_stats": {
+                "total_videos": uploaded_channels.count() + shorts_qs.count(),
+                "videos_today": uploaded_channels.filter(created_at__date=today).count() + shorts_qs.filter(created_at__date=today).count(),
+                "total_views": total_views,
+                "live_streams": channels.filter(is_active=True, is_live=True).count(),
+                "followers": follower_count,
+                "processing": processing_count,
+            },
+            "notifications": notifications,
             "settings": serialize_live_tv_setting(request, settings_obj),
             "facebook_live": serialize_facebook_live_setting(facebook_live_setting()),
             "channels": [serialize_channel_for_admin(request, channel) for channel in channels],
@@ -2797,8 +2847,22 @@ def mobile_admin_settings_save_api(request):
         if field in request.POST:
             setattr(setting, field, request.POST.get(field) in {"1", "true", "on", "yes"})
     if request.FILES.get("channel_logo"):
+        next_change_at = (
+            setting.channel_logo_updated_at + timedelta(days=7)
+            if setting.channel_logo_updated_at
+            else None
+        )
+        if next_change_at and timezone.now() < next_change_at:
+            return JsonResponse(
+                {
+                    "detail": "Global TV logo week me sirf ek baar change ho sakta hai.",
+                    "next_change_at": next_change_at.isoformat(),
+                },
+                status=429,
+            )
         delete_file_field(setting.channel_logo)
         setting.channel_logo = request.FILES["channel_logo"]
+        setting.channel_logo_updated_at = timezone.now()
     setting.save()
     return JsonResponse({"settings": serialize_live_tv_setting(request, setting)})
 
