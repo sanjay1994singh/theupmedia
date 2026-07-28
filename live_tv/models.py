@@ -140,6 +140,12 @@ class LiveTVChannel(models.Model):
     city = models.ForeignKey(LiveTVCity, on_delete=models.SET_NULL, blank=True, null=True, related_name="channels")
     is_active = models.BooleanField(default=True)
     is_live = models.BooleanField(default=True)
+    pending_delete = models.BooleanField(
+        default=False,
+        db_index=True,
+        editable=False,
+        help_text="Delete requested while background processing was still active.",
+    )
     lower_third_label = models.CharField(max_length=60, blank=True, default="")
     headline = models.CharField(max_length=180, blank=True, default="")
     reporter_label = models.CharField(max_length=60, blank=True, default="REPORTER")

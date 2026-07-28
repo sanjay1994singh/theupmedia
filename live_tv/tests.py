@@ -13,7 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, LiveTVVideoHeadline, ShortsVideo, SocialRenderedVideo
-from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, create_broadcast_render_job, enqueue_completed_broadcast_renders, get_main_live_channel, rebuild_live_playlist, recover_stale_render_jobs, split_headline_parts
+from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, cleanup_expired_live_video_sources, create_broadcast_render_job, delete_live_video_source, enqueue_completed_broadcast_renders, get_main_live_channel, rebuild_live_playlist, recover_stale_render_jobs, split_headline_parts
 from .tasks import process_live_channel_hls_task
 from .views import video_headline_payload
 
@@ -36,6 +36,66 @@ class CeleryQueueRoutingTests(SimpleTestCase):
         self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.process_short_hls"]["queue"], "hls")
         self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.render_social_video"]["queue"], "render")
         self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.render_live_broadcast_video"]["queue"], "render")
+
+
+class LiveVideoDeletionTests(TestCase):
+    def setUp(self):
+        self.main = LiveTVChannel.objects.create(
+            title="Deletion Main",
+            slug="deletion-main",
+            source_type=LiveTVChannel.SourceType.PLAYLIST,
+            auto_playlist_enabled=True,
+            auto_add_to_live=False,
+        )
+
+    def make_video(self, title="Uploaded Source", status=LiveTVChannel.HLSStatus.COMPLETED):
+        return LiveTVChannel.objects.create(
+            title=title,
+            slug=title.lower().replace(" ", "-"),
+            source_type=LiveTVChannel.SourceType.DIRECT,
+            video_file=f"live-tv/videos/{title}.mp4",
+            hls_master_url="live-tv/hls/99/master.m3u8",
+            hls_status=status,
+            duration_seconds=60,
+        )
+
+    @patch("live_tv.services._remove_media_directory", return_value=True)
+    def test_delete_removes_playlist_source_but_preserves_completed_render(self, _remove_hls):
+        video = self.make_video()
+        item = LiveTVPlaylistItem.objects.create(channel=self.main, video=video, duration_seconds=60)
+        render = SocialRenderedVideo.objects.create(
+            title="Archived Render",
+            source_video=video,
+            live_channel=self.main,
+            playlist_item=item,
+            rendered_video="social-render/rendered/archive.mp4",
+            status=SocialRenderedVideo.Status.COMPLETED,
+            progress_percent=100,
+        )
+
+        result = delete_live_video_source(video)
+
+        self.assertTrue(result["deleted"])
+        self.assertFalse(LiveTVChannel.objects.filter(pk=video.pk).exists())
+        render.refresh_from_db()
+        self.assertIsNone(render.source_video_id)
+        self.assertTrue(bool(render.rendered_video))
+
+    @patch("live_tv.services._remove_media_directory", return_value=True)
+    def test_processing_delete_is_hidden_then_physically_cleaned(self, _remove_hls):
+        video = self.make_video("Processing Upload", LiveTVChannel.HLSStatus.PROCESSING)
+
+        result = delete_live_video_source(video)
+
+        self.assertTrue(result["deferred"])
+        video.refresh_from_db()
+        self.assertTrue(video.pending_delete)
+        self.assertFalse(video.is_active)
+        video.hls_status = LiveTVChannel.HLSStatus.COMPLETED
+        video.save(update_fields=["hls_status", "updated_at"])
+        report = cleanup_expired_live_video_sources()
+        self.assertEqual(report["deleted"], 1)
+        self.assertFalse(LiveTVChannel.objects.filter(pk=video.pk).exists())
 
 
 class VideoHeadlineRotationTests(TestCase):

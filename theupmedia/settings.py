@@ -270,6 +270,10 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": float(os.getenv("LIVE_TV_TEMP_CLEANUP_SECONDS", "21600")),
         "kwargs": {"hours": 24},
     },
+    "cleanup-expired-live-sources": {
+        "task": "live_tv.cleanup_expired_live_sources",
+        "schedule": float(os.getenv("LIVE_TV_SOURCE_CLEANUP_SECONDS", "3600")),
+    },
 }
 
 LIVE_TV_RENDER_USE_CELERY = os.getenv("LIVE_TV_RENDER_USE_CELERY", "True").lower() == "true"

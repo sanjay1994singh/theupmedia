@@ -414,10 +414,20 @@ def make_short_logo_badge(source_path, output_path, size=128):
 def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None):
     if Image is None:
         return False
-    primary = safe_hex_color(short.frame_primary_color, "#d71920")
+    template = short.frame_template or "normal_black_red"
+    template_styles = {
+        "normal_black_red": {"background": "#070707", "panel": "#0d0d0d", "accent": "#ef1717", "text": "#ffffff", "highlight": "#f8d24c"},
+        "normal_white_blue": {"background": "#eef3fb", "panel": "#ffffff", "accent": "#1d4ed8", "text": "#111111", "highlight": "#1d4ed8"},
+        "normal_storm_yellow": {"background": "#080c14", "panel": "#111827", "accent": "#f59e0b", "text": "#ffffff", "highlight": "#f8d24c"},
+        "normal_white_red": {"background": "#f8fafc", "panel": "#ffffff", "accent": "#ef1717", "text": "#111111", "highlight": "#ef1717"},
+        "breaking_big": {"background": "#110204", "panel": "#ffffff", "accent": "#ef1717", "text": "#111111", "highlight": "#ef1717"},
+    }
+    style = template_styles.get(template, template_styles["normal_black_red"])
+    primary = safe_hex_color(style["accent"], "#d71920")
     secondary = safe_hex_color(short.frame_secondary_color, "#2b0508")
-    background = safe_hex_color(short.frame_background_color, "#050505")
-    text_color = safe_hex_color(short.frame_text_color, "#ffffff")
+    background = safe_hex_color(style["background"], "#050505")
+    text_color = safe_hex_color(style["text"], "#ffffff")
+    highlight_color = safe_hex_color(style["highlight"], primary)
     headline = short.headline or short.title
     bg = Image.new("RGBA", (SHORTS_RENDER_WIDTH, SHORTS_RENDER_HEIGHT), background)
     fg = Image.new("RGBA", (SHORTS_RENDER_WIDTH, SHORTS_RENDER_HEIGHT), (0, 0, 0, 0))
@@ -425,23 +435,28 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
     fg_draw = ImageDraw.Draw(fg)
 
     bg_draw.rectangle((0, 0, SHORTS_RENDER_WIDTH, SHORTS_RENDER_HEIGHT), fill=background)
-    for step in range(0, 420, 3):
-        ratio = step / 420
-        if ratio < 0.28:
-            red = int(23 + (18 * (ratio / 0.28)))
-            green = 3
-        else:
-            red = int(54 + (102 * ((ratio - 0.28) / 0.72)))
-            green = int(6 + (13 * ((ratio - 0.28) / 0.72)))
-        bg_draw.rectangle((0, step, SHORTS_RENDER_WIDTH, step + 3), fill=(red, green, 10, 255))
+    if template in {"normal_black_red", "normal_storm_yellow", "breaking_big"}:
+        for step in range(0, 420, 3):
+            ratio = step / 420
+            red = int(18 + (88 * ratio)) if template != "normal_storm_yellow" else int(7 + (18 * ratio))
+            green = int(3 + (12 * ratio)) if template != "normal_storm_yellow" else int(10 + (12 * ratio))
+            bg_draw.rectangle((0, step, SHORTS_RENDER_WIDTH, step + 3), fill=(red, green, 14, 255))
+    else:
+        bg_draw.rectangle((0, 0, SHORTS_RENDER_WIDTH, 420), fill=background)
 
-    headline_font = shorts_image_font(64)
-    y = 66
-    for line in wrap_text_pixels(fg_draw, headline, headline_font, 930, max_lines=3):
+    headline_font = shorts_image_font(68 if template == "breaking_big" else 64)
+    headline_lines = wrap_text_pixels(fg_draw, headline, headline_font, 900, max_lines=3)
+    y = 78
+    if template == "breaking_big":
+        fg_draw.rounded_rectangle((38, 42, 490, 118), radius=12, fill=primary)
+        fg_draw.text((62, 50), "BIG BREAKING", font=shorts_latin_image_font(43), fill="#ffffff")
+        y = 140
+    for index, line in enumerate(headline_lines):
         bbox = fg_draw.textbbox((0, 0), line, font=headline_font, stroke_width=3)
         line_width = bbox[2] - bbox[0]
         x = max(60, int((SHORTS_RENDER_WIDTH - line_width) / 2))
-        fg_draw.text((x, y), line, font=headline_font, fill=text_color, stroke_width=3, stroke_fill=(0, 0, 0, 150))
+        line_color = highlight_color if index == len(headline_lines) - 1 and template != "breaking_big" else text_color
+        fg_draw.text((x, y), line, font=headline_font, fill=line_color, stroke_width=2, stroke_fill=(0, 0, 0, 120))
         y += 74
 
     video_outer = (18, 370, 1062, 1864)
@@ -621,7 +636,13 @@ def render_short_frame(short_id):
         str(tmp_output),
     ]
     try:
-        run_ffmpeg_command(args, duration=metadata.get("duration") or 0, progress_callback=progress_updater(ShortsVideo, short.pk), timeout=getattr(settings, "LIVE_TV_SHORTS_RENDER_TIMEOUT", 1800))
+        update_render_progress = progress_updater(ShortsVideo, short.pk)
+        run_ffmpeg_command(
+            args,
+            duration=metadata.get("duration") or 0,
+            progress_callback=lambda percent: update_render_progress(1 + (float(percent) * 0.79)),
+            timeout=getattr(settings, "LIVE_TV_SHORTS_RENDER_TIMEOUT", 1800),
+        )
         tmp_output.replace(final_output)
         rel_path = final_output.relative_to(Path(settings.MEDIA_ROOT)).as_posix()
         short.rendered_video.name = rel_path
@@ -668,7 +689,7 @@ def convert_short_to_hls(short_id):
         return short.hls_master_url
 
     short.hls_status = ShortsVideo.HLSStatus.PROCESSING
-    short.hls_progress_percent = 1
+    short.hls_progress_percent = max(82, short.hls_progress_percent or 0)
     short.processing_error = ""
     short.save(update_fields=["hls_status", "hls_progress_percent", "processing_error", "updated_at"])
 
@@ -737,10 +758,10 @@ def convert_short_to_hls(short_id):
                 str(variant_dir / "index.m3u8"),
             ]
             def variant_progress(percent, index=variant_index):
-                update_progress(1 + (((index + (percent / 100)) / total_variants) * 98))
+                update_progress(82 + (((index + (percent / 100)) / total_variants) * 17))
 
             run_ffmpeg_command(args, duration=duration, progress_callback=variant_progress, timeout=getattr(settings, "LIVE_TV_HLS_TIMEOUT", 1800))
-            update_progress(1 + (((variant_index + 1) / total_variants) * 98))
+            update_progress(82 + (((variant_index + 1) / total_variants) * 17))
 
         write_master_playlist(tmp_dir, metadata)
         make_public_media_tree(tmp_dir)
@@ -896,7 +917,14 @@ def convert_live_channel_to_hls(channel_id):
                 "updated_at",
             ]
         )
-        if channel.auto_add_to_live and not channel.auto_playlist_enabled and channel.duration_seconds > 0:
+        channel.refresh_from_db(fields=["pending_delete", "auto_add_to_live", "auto_playlist_enabled", "is_active"])
+        if (
+            not channel.pending_delete
+            and channel.is_active
+            and channel.auto_add_to_live
+            and not channel.auto_playlist_enabled
+            and channel.duration_seconds > 0
+        ):
             try:
                 from .services import add_uploaded_video_to_live_playlist
 

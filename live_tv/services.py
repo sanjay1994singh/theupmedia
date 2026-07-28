@@ -1,6 +1,8 @@
 import logging
+import shutil
 import threading
 from datetime import timedelta
+from pathlib import Path
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -21,6 +23,93 @@ logger = logging.getLogger(__name__)
 
 
 LIVE_PLAYLIST_MAX_AGE_HOURS = 48
+
+
+def _remove_media_directory(relative_path):
+    if not relative_path:
+        return False
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    target = (media_root / str(relative_path)).resolve()
+    if target == media_root or media_root not in target.parents:
+        raise ValueError(f"Unsafe media cleanup path: {target}")
+    if target.exists():
+        shutil.rmtree(target, ignore_errors=True)
+        return True
+    return False
+
+
+def delete_live_video_source(video, defer_processing=True):
+    """Remove one uploaded source/HLS while preserving completed rendered archives."""
+    if not video or not video.pk or video.source_type != LiveTVChannel.SourceType.DIRECT:
+        return {"deleted": False, "deferred": False}
+
+    active_render = SocialRenderedVideo.objects.filter(
+        source_video_id=video.pk,
+        status__in=[SocialRenderedVideo.Status.PENDING, SocialRenderedVideo.Status.PROCESSING],
+    ).exists()
+    active_hls = video.hls_status == LiveTVChannel.HLSStatus.PROCESSING
+    if defer_processing and (active_hls or active_render):
+        now = timezone.now()
+        LiveTVPlaylistItem.objects.filter(video_id=video.pk, is_active=True).update(
+            is_active=False, removed_at=now, updated_at=now
+        )
+        LiveTVChannel.objects.filter(pk=video.pk).update(
+            is_active=False,
+            is_live=False,
+            auto_add_to_live=False,
+            pending_delete=True,
+            updated_at=now,
+        )
+        return {"deleted": False, "deferred": True}
+
+    video_id = video.pk
+    video_file = video.video_file
+    poster_image = video.poster_image
+    # Historical cycle entries use PROTECT; removing playlist items first also
+    # cascades their cycle entries. Render records use SET_NULL and remain intact.
+    affected_channel_ids = list(
+        LiveTVPlaylistItem.objects.filter(video_id=video_id).values_list("channel_id", flat=True).distinct()
+    )
+    with transaction.atomic():
+        LiveTVPlaylistItem.objects.filter(video_id=video_id).delete()
+        LiveTVPlaylistCycleItem.objects.filter(video_id=video_id).delete()
+        now = timezone.now()
+        for channel in LiveTVChannel.objects.select_for_update().filter(pk__in=affected_channel_ids):
+            channel.playlist_cycles.all().delete()
+            normalize_playlist_positions(channel)
+            channel.playlist_version += 1
+            channel.last_playlist_update = now
+            if not channel.playlist_items.filter(is_active=True).exists():
+                channel.playback_started_at = None
+            channel.save(update_fields=["playlist_version", "last_playlist_update", "playback_started_at", "updated_at"])
+        LiveTVChannel.objects.filter(pk=video_id).delete()
+    _remove_media_directory(Path("live-tv") / "hls" / str(video_id))
+    for file_obj in (video_file, poster_image):
+        if file_obj and file_obj.name:
+            try:
+                file_obj.delete(save=False)
+            except (OSError, ValueError):
+                logger.exception("Could not delete source media file %s", file_obj.name)
+    return {"deleted": True, "deferred": False}
+
+
+def cleanup_expired_live_video_sources(at=None):
+    """Delete sources/HLS older than retention; never delete rendered outputs."""
+    at = at or timezone.now()
+    cutoff = live_playlist_cutoff(at)
+    report = {"deleted": 0, "deferred": 0, "failed": 0}
+    queryset = LiveTVChannel.objects.filter(source_type=LiveTVChannel.SourceType.DIRECT).filter(
+        Q(created_at__lt=cutoff) | Q(pending_delete=True)
+    ).order_by("created_at", "pk")
+    for video in queryset.iterator():
+        try:
+            result = delete_live_video_source(video, defer_processing=True)
+            key = "deferred" if result["deferred"] else "deleted"
+            report[key] += 1
+        except Exception:
+            report["failed"] += 1
+            logger.exception("Expired Live TV source cleanup failed for %s", video.pk)
+    return report
 
 
 def split_headline_parts(text, maximum_characters=100):

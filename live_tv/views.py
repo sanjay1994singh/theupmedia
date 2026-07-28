@@ -43,7 +43,7 @@ except ImportError:  # pragma: no cover - server requirements include Pillow
 
 from .hls import hls_processing_lock_is_active, validate_uploaded_video
 from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, PushDevice, ShortsComment, ShortsLike, ShortsVideo, SocialRenderedVideo
-from .services import calculate_current_playback, enqueue_completed_broadcast_renders, expanded_video_headlines, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
+from .services import calculate_current_playback, delete_live_video_source, enqueue_completed_broadcast_renders, expanded_video_headlines, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
 from blog.models import BlogPost
 from news.models import Article
 
@@ -641,6 +641,8 @@ def serialize_channel_for_mobile(request, channel):
         "hls_url": hls_url,
         "processing_status": channel.hls_status,
         "hls_status": channel.hls_status,
+        "progress_percent": 100 if channel.hls_status == LiveTVChannel.HLSStatus.COMPLETED else channel.hls_progress_percent,
+        "hls_progress_percent": 100 if channel.hls_status == LiveTVChannel.HLSStatus.COMPLETED else channel.hls_progress_percent,
         "processing_error": channel.processing_error,
         "duration": channel.duration,
         "youtube_url": channel.youtube_url,
@@ -1075,6 +1077,8 @@ def serialize_shorts_video(request, short):
         "processing_status": short.hls_status,
         "status": short.hls_status,
         "hls_status": short.hls_status,
+        "progress_percent": 100 if short.hls_status == ShortsVideo.HLSStatus.COMPLETED else short.hls_progress_percent,
+        "hls_progress_percent": 100 if short.hls_status == ShortsVideo.HLSStatus.COMPLETED else short.hls_progress_percent,
         "processing_error": short.processing_error,
         "error_message": short.processing_error,
         "duration": short.duration,
@@ -2781,7 +2785,7 @@ def mobile_admin_dashboard_api(request):
     if error:
         return error
 
-    channels = LiveTVChannel.objects.all()
+    channels = LiveTVChannel.objects.filter(pending_delete=False)
     rendered_videos = manageable_render_jobs_for(user)[:50]
     media_downloads = manageable_media_downloads_for(user)[:50]
     settings_obj = live_tv_setting()
@@ -3079,11 +3083,13 @@ def mobile_admin_channel_delete_api(request, pk):
         return error
 
     channel = get_object_or_404(LiveTVChannel, pk=pk)
+    if channel.source_type == LiveTVChannel.SourceType.PLAYLIST or channel.auto_playlist_enabled:
+        return JsonResponse({"detail": "Main Live TV playlist channel delete nahi kiya ja sakta."}, status=409)
     try:
-        channel.delete()
+        result = delete_live_video_source(channel, defer_processing=True)
     except ProtectedError:
-        return JsonResponse({"detail": "Video active ya historical live playlist me use ho rahi hai; pehle playlist se remove kare."}, status=409)
-    return JsonResponse({"ok": True})
+        return JsonResponse({"detail": "Video relation cleanup failed. Dobara try karein."}, status=409)
+    return JsonResponse({"ok": True, **result})
 
 
 @csrf_exempt
@@ -3155,6 +3161,27 @@ def mobile_admin_shorts_upload_api(request):
         short.save(update_fields=["original_video", "updated_at"])
     enqueue_short_hls_job(short.pk)
     return JsonResponse({"short": serialize_shorts_video(request, short)}, status=201)
+
+
+@require_GET
+def mobile_admin_shorts_status_api(request, pk):
+    _user, error = mobile_admin_required(request)
+    if error:
+        return error
+    short = get_object_or_404(
+        ShortsVideo.objects.select_related("category", "state", "city", "created_by").prefetch_related("comments"),
+        pk=pk,
+    )
+    return JsonResponse({"short": serialize_shorts_video(request, short)})
+
+
+@require_GET
+def mobile_admin_channel_status_api(request, pk):
+    _user, error = mobile_admin_required(request)
+    if error:
+        return error
+    channel = get_object_or_404(LiveTVChannel, pk=pk)
+    return JsonResponse({"channel": serialize_channel_for_admin(request, channel)})
 
 
 @csrf_exempt
