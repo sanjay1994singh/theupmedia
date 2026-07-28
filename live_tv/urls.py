@@ -35,6 +35,7 @@ urlpatterns = [
     path("api/live-tv/admin/shorts/upload/", views.mobile_admin_shorts_upload_api, name="api_admin_shorts_upload"),
     path("api/live-tv/admin/render-social-video/", views.mobile_admin_render_social_video_api, name="api_admin_render_social_video"),
     path("api/live-tv/admin/render-social-video/<int:pk>/status/", views.mobile_admin_render_social_video_status_api, name="api_admin_render_social_video_status"),
+    path("api/live-tv/admin/manual-rendered-videos/", views.mobile_admin_manual_rendered_videos_api, name="api_admin_manual_rendered_videos"),
     path("api/live-tv/admin/rendered-videos/<int:pk>/update/", views.mobile_admin_rendered_video_update_api, name="api_admin_rendered_video_update"),
     path("api/live-tv/admin/rendered-videos/<int:pk>/delete/", views.mobile_admin_rendered_video_delete_api, name="api_admin_rendered_video_delete"),
     path("api/live-tv/admin/media-downloads/start/", views.mobile_admin_media_download_start_api, name="api_admin_media_download_start"),

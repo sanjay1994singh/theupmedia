@@ -891,6 +891,10 @@ class MediaDownload(models.Model):
 
 
 class SocialRenderedVideo(models.Model):
+    class Origin(models.TextChoices):
+        LIVE_BROADCAST = "live_broadcast", "Live broadcast"
+        MANUAL_MOBILE = "manual_mobile", "Manual mobile render"
+
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
         PROCESSING = "processing", "Processing"
@@ -906,6 +910,12 @@ class SocialRenderedVideo(models.Model):
     render_format = models.CharField(max_length=10, default="16:9", db_default="16:9")
     frame_category = models.CharField(max_length=40, blank=True)
     frame_template = models.CharField(max_length=60, blank=True)
+    render_origin = models.CharField(
+        max_length=24,
+        choices=Origin.choices,
+        default=Origin.LIVE_BROADCAST,
+        db_index=True,
+    )
     source_video = models.ForeignKey(
         LiveTVChannel,
         on_delete=models.SET_NULL,

@@ -2202,6 +2202,7 @@ def serialize_render_job(request, job):
         "render_format": job.render_format,
         "frame_category": job.frame_category,
         "frame_template": job.frame_template,
+        "render_origin": job.render_origin,
         "original_video_url": original_url,
         "rendered_video_url": rendered_url,
         "thumbnail": thumbnail_url,
@@ -2211,6 +2212,8 @@ def serialize_render_job(request, job):
         "resolution": job.resolution,
         "error": job.error_message,
         "created_at": job.created_at.isoformat(),
+        "completed_at": job.completed_at.isoformat() if job.completed_at else "",
+        "download_url": request.build_absolute_uri(f"/api/live-tv/rendered-videos/{job.pk}/download/") if job.rendered_video else "",
     }
 
 
@@ -2744,6 +2747,12 @@ def mobile_admin_dashboard_api(request):
     if not notifications:
         notifications.append({"id": "system-ok", "level": "success", "title": "System ready", "message": "Koi processing alert nahi hai."})
     avatar_url = absolute_media_url(request, getattr(user, "avatar", None))
+    User = get_user_model()
+    team_users = User.objects.filter(Q(is_staff=True) | Q(is_superuser=True)).order_by("-is_superuser", "username")[:50]
+    category_rows = LiveTVCategory.objects.annotate(
+        video_count=Count("channels", distinct=True),
+        shorts_count=Count("shorts", distinct=True),
+    ).order_by("display_order", "name")
     return JsonResponse(
         {
             "user": {
@@ -2770,6 +2779,41 @@ def mobile_admin_dashboard_api(request):
                 "processing": processing_count,
             },
             "notifications": notifications,
+            "analytics": {
+                "shorts_views": total_views,
+                "published_shorts": shorts_qs.count(),
+                "rendered_completed": manageable_render_jobs_for(user).filter(status__in=["completed", "done"]).count(),
+                "hls_completed": channels.filter(hls_status=LiveTVChannel.HLSStatus.COMPLETED).count(),
+                "hls_processing": processing_count,
+                "hls_failed": failed_count,
+            },
+            "categories": [
+                {
+                    "id": category.pk,
+                    "name": category.name,
+                    "slug": category.slug,
+                    "video_count": category.video_count,
+                    "shorts_count": category.shorts_count,
+                    "is_active": category.is_active,
+                }
+                for category in category_rows
+            ],
+            "team_users": [
+                {
+                    "id": member.pk,
+                    "username": member.get_username(),
+                    "name": member.get_full_name() or member.get_username(),
+                    "email": member.email,
+                    "phone_number": getattr(member, "phone_number", ""),
+                    "role": getattr(member, "role", ""),
+                    "designation": getattr(member, "designation", ""),
+                    "avatar": absolute_media_url(request, getattr(member, "avatar", None)),
+                    "is_active": member.is_active,
+                    "is_superuser": member.is_superuser,
+                    "last_login": member.last_login.isoformat() if member.last_login else "",
+                }
+                for member in team_users
+            ],
             "settings": serialize_live_tv_setting(request, settings_obj),
             "facebook_live": serialize_facebook_live_setting(facebook_live_setting()),
             "channels": [serialize_channel_for_admin(request, channel) for channel in channels],
@@ -3150,6 +3194,7 @@ def mobile_admin_render_social_video_api(request):
         return JsonResponse({"detail": "Video file is required."}, status=400)
 
     active_channel = LiveTVChannel.objects.filter(is_active=True, is_live=True).first() or LiveTVChannel.objects.filter(is_active=True).first()
+    setting = live_tv_setting()
     title = request.POST.get("title", "").strip() or (active_channel.title if active_channel else Path(video.name).stem)
     headline = request.POST.get("headline", "").strip() or (active_channel.headline if active_channel else title)
     ticker_setting = news_ticker_setting()
@@ -3161,16 +3206,41 @@ def mobile_admin_render_social_video_api(request):
         render_format = "16:9"
     frame_category = request.POST.get("frame_category", "").strip()
     frame_template = request.POST.get("frame_template", "").strip()
+    include_ticker = request.POST.get("include_ticker", "1").lower() not in {"0", "false", "off", "no"}
+    include_headline = request.POST.get("include_headline", "1" if headline else "0").lower() not in {"0", "false", "off", "no"}
+    logo_name = setting.channel_logo.name if setting.channel_logo else ""
+    snapshot = {
+        "origin": SocialRenderedVideo.Origin.MANUAL_MOBILE,
+        "headline": headline if include_headline else "",
+        "headline_label": lower_third_label if include_headline else "",
+        "lower_third_label": lower_third_label if include_headline else "",
+        "ticker_label": ticker_label if include_ticker else "",
+        "ticker_text": ticker_text if include_ticker else "",
+        "ticker_speed_seconds": setting.ticker_speed_seconds,
+        "mobile_ticker_speed_seconds": setting.mobile_ticker_speed_seconds,
+        "channel_name": setting.name,
+        "channel_logo": logo_name,
+        "show_channel_logo": bool(logo_name),
+        "show_live_badge": False,
+        "show_lower_third": include_headline and bool(headline),
+        "show_ticker": include_ticker and bool(ticker_label or ticker_text),
+        "render_format": render_format,
+        "frame_template": "broadcast_live_tv",
+        "frame_category": "manual_mobile",
+        "ticker_time_offset_seconds": 0,
+    }
 
     job = SocialRenderedVideo.objects.create(
         title=title[:180],
-        headline=headline[:180],
-        ticker_label=ticker_label[:60],
-        ticker_text=ticker_text[:260],
-        lower_third_label=lower_third_label[:60],
+        headline=headline[:180] if include_headline else "",
+        ticker_label=ticker_label[:60] if include_ticker else "",
+        ticker_text=ticker_text[:260] if include_ticker else "",
+        lower_third_label=lower_third_label[:60] if include_headline else "",
         render_format=render_format,
-        frame_category=frame_category[:40],
-        frame_template=frame_template[:60],
+        frame_category="manual_mobile",
+        frame_template="broadcast_live_tv",
+        render_origin=SocialRenderedVideo.Origin.MANUAL_MOBILE,
+        snapshot=snapshot,
         original_video=video,
         created_by=user,
         status=SocialRenderedVideo.Status.PENDING,
@@ -3198,8 +3268,20 @@ def mobile_admin_render_social_video_status_api(request, pk):
     if error:
         return error
 
-    job = get_object_or_404(SocialRenderedVideo, pk=pk)
+    job = get_object_or_404(SocialRenderedVideo, pk=pk, created_by=_user)
     return JsonResponse(serialize_render_job(request, job))
+
+
+@require_GET
+def mobile_admin_manual_rendered_videos_api(request):
+    user, error = mobile_admin_required(request)
+    if error:
+        return error
+    jobs = SocialRenderedVideo.objects.filter(
+        created_by=user,
+        render_origin=SocialRenderedVideo.Origin.MANUAL_MOBILE,
+    ).order_by("-created_at", "-pk")[:50]
+    return JsonResponse({"success": True, "results": [serialize_render_job(request, job) for job in jobs]})
 
 
 
