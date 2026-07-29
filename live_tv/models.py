@@ -897,6 +897,29 @@ class MobileAdminToken(models.Model):
         return token
 
 
+class AccountDeletionRequest(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
+    user_id_snapshot = models.PositiveBigIntegerField(db_index=True)
+    username_snapshot = models.CharField(max_length=150, blank=True)
+    full_name_snapshot = models.CharField(max_length=300, blank=True)
+    email_snapshot = models.EmailField(blank=True)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    scheduled_for = models.DateTimeField(db_index=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING, db_index=True)
+    last_error = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-requested_at"]
+
+    def __str__(self):
+        return f"{self.username_snapshot or self.user_id_snapshot} deletion ({self.status})"
+
+
 class PushDevice(models.Model):
     token = models.CharField(max_length=255, unique=True, db_index=True)
     platform = models.CharField(max_length=20, blank=True)

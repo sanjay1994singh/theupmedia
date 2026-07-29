@@ -33,6 +33,7 @@ urlpatterns = [
     path("api/mobile-auth/register/", views.mobile_user_register_api, name="api_mobile_register"),
     path("api/mobile-auth/login/", views.mobile_user_login_api, name="api_mobile_login"),
     path("api/mobile-auth/delete-account/", views.mobile_user_delete_account_api, name="api_mobile_delete_account"),
+    path("api/mobile-auth/delete-account/schedule/", views.mobile_user_delete_account_api, name="api_mobile_delete_account_schedule"),
     path("api/mobile-auth/profile/", views.mobile_profile_api, name="api_mobile_profile"),
     path("api/mobile-auth/change-password/", views.mobile_password_change_api, name="api_mobile_change_password"),
     path("api/mobile-auth/google/", views.mobile_google_auth_config_api, name="api_mobile_google_config"),

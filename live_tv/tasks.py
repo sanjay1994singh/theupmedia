@@ -6,7 +6,8 @@ from django.conf import settings
 from django.utils import timezone
 
 from .hls import convert_live_channel_to_hls, convert_short_to_hls, render_short_frame
-from .models import LiveTVChannel, ShortsVideo
+from .account_emails import send_account_email
+from .models import AccountDeletionRequest, LiveTVChannel, MobileAdminToken, ShortsVideo
 from .views import run_media_download_job, run_social_render_job
 from .services import cleanup_expired_live_video_sources, live_playlist_cutoff, repair_live_tv_health
 
@@ -114,7 +115,48 @@ def cleanup_rendered_video_temps_task(hours=24):
 
 @shared_task(name="live_tv.live_tv_health_watchdog")
 def live_tv_health_watchdog_task():
-    return repair_live_tv_health(queue_hls=True, queue_renders=True)
+    result = repair_live_tv_health(queue_hls=True, queue_renders=True)
+    process_due_account_deletions_task()
+    return result
+
+
+@shared_task(name="live_tv.process_due_account_deletions")
+def process_due_account_deletions_task():
+    from django.contrib.auth import get_user_model
+    from django.db import transaction
+
+    due_ids = list(
+        AccountDeletionRequest.objects.filter(
+            status=AccountDeletionRequest.Status.PENDING,
+            scheduled_for__lte=timezone.now(),
+        ).values_list("pk", flat=True)[:100]
+    )
+    User = get_user_model()
+    completed = 0
+    for request_id in due_ids:
+        try:
+            with transaction.atomic():
+                deletion = AccountDeletionRequest.objects.select_for_update().get(pk=request_id)
+                if deletion.status != AccountDeletionRequest.Status.PENDING or deletion.scheduled_for > timezone.now():
+                    continue
+                user = User.objects.filter(pk=deletion.user_id_snapshot).first()
+                if user:
+                    for field_name in ("avatar", "cover_image"):
+                        file_field = getattr(user, field_name, None)
+                        if file_field:
+                            file_field.delete(save=False)
+                    MobileAdminToken.objects.filter(user=user).delete()
+                    user.delete()
+                deletion.status = AccountDeletionRequest.Status.COMPLETED
+                deletion.completed_at = timezone.now()
+                deletion.last_error = ""
+                deletion.save(update_fields=["status", "completed_at", "last_error"])
+            send_account_email("deleted", deletion.email_snapshot, display_name=deletion.full_name_snapshot or deletion.username_snapshot)
+            completed += 1
+        except Exception as exc:
+            logger.exception("Scheduled account deletion %s failed", request_id)
+            AccountDeletionRequest.objects.filter(pk=request_id).update(last_error=str(exc)[:2000])
+    return {"completed": completed, "checked": len(due_ids)}
 
 
 @shared_task(name="live_tv.cleanup_expired_live_sources")

@@ -8,7 +8,15 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 
 from .forms import LiveTVChannelForm
-from .models import AppMenu, BlockedUser, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistCycle, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, LiveTVVideoHeadline, MediaDownload, MobileAdminToken, MobileAppRelease, PushDevice, ShortsComment, ShortsCommentLike, ShortsCommentReport, ShortsLike, ShortsVideo, SocialRenderedVideo
+from .models import AccountDeletionRequest, AppMenu, BlockedUser, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistCycle, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, LiveTVVideoHeadline, MediaDownload, MobileAdminToken, MobileAppRelease, PushDevice, ShortsComment, ShortsCommentLike, ShortsCommentReport, ShortsLike, ShortsVideo, SocialRenderedVideo
+
+
+@admin.register(AccountDeletionRequest)
+class AccountDeletionRequestAdmin(admin.ModelAdmin):
+    list_display = ("username_snapshot", "email_snapshot", "status", "requested_at", "scheduled_for", "completed_at")
+    list_filter = ("status", "requested_at", "scheduled_for")
+    search_fields = ("username_snapshot", "email_snapshot", "full_name_snapshot")
+    readonly_fields = ("user_id_snapshot", "username_snapshot", "full_name_snapshot", "email_snapshot", "requested_at", "scheduled_for", "completed_at", "status", "last_error")
 
 
 @admin.register(ShortsCommentReport)

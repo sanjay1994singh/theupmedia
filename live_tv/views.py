@@ -44,7 +44,8 @@ except ImportError:  # pragma: no cover - server requirements include Pillow
     Image = ImageDraw = ImageFont = None
 
 from .hls import hls_processing_lock_is_active, validate_uploaded_video
-from .models import AppMenu, BlockedUser, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, MobileAppRelease, PushDevice, ShortsComment, ShortsCommentLike, ShortsCommentReport, ShortsLike, ShortsVideo, SocialRenderedVideo
+from .account_emails import send_account_email
+from .models import AccountDeletionRequest, AppMenu, BlockedUser, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, MobileAppRelease, PushDevice, ShortsComment, ShortsCommentLike, ShortsCommentReport, ShortsLike, ShortsVideo, SocialRenderedVideo
 from .services import calculate_current_playback, delete_live_video_source, enqueue_completed_broadcast_renders, expanded_video_headlines, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
 from blog.models import BlogPost
 from news.models import Article, Category
@@ -2740,19 +2741,17 @@ def mobile_profile_api(request):
     if not user:
         return JsonResponse({"detail": "Login required."}, status=401)
     if request.method == "POST":
-        username = request.POST.get("username", user.get_username()).strip()
         email = request.POST.get("email", user.email).strip().lower()
-        phone = request.POST.get("phone_number", getattr(user, "phone_number", "")).strip()
+        phone = re.sub(r"\D", "", request.POST.get("phone_number", getattr(user, "phone_number", "")))
         User = get_user_model()
-        if not re.fullmatch(r"[\w.@+-]{3,150}", username):
-            return JsonResponse({"detail": "Valid username enter kare."}, status=400)
         if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
             return JsonResponse({"detail": "Valid email enter kare."}, status=400)
-        if User.objects.filter(username__iexact=username).exclude(pk=user.pk).exists():
-            return JsonResponse({"detail": "Username already used hai."}, status=409)
+        if phone and not re.fullmatch(r"\d{10,15}", phone):
+            return JsonResponse({"detail": "Valid mobile number enter kare."}, status=400)
         if email and User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists():
             return JsonResponse({"detail": "Email already used hai."}, status=409)
-        user.username = username
+        if phone and User.objects.filter(phone_number=phone).exclude(pk=user.pk).exists():
+            return JsonResponse({"detail": "Mobile number already used hai."}, status=409)
         user.email = email
         if hasattr(user, "phone_number"):
             user.phone_number = phone
@@ -3021,23 +3020,32 @@ def serialize_mobile_user(user):
 @csrf_exempt
 @require_POST
 def mobile_user_register_api(request):
-    username = request.POST.get("username", "").strip()
+    first_name = request.POST.get("first_name", "").strip()
+    last_name = request.POST.get("last_name", "").strip()
     email = request.POST.get("email", "").strip().lower()
+    phone = re.sub(r"\D", "", request.POST.get("phone_number", ""))
     password = request.POST.get("password", "")
     password_confirm = request.POST.get("password_confirm", "")
-    if not re.fullmatch(r"[\w.@+-]{3,150}", username):
-        return JsonResponse({"detail": "Username 3-150 valid characters ka hona chahiye."}, status=400)
+    if not first_name:
+        return JsonResponse({"detail": "First name required hai."}, status=400)
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
         return JsonResponse({"detail": "Valid email enter kare."}, status=400)
+    if not re.fullmatch(r"\d{10,15}", phone):
+        return JsonResponse({"detail": "Valid mobile number enter kare."}, status=400)
     if len(password) < 8:
         return JsonResponse({"detail": "Password kam se kam 8 characters ka hona chahiye."}, status=400)
     if password != password_confirm:
         return JsonResponse({"detail": "Password confirmation match nahi karta."}, status=400)
     User = get_user_model()
-    if User.objects.filter(username__iexact=username).exists() or User.objects.filter(email__iexact=email).exists():
-        return JsonResponse({"detail": "Username ya email already registered hai."}, status=409)
+    if User.objects.filter(email__iexact=email).exists():
+        return JsonResponse({"detail": "Email already registered hai."}, status=409)
+    if User.objects.filter(phone_number=phone).exists():
+        return JsonResponse({"detail": "Mobile number already registered hai."}, status=409)
+    username = f"up_{uuid4().hex[:16]}"
+    while User.objects.filter(username=username).exists():
+        username = f"up_{uuid4().hex[:16]}"
     with transaction.atomic():
-        user = User.objects.create_user(username=username, email=email, password=password)
+        user = User.objects.create_user(username=username, email=email, password=password, first_name=first_name, last_name=last_name, phone_number=phone)
         token = MobileAdminToken.create_for_user(user, request.POST.get("device_name", "Mobile App"))
     return JsonResponse({"token": token.key, "user": serialize_mobile_user(user)}, status=201)
 
@@ -3045,9 +3053,17 @@ def mobile_user_register_api(request):
 @csrf_exempt
 @require_POST
 def mobile_user_login_api(request):
-    user = authenticate(request, username=request.POST.get("username", "").strip(), password=request.POST.get("password", ""))
+    identifier = request.POST.get("identifier", request.POST.get("username", "")).strip()
+    password = request.POST.get("password", "")
+    User = get_user_model()
+    normalized_phone = re.sub(r"\D", "", identifier)
+    lookup = Q(username__iexact=identifier) | Q(email__iexact=identifier)
+    if normalized_phone:
+        lookup |= Q(phone_number=normalized_phone)
+    matched = User.objects.filter(lookup).order_by("pk").first()
+    user = authenticate(request, username=matched.get_username(), password=password) if matched else None
     if not user or not user.is_active:
-        return JsonResponse({"detail": "Invalid username or password."}, status=400)
+        return JsonResponse({"detail": "Invalid email/mobile/username or password."}, status=400)
     token = MobileAdminToken.create_for_user(user, request.POST.get("device_name", "Mobile App"))
     return JsonResponse({"token": token.key, "user": serialize_mobile_user(user)})
 
@@ -3063,15 +3079,22 @@ def mobile_user_delete_account_api(request):
     confirmation = request.POST.get("confirmation", "").strip().upper()
     if confirmation != "DELETE":
         return JsonResponse({"detail": "Deletion confirmation required."}, status=400)
-    username = user.get_username()
-    for field_name in ("avatar", "cover_image"):
-        file_field = getattr(user, field_name, None)
-        if file_field:
-            file_field.delete(save=False)
+    scheduled_for = timezone.now() + timedelta(hours=48)
     with transaction.atomic():
+        deletion, created = AccountDeletionRequest.objects.get_or_create(
+            user_id_snapshot=user.pk,
+            status=AccountDeletionRequest.Status.PENDING,
+            defaults={"username_snapshot": user.get_username(), "full_name_snapshot": user.get_full_name(), "email_snapshot": user.email, "scheduled_for": scheduled_for},
+        )
+        if not created:
+            scheduled_for = deletion.scheduled_for
         MobileAdminToken.objects.filter(user=user).delete()
-        user.delete()
-    return JsonResponse({"ok": True, "deleted_account": username})
+        if user.is_active:
+            user.is_active = False
+            user.save(update_fields=["is_active"])
+    if created:
+        send_account_email("deletion_scheduled", deletion.email_snapshot, display_name=deletion.full_name_snapshot or deletion.username_snapshot, details=f"Deletion time: {timezone.localtime(scheduled_for):%d %B %Y, %I:%M %p %Z}")
+    return JsonResponse({"ok": True, "status": "pending", "scheduled_for": scheduled_for.isoformat()})
 
 
 @require_GET
