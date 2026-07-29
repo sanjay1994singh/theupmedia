@@ -28,7 +28,7 @@ from django.db import close_old_connections, connection, transaction
 from django.db.models.deletion import ProtectedError
 from django.db.models import Count, F, Q, Sum
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.http import FileResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -3096,7 +3096,13 @@ def mobile_google_auth_complete(request):
     channel = request.GET.get("channel", MobileAppRelease.Channel.PLAY_STORE)
     scheme = "com.upmedia.livetv.testing" if channel == MobileAppRelease.Channel.TESTING else "com.upmedia.livetv"
     params = urlencode({"code": one_time_code})
-    return redirect(f"{scheme}://auth/google?{params}")
+    # Django's redirect() intentionally rejects non-HTTP schemes. These two
+    # app-owned schemes are selected server-side, so emit the OAuth handoff
+    # response directly without accepting an arbitrary redirect target.
+    response = HttpResponse(status=302)
+    response["Location"] = f"{scheme}://auth/google?{params}"
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 @csrf_exempt
