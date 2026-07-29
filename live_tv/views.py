@@ -53,6 +53,7 @@ from services.models import Service
 logger = logging.getLogger(__name__)
 
 
+@never_cache
 @require_GET
 def download_latest_testing_app(request):
     """Redirect to the newest active APK uploaded in Django Admin."""
@@ -2665,7 +2666,7 @@ def app_home_api(request):
             "version_code": latest_release.version_code if latest_release else 0,
             "release_notes": latest_release.release_notes if latest_release else "",
             "play_store_url": latest_release.play_store_url if latest_release else "https://play.google.com/store/apps/details?id=com.upmedia.livetv",
-            "download_url": request.build_absolute_uri(latest_release.testing_apk.url) if latest_release and latest_release.testing_apk and latest_release.channel == MobileAppRelease.Channel.TESTING else (latest_release.play_store_url if latest_release else ""),
+            "download_url": request.build_absolute_uri(reverse("live_tv:download_latest_testing_app")) if latest_release and latest_release.testing_apk and latest_release.channel == MobileAppRelease.Channel.TESTING else (latest_release.play_store_url if latest_release else ""),
             "channel": latest_release.channel if latest_release else requested_channel,
             "force_update": latest_release.force_update if latest_release else False,
             "published_at": latest_release.published_at.isoformat() if latest_release else "",

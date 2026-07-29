@@ -576,6 +576,11 @@ class MobileAppRelease(models.Model):
     def __str__(self):
         return f"{self.get_channel_display()} — The UP Media {self.version_name} ({self.version_code})"
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.is_active:
+            MobileAppRelease.objects.filter(channel=self.channel, is_active=True).exclude(pk=self.pk).update(is_active=False)
+
 
 class LiveTVSetting(models.Model):
     name = models.CharField(max_length=120, default="The Up Media Live TV")
