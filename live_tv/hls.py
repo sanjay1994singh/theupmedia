@@ -420,7 +420,8 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
         "normal_white_blue": {"background": "#eef3fb", "panel": "#ffffff", "accent": "#1d4ed8", "text": "#111111", "highlight": "#1d4ed8"},
         "normal_storm_yellow": {"background": "#080c14", "panel": "#111827", "accent": "#f59e0b", "text": "#ffffff", "highlight": "#f8d24c"},
         "normal_white_red": {"background": "#f8fafc", "panel": "#ffffff", "accent": "#ef1717", "text": "#111111", "highlight": "#ef1717"},
-        "breaking_big": {"background": "#110204", "panel": "#ffffff", "accent": "#ef1717", "text": "#111111", "highlight": "#ef1717"},
+        "breaking_big": {"background": "#110204", "panel": "#ffffff", "accent": "#ef1717", "text": "#ffffff", "highlight": "#ffffff"},
+        "hindu_dharmik": {"background": "#210800", "panel": "#431300", "accent": "#f59e0b", "text": "#ffffff", "highlight": "#fde68a"},
     }
     style = template_styles.get(template, template_styles["normal_black_red"])
     primary = safe_hex_color(style["accent"], "#d71920")
@@ -435,12 +436,16 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
     fg_draw = ImageDraw.Draw(fg)
 
     bg_draw.rectangle((0, 0, SHORTS_RENDER_WIDTH, SHORTS_RENDER_HEIGHT), fill=background)
-    if template in {"normal_black_red", "normal_storm_yellow", "breaking_big"}:
+    if template in {"normal_black_red", "normal_storm_yellow", "breaking_big", "hindu_dharmik"}:
         for step in range(0, 420, 3):
             ratio = step / 420
-            red = int(18 + (88 * ratio)) if template != "normal_storm_yellow" else int(7 + (18 * ratio))
-            green = int(3 + (12 * ratio)) if template != "normal_storm_yellow" else int(10 + (12 * ratio))
-            bg_draw.rectangle((0, step, SHORTS_RENDER_WIDTH, step + 3), fill=(red, green, 14, 255))
+            if template == "hindu_dharmik":
+                color = (int(33 + (165 * ratio)), int(8 + (75 * ratio)), int(11 * ratio), 255)
+            elif template == "normal_storm_yellow":
+                color = (int(7 + (18 * ratio)), int(10 + (12 * ratio)), 14, 255)
+            else:
+                color = (int(18 + (88 * ratio)), int(3 + (12 * ratio)), 14, 255)
+            bg_draw.rectangle((0, step, SHORTS_RENDER_WIDTH, step + 3), fill=color)
     else:
         bg_draw.rectangle((0, 0, SHORTS_RENDER_WIDTH, 420), fill=background)
 
@@ -450,6 +455,10 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
     if template == "breaking_big":
         fg_draw.rounded_rectangle((38, 42, 490, 118), radius=12, fill=primary)
         fg_draw.text((62, 50), "BIG BREAKING", font=shorts_latin_image_font(43), fill="#ffffff")
+        y = 140
+    elif template == "hindu_dharmik":
+        fg_draw.rounded_rectangle((38, 42, 520, 118), radius=12, fill=primary)
+        fg_draw.text((62, 50), "ॐ  धर्म • संस्कृति", font=shorts_image_font(38), fill="#ffffff")
         y = 140
     for index, line in enumerate(headline_lines):
         bbox = fg_draw.textbbox((0, 0), line, font=headline_font, stroke_width=3)

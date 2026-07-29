@@ -13,6 +13,7 @@ class StaticPageSitemap(Sitemap):
             "core:contact",
             "core:privacy_policy",
             "core:terms",
+            "core:account_deletion",
             "core:disclaimer",
             "core:editorial_policy",
             "core:fact_checking_policy",

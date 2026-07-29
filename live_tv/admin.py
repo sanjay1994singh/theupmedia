@@ -8,7 +8,21 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 
 from .forms import LiveTVChannelForm
-from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistCycle, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, LiveTVVideoHeadline, MediaDownload, MobileAdminToken, PushDevice, ShortsComment, ShortsCommentLike, ShortsLike, ShortsVideo, SocialRenderedVideo
+from .models import AppMenu, BlockedUser, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistCycle, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, LiveTVVideoHeadline, MediaDownload, MobileAdminToken, MobileAppRelease, PushDevice, ShortsComment, ShortsCommentLike, ShortsCommentReport, ShortsLike, ShortsVideo, SocialRenderedVideo
+
+
+@admin.register(ShortsCommentReport)
+class ShortsCommentReportAdmin(admin.ModelAdmin):
+    list_display = ("comment", "reporter", "reason", "status", "created_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("comment__text", "reporter__username", "reporter__email", "reason")
+    list_editable = ("status",)
+
+
+@admin.register(BlockedUser)
+class BlockedUserAdmin(admin.ModelAdmin):
+    list_display = ("user", "blocked_user", "created_at")
+    search_fields = ("user__username", "blocked_user__username")
 from .services import calculate_current_playback, delete_live_video_source, update_playlist_item
 
 
@@ -61,6 +75,15 @@ class HomeUtilityAdmin(admin.ModelAdmin):
     list_display = ("title", "icon", "action", "display_order", "is_active")
     list_editable = ("display_order", "is_active")
     search_fields = ("title", "subtitle", "action")
+
+
+@admin.register(MobileAppRelease)
+class MobileAppReleaseAdmin(admin.ModelAdmin):
+    list_display = ("channel", "version_name", "version_code", "published_at", "force_update", "is_active")
+    list_filter = ("channel", "force_update", "is_active")
+    list_editable = ("force_update", "is_active")
+    ordering = ("channel", "-version_code")
+    search_fields = ("version_name", "release_notes")
 
 
 @admin.register(LiveTVCategory)

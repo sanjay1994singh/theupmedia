@@ -5,3 +5,6 @@ class LiveTvConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "live_tv"
     verbose_name = "Live TV"
+
+    def ready(self):
+        from . import signals  # noqa: F401

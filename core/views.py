@@ -19,7 +19,7 @@ from services.sitemaps import ServiceSitemap
 from subscriptions.models import SubscriptionPlan
 from live_tv.models import LiveTVChannel, LiveTVSetting
 from live_tv.services import calculate_current_playback, get_main_live_channel
-from .forms import ContactForm
+from .forms import AccountDeletionRequestForm, ContactForm
 from .sitemaps import StaticPageSitemap
 
 
@@ -118,6 +118,32 @@ def privacy_policy(request):
 
 def terms(request):
     return render(request, "core/terms.html")
+
+
+def account_deletion(request):
+    form = AccountDeletionRequestForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        if form.cleaned_data.get("website"):
+            messages.success(request, "Your deletion request has been received.")
+            form = AccountDeletionRequestForm()
+        else:
+            try:
+                send_mail(
+                    subject="The UP Media app account deletion request",
+                    message=(
+                        f"Username: {form.cleaned_data['username']}\n"
+                        f"Registered email: {form.cleaned_data['email']}\n\n"
+                        f"Reason: {form.cleaned_data.get('reason') or 'Not provided'}"
+                    ),
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[settings.CONTACT_EMAIL],
+                    fail_silently=False,
+                )
+                messages.success(request, "Your deletion request has been submitted. We will verify and process it within 30 days.")
+                form = AccountDeletionRequestForm()
+            except Exception:
+                messages.error(request, "Request could not be sent. Please email srbc500@gmail.com with subject 'Account deletion'.")
+    return render(request, "core/account_deletion.html", {"form": form})
 
 
 def disclaimer(request):

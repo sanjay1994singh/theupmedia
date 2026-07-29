@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Delete App Account - {{ SITE_NAME }}{% endblock %}
+{% block meta_description %}Request deletion of your The UP Media mobile app account and associated personal data.{% endblock %}
+{% block canonical %}{{ request.scheme }}://{{ request.get_host }}{% url 'core:account_deletion' %}{% endblock %}
+
+{% block content %}
+<section class="page-shell">
+  <p class="eyebrow">Account &amp; Data</p>
+  <h1>Delete The UP Media App Account</h1>
+  <p>You can permanently delete a reader account directly inside the mobile app from Profile &gt; Delete Account. If you cannot access the app, submit this request using the registered username and email.</p>
+  <div class="info-list">
+    <p><strong>What is deleted:</strong> account profile, authentication tokens, follows, likes, comment likes and other personal data linked to the account.</p>
+    <p><strong>What may be retained:</strong> limited records required for legal compliance, security, fraud prevention or resolving disputes. Public-interest/editorial material is handled under applicable law and our editorial policies.</p>
+    <p><strong>Processing time:</strong> in-app deletion is immediate. A web request is verified and normally completed within 30 days.</p>
+    <p><strong>Privacy contact:</strong> srbc500@gmail.com · 8279408396</p>
+  </div>
+  <h2>Request deletion without the app</h2>
+  <form class="contact-form" method="post" action="{% url 'core:account_deletion' %}">
+    {% csrf_token %}
+    {{ form.website }}
+    <label><span>Username</span>{{ form.username }}{{ form.username.errors }}</label>
+    <label><span>Registered email</span>{{ form.email }}{{ form.email.errors }}</label>
+    <label><span>Reason (optional)</span>{{ form.reason }}{{ form.reason.errors }}</label>
+    <button class="primary-button" type="submit">Submit deletion request</button>
+  </form>
+</section>
+{% endblock %}

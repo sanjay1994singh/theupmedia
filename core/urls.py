@@ -10,6 +10,7 @@ urlpatterns = [
     path("contact/", views.contact, name="contact"),
     path("privacy-policy/", views.privacy_policy, name="privacy_policy"),
     path("terms-and-conditions/", views.terms, name="terms"),
+    path("account-deletion/", views.account_deletion, name="account_deletion"),
     path("disclaimer/", views.disclaimer, name="disclaimer"),
     path("editorial-policy/", views.editorial_policy, name="editorial_policy"),
     path("fact-checking-policy/", views.fact_checking_policy, name="fact_checking_policy"),

@@ -31,6 +31,7 @@ from django.http import FileResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import strip_tags
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
@@ -42,10 +43,11 @@ except ImportError:  # pragma: no cover - server requirements include Pillow
     Image = ImageDraw = ImageFont = None
 
 from .hls import hls_processing_lock_is_active, validate_uploaded_video
-from .models import AppMenu, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, PushDevice, ShortsComment, ShortsCommentLike, ShortsLike, ShortsVideo, SocialRenderedVideo
+from .models import AppMenu, BlockedUser, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, MobileAppRelease, PushDevice, ShortsComment, ShortsCommentLike, ShortsCommentReport, ShortsLike, ShortsVideo, SocialRenderedVideo
 from .services import calculate_current_playback, delete_live_video_source, enqueue_completed_broadcast_renders, expanded_video_headlines, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
 from blog.models import BlogPost
-from news.models import Article
+from news.models import Article, Category
+from services.models import Service
 
 
 logger = logging.getLogger(__name__)
@@ -939,10 +941,25 @@ def mobile_admin_user(request):
     return token.user
 
 
+def mobile_token_user(request):
+    auth_header = request.headers.get("Authorization", "")
+    key = auth_header.removeprefix("Token ").removeprefix("Bearer ").strip()
+    if not key:
+        key = request.headers.get("X-Mobile-Admin-Token", "").strip()
+    if not key:
+        return None
+    token = MobileAdminToken.objects.select_related("user").filter(key=key).first()
+    if not token or not token.user.is_active:
+        return None
+    token.last_used_at = timezone.now()
+    token.save(update_fields=["last_used_at"])
+    return token.user
+
+
 def shorts_request_user(request):
     if hasattr(request, "_shorts_request_user"):
         return request._shorts_request_user
-    token_user = mobile_admin_user(request)
+    token_user = mobile_token_user(request)
     if token_user:
         request._shorts_request_user = token_user
         return token_user
@@ -1109,11 +1126,48 @@ def serialize_shorts_video(request, short):
     }
 
 
+def mobile_absolute_file_url(request, field):
+    if not field:
+        return ""
+    try:
+        return request.build_absolute_uri(field.url)
+    except (AttributeError, ValueError):
+        return ""
+
+
+def serialize_mobile_article(request, article, include_content=False):
+    payload = {
+        "id": article.pk,
+        "title": article.title,
+        "slug": article.slug,
+        "summary": strip_tags(article.summary or ""),
+        "featured_image": mobile_absolute_file_url(request, article.featured_image),
+        "image_alt_text": article.image_alt_text,
+        "image_caption": article.image_caption,
+        "image_credit": article.image_credit,
+        "category": {"id": article.category_id, "name": article.category.name, "slug": article.category.slug},
+        "state": article.state.name if article.state_id else "",
+        "city": article.city.name if article.city_id else "",
+        "author": article.author.get_full_name() or article.author.get_username() if article.author_id else "The UP Media",
+        "source_name": article.source_name,
+        "source_url": article.source_url,
+        "correction_note": article.correction_note,
+        "published_at": article.published_at.isoformat(),
+        "updated_at": article.updated_at.isoformat(),
+        "reads": article.unique_reads,
+        "share_url": request.build_absolute_uri(article.get_absolute_url()),
+    }
+    if include_content:
+        payload["content_html"] = str(article.content or "")
+    return payload
+
+
 def serialize_shorts_comment(request, comment, include_replies=True):
     user = shorts_request_user(request)
     display_name = comment.name or (comment.user.get_full_name() if comment.user_id else "") or (comment.user.username if comment.user_id else "Viewer")
     data = {
         "id": comment.pk,
+        "user_id": comment.user_id,
         "name": display_name,
         "text": comment.text,
         "parent_id": comment.parent_id,
@@ -1121,7 +1175,11 @@ def serialize_shorts_comment(request, comment, include_replies=True):
         "is_liked": bool(user and ShortsCommentLike.objects.filter(comment=comment, user=user).exists()),
         "created_at": comment.created_at.isoformat(),
     }
-    data["replies"] = [serialize_shorts_comment(request, reply, False) for reply in comment.replies.all()] if include_replies else []
+    replies = comment.replies.all()
+    if include_replies and user:
+        blocked_ids = BlockedUser.objects.filter(user=user).values_list("blocked_user_id", flat=True)
+        replies = replies.exclude(user_id__in=blocked_ids)
+    data["replies"] = [serialize_shorts_comment(request, reply, False) for reply in replies] if include_replies else []
     return data
 
 
@@ -2535,9 +2593,24 @@ def app_home_api(request):
     shorts = ShortsVideo.objects.filter(is_published=True).select_related("category", "state", "city").prefetch_related("comments")[:12]
     districts = LiveTVCity.objects.filter(is_active=True).select_related("state")[:30]
 
+    website_categories = Category.objects.filter(is_active=True).order_by("name")[:30]
+    requested_channel = request.GET.get("release_channel", MobileAppRelease.Channel.TESTING)
+    if requested_channel not in MobileAppRelease.Channel.values:
+        requested_channel = MobileAppRelease.Channel.TESTING
+    latest_release = MobileAppRelease.objects.filter(is_active=True, channel=requested_channel).first()
     data = {
         "success": True,
-        "menu": [serialize_app_menu(menu) for menu in AppMenu.objects.filter(is_active=True)[:20]],
+        "menu": [
+            {
+                "id": f"website-category-{category.pk}",
+                "title": category.name,
+                "slug": category.slug,
+                "target_type": "url",
+                "target_value": request.build_absolute_uri(category.get_absolute_url()),
+                "url": request.build_absolute_uri(category.get_absolute_url()),
+            }
+            for category in website_categories
+        ],
         "main_live_tv": main_live_tv,
         "ticker": {
             "label": ticker_setting.label,
@@ -2553,8 +2626,123 @@ def app_home_api(request):
         "utilities": [serialize_home_utility(utility) for utility in HomeUtility.objects.filter(is_active=True)[:12]],
         "districts": [serialize_home_district(city) for city in districts],
         "settings": serialize_live_tv_setting(request, live_setting),
+        "app_update": {
+            "available": bool(latest_release),
+            "version_name": latest_release.version_name if latest_release else "",
+            "version_code": latest_release.version_code if latest_release else 0,
+            "release_notes": latest_release.release_notes if latest_release else "",
+            "play_store_url": latest_release.play_store_url if latest_release else "https://play.google.com/store/apps/details?id=com.upmedia.livetv",
+            "download_url": request.build_absolute_uri(latest_release.testing_apk.url) if latest_release and latest_release.testing_apk and latest_release.channel == MobileAppRelease.Channel.TESTING else (latest_release.play_store_url if latest_release else ""),
+            "channel": latest_release.channel if latest_release else requested_channel,
+            "force_update": latest_release.force_update if latest_release else False,
+            "published_at": latest_release.published_at.isoformat() if latest_release else "",
+        },
     }
     return JsonResponse(data)
+
+
+@require_GET
+def mobile_news_categories_api(request):
+    categories = Category.objects.filter(is_active=True).order_by("name")
+    return JsonResponse({
+        "results": [
+            {"id": category.pk, "name": category.name, "slug": category.slug, "description": strip_tags(category.description or ""), "image": mobile_absolute_file_url(request, category.image)}
+            for category in categories
+        ]
+    })
+
+
+@require_GET
+def mobile_category_articles_api(request, slug):
+    category = get_object_or_404(Category, slug=slug, is_active=True)
+    try:
+        page = max(1, int(request.GET.get("page", "1")))
+    except (TypeError, ValueError):
+        page = 1
+    queryset = Article.published.filter(category=category).select_related("category", "state", "city", "author")
+    paginator = Paginator(queryset, 15)
+    page_obj = paginator.get_page(page)
+    return JsonResponse({
+        "category": {"id": category.pk, "name": category.name, "slug": category.slug, "description": strip_tags(category.description or "")},
+        "results": [serialize_mobile_article(request, article) for article in page_obj.object_list],
+        "page": page_obj.number,
+        "total_pages": paginator.num_pages,
+        "next_page": page_obj.next_page_number() if page_obj.has_next() else None,
+    })
+
+
+@require_GET
+def mobile_article_detail_api(request, slug):
+    article = get_object_or_404(Article.published.select_related("category", "state", "city", "author"), slug=slug)
+    related = Article.published.filter(category=article.category).exclude(pk=article.pk).select_related("category", "state", "city", "author")[:6]
+    return JsonResponse({
+        "article": serialize_mobile_article(request, article, include_content=True),
+        "related": [serialize_mobile_article(request, item) for item in related],
+    })
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def mobile_profile_api(request):
+    user = mobile_token_user(request)
+    if not user:
+        return JsonResponse({"detail": "Login required."}, status=401)
+    if request.method == "POST":
+        username = request.POST.get("username", user.get_username()).strip()
+        email = request.POST.get("email", user.email).strip().lower()
+        phone = request.POST.get("phone_number", getattr(user, "phone_number", "")).strip()
+        User = get_user_model()
+        if not re.fullmatch(r"[\w.@+-]{3,150}", username):
+            return JsonResponse({"detail": "Valid username enter kare."}, status=400)
+        if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            return JsonResponse({"detail": "Valid email enter kare."}, status=400)
+        if User.objects.filter(username__iexact=username).exclude(pk=user.pk).exists():
+            return JsonResponse({"detail": "Username already used hai."}, status=409)
+        if email and User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists():
+            return JsonResponse({"detail": "Email already used hai."}, status=409)
+        user.username = username
+        user.email = email
+        if hasattr(user, "phone_number"):
+            user.phone_number = phone
+        first_name = request.POST.get("first_name", user.first_name).strip()
+        last_name = request.POST.get("last_name", user.last_name).strip()
+        user.first_name = first_name
+        user.last_name = last_name
+        user.save()
+    return JsonResponse({"user": serialize_mobile_user(user)})
+
+
+@csrf_exempt
+@require_POST
+def mobile_password_change_api(request):
+    user = mobile_token_user(request)
+    if not user:
+        return JsonResponse({"detail": "Login required."}, status=401)
+    old_password = request.POST.get("old_password", "")
+    new_password = request.POST.get("new_password", "")
+    confirm = request.POST.get("new_password_confirm", "")
+    if not user.check_password(old_password):
+        return JsonResponse({"detail": "Old password incorrect hai."}, status=400)
+    if len(new_password) < 8:
+        return JsonResponse({"detail": "New password kam se kam 8 characters ka ho."}, status=400)
+    if new_password != confirm:
+        return JsonResponse({"detail": "New password confirmation match nahi karta."}, status=400)
+    user.set_password(new_password)
+    user.save(update_fields=["password"])
+    return JsonResponse({"ok": True})
+
+
+@require_GET
+def mobile_content_notifications_api(request):
+    items = []
+    for article in Article.published.select_related("category").order_by("-updated_at")[:15]:
+        items.append({"id": f"article-{article.pk}-{int(article.updated_at.timestamp())}", "type": "article", "title": article.title, "message": article.summary[:180], "image": mobile_absolute_file_url(request, article.featured_image), "slug": article.slug, "updated_at": article.updated_at.isoformat()})
+    for post in BlogPost.published.order_by("-updated_at")[:10]:
+        items.append({"id": f"blog-{post.pk}-{int(post.updated_at.timestamp())}", "type": "blog", "title": post.title, "message": post.excerpt[:180], "image": mobile_absolute_file_url(request, post.featured_image), "url": request.build_absolute_uri(post.get_absolute_url()), "updated_at": post.updated_at.isoformat()})
+    for service in Service.objects.filter(is_active=True).order_by("-updated_at")[:10]:
+        items.append({"id": f"service-{service.pk}-{int(service.updated_at.timestamp())}", "type": "service", "title": service.name_hi or service.name, "message": (service.short_description_hi or service.short_description)[:180], "url": request.build_absolute_uri(service.get_absolute_url()), "updated_at": service.updated_at.isoformat()})
+    items.sort(key=lambda item: item["updated_at"], reverse=True)
+    return JsonResponse({"results": items[:30], "count": min(len(items), 30)})
 
 
 @require_GET
@@ -2667,13 +2855,20 @@ def shorts_download_api(request, pk):
 def shorts_comment_api(request, pk):
     short = get_object_or_404(ShortsVideo, pk=pk, is_published=True)
     if request.method == "GET":
-        comments = short.comments.filter(parent__isnull=True).select_related("user").prefetch_related("replies__user")[:50]
+        comments = short.comments.filter(parent__isnull=True)
+        user = shorts_request_user(request)
+        if user:
+            blocked_ids = BlockedUser.objects.filter(user=user).values_list("blocked_user_id", flat=True)
+            comments = comments.exclude(user_id__in=blocked_ids)
+        comments = comments.select_related("user").prefetch_related("replies__user")[:50]
         return JsonResponse({"count": short.comments_count, "results": [serialize_shorts_comment(request, item) for item in comments]})
     text = request.POST.get("text", "").strip()
     if not text:
         return JsonResponse({"detail": "Comment text is required.", "errors": {"text": ["This field is required."]}}, status=400)
-    name = request.POST.get("name", "").strip()[:80]
     user = shorts_request_user(request)
+    if not user:
+        return JsonResponse({"detail": "Login required to post a comment."}, status=401)
+    name = request.POST.get("name", "").strip()[:80]
     parent = None
     parent_id = request.POST.get("parent_id", "").strip()
     if parent_id:
@@ -2758,7 +2953,17 @@ def mobile_admin_logout_api(request):
 
 
 def serialize_mobile_user(user):
-    return {"id": user.pk, "username": user.get_username(), "name": user.get_full_name() or user.get_username(), "email": user.email, "is_superuser": user.is_superuser, "role": getattr(user, "role", "reader")}
+    return {
+        "id": user.pk,
+        "username": user.get_username(),
+        "name": user.get_full_name() or user.get_username(),
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "email": user.email,
+        "phone_number": getattr(user, "phone_number", ""),
+        "is_superuser": user.is_superuser,
+        "role": getattr(user, "role", "reader"),
+    }
 
 
 @csrf_exempt
@@ -2793,6 +2998,28 @@ def mobile_user_login_api(request):
         return JsonResponse({"detail": "Invalid username or password."}, status=400)
     token = MobileAdminToken.create_for_user(user, request.POST.get("device_name", "Mobile App"))
     return JsonResponse({"token": token.key, "user": serialize_mobile_user(user)})
+
+
+@csrf_exempt
+@require_POST
+def mobile_user_delete_account_api(request):
+    user = mobile_token_user(request)
+    if not user:
+        return JsonResponse({"detail": "Login required."}, status=401)
+    if user.is_superuser or user.is_staff:
+        return JsonResponse({"detail": "Admin accounts cannot be deleted from the mobile app. Contact the site owner."}, status=403)
+    confirmation = request.POST.get("confirmation", "").strip().upper()
+    if confirmation != "DELETE":
+        return JsonResponse({"detail": "Deletion confirmation required."}, status=400)
+    username = user.get_username()
+    for field_name in ("avatar", "cover_image"):
+        file_field = getattr(user, field_name, None)
+        if file_field:
+            file_field.delete(save=False)
+    with transaction.atomic():
+        MobileAdminToken.objects.filter(user=user).delete()
+        user.delete()
+    return JsonResponse({"ok": True, "deleted_account": username})
 
 
 @require_GET
@@ -3144,8 +3371,17 @@ def mobile_admin_shorts_upload_api(request):
         category_id, category_errors = parse_required_category(request.POST)
         if category_errors:
             return JsonResponse({"detail": "Selected category is invalid.", "errors": category_errors}, status=400)
-    # Mobile upload currently exposes one production frame; keep preview and render identical.
-    frame_template = "normal_black_red"
+    # Only production mobile templates are accepted. The selected template is persisted
+    # so the rendered MP4/HLS shown in Shorts matches the upload preview exactly.
+    allowed_short_frames = {"normal_black_red", "breaking_big", "hindu_dharmik"}
+    requested_frame = request.POST.get("frame_template", "").strip()
+    frame_template = requested_frame if requested_frame in allowed_short_frames else "normal_black_red"
+    frame_defaults = {
+        "normal_black_red": ("#ef1717", "#2b0508", "#050505", "#ffffff"),
+        "breaking_big": ("#ef1717", "#760000", "#110204", "#ffffff"),
+        "hindu_dharmik": ("#f59e0b", "#7c2d12", "#210800", "#ffffff"),
+    }
+    default_primary, default_secondary, default_background, default_text = frame_defaults[frame_template]
     raw_display_order = request.POST.get("display_order")
     try:
         display_order = int(raw_display_order) if raw_display_order not in (None, "") else None
@@ -3168,10 +3404,10 @@ def mobile_admin_shorts_upload_api(request):
         thumbnail=request.FILES.get("thumbnail"),
         channel_logo=request.FILES.get("channel_logo"),
         channel_name=request.POST.get("channel_name", "").strip()[:120],
-        frame_primary_color=request.POST.get("frame_primary_color", "#d71920").strip()[:20] or "#d71920",
-        frame_secondary_color=request.POST.get("frame_secondary_color", "#2b0508").strip()[:20] or "#2b0508",
-        frame_background_color=request.POST.get("frame_background_color", "#050505").strip()[:20] or "#050505",
-        frame_text_color=request.POST.get("frame_text_color", "#ffffff").strip()[:20] or "#ffffff",
+        frame_primary_color=request.POST.get("frame_primary_color", default_primary).strip()[:20] or default_primary,
+        frame_secondary_color=request.POST.get("frame_secondary_color", default_secondary).strip()[:20] or default_secondary,
+        frame_background_color=request.POST.get("frame_background_color", default_background).strip()[:20] or default_background,
+        frame_text_color=request.POST.get("frame_text_color", default_text).strip()[:20] or default_text,
         video_fit=request.POST.get("video_fit", ShortsVideo.VideoFit.CONTAIN).strip()[:12] or ShortsVideo.VideoFit.CONTAIN,
         show_duration_badge=request.POST.get("show_duration_badge", "1").lower() not in {"0", "false", "off", "no"},
         show_branding_strip=request.POST.get("show_branding_strip", "1").lower() not in {"0", "false", "off", "no"},
@@ -3195,6 +3431,34 @@ def mobile_admin_shorts_status_api(request, pk):
         ShortsVideo.objects.select_related("category", "state", "city", "created_by").prefetch_related("comments"),
         pk=pk,
     )
+
+
+@csrf_exempt
+@require_POST
+def shorts_comment_report_api(request, pk):
+    user = mobile_token_user(request)
+    if not user:
+        return JsonResponse({"detail": "Login required to report content."}, status=401)
+    comment = get_object_or_404(ShortsComment, pk=pk)
+    report, created = ShortsCommentReport.objects.get_or_create(
+        comment=comment,
+        reporter=user,
+        defaults={"reason": request.POST.get("reason", "Inappropriate content").strip()[:500]},
+    )
+    return JsonResponse({"ok": True, "reported": True, "created": created, "report_id": report.pk})
+
+
+@csrf_exempt
+@require_POST
+def shorts_user_block_api(request, pk):
+    user = mobile_token_user(request)
+    if not user:
+        return JsonResponse({"detail": "Login required to block a user."}, status=401)
+    target = get_object_or_404(get_user_model(), pk=pk, is_active=True)
+    if target.pk == user.pk:
+        return JsonResponse({"detail": "You cannot block your own account."}, status=400)
+    BlockedUser.objects.get_or_create(user=user, blocked_user=target)
+    return JsonResponse({"ok": True, "blocked": True, "blocked_user_id": target.pk})
 
 
 @csrf_exempt

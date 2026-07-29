@@ -551,6 +551,32 @@ class HomeUtility(models.Model):
         return self.title
 
 
+class MobileAppRelease(models.Model):
+    class Channel(models.TextChoices):
+        TESTING = "testing", "Direct testing APK"
+        PLAY_STORE = "play_store", "Google Play Store"
+
+    channel = models.CharField(max_length=20, choices=Channel.choices, default=Channel.TESTING)
+    version_name = models.CharField(max_length=30, help_text="Play Store version name, for example 1.0.1")
+    version_code = models.PositiveIntegerField(help_text="Must match Android versionCode in this release channel")
+    release_notes = models.TextField(blank=True)
+    testing_apk = models.FileField(upload_to="mobile-releases/testing/%Y/%m/", blank=True, null=True, help_text="Testing channel only. Upload signed APK, not AAB.")
+    play_store_url = models.URLField(default="https://play.google.com/store/apps/details?id=com.upmedia.livetv")
+    force_update = models.BooleanField(default=False, help_text="Show a non-cancelable update prompt for older app versions")
+    is_active = models.BooleanField(default=True)
+    published_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-version_code", "-published_at"]
+        constraints = [models.UniqueConstraint(fields=["channel", "version_code"], name="unique_mobile_release_channel_version")]
+        verbose_name = "Mobile App Release"
+        verbose_name_plural = "Mobile App Releases"
+
+    def __str__(self):
+        return f"{self.get_channel_display()} — The UP Media {self.version_name} ({self.version_code})"
+
+
 class LiveTVSetting(models.Model):
     name = models.CharField(max_length=120, default="The Up Media Live TV")
     live_label = models.CharField(max_length=40, default="LIVE")
@@ -779,6 +805,32 @@ class ShortsCommentLike(models.Model):
 
     def __str__(self):
         return f"{self.user} liked comment {self.comment_id}"
+
+
+class ShortsCommentReport(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        REVIEWED = "reviewed", "Reviewed"
+        REMOVED = "removed", "Content removed"
+
+    comment = models.ForeignKey(ShortsComment, on_delete=models.CASCADE, related_name="reports")
+    reporter = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reported_shorts_comments")
+    reason = models.CharField(max_length=500, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["comment", "reporter"], name="unique_short_comment_report")]
+        ordering = ["-created_at"]
+
+
+class BlockedUser(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="blocked_live_tv_users")
+    blocked_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="blocked_by_live_tv_users")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "blocked_user"], name="unique_live_tv_blocked_user")]
 
 
 class ShortsLike(models.Model):

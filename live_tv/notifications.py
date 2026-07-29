@@ -89,3 +89,30 @@ def notify_new_video_ready(channel_id):
             push_notification_sent_at__isnull=True,
         ).update(push_notification_sent_at=timezone.now())
     return sent
+
+
+def notify_content_update(*, content_type, title, body, data=None):
+    tokens = list(PushDevice.objects.filter(is_active=True).values_list("token", flat=True))
+    if not tokens:
+        return 0
+    sent = 0
+    payload_data = {"type": content_type, **(data or {})}
+    for token_batch in _chunks(tokens):
+        messages = [{
+            "to": token,
+            "sound": "default",
+            "title": title[:120],
+            "body": body[:220],
+            "priority": "high",
+            "channelId": "content-updates",
+            "data": payload_data,
+        } for token in token_batch]
+        result = _send_expo_messages(messages)
+        if not result:
+            continue
+        for token, ticket in zip(token_batch, result.get("data") or []):
+            if ticket.get("status") == "ok":
+                sent += 1
+            elif (ticket.get("details") or {}).get("error") == "DeviceNotRegistered":
+                PushDevice.objects.filter(token=token).update(is_active=False)
+    return sent
