@@ -3089,7 +3089,7 @@ def mobile_google_auth_config_api(request):
 @require_GET
 def mobile_google_auth_complete(request):
     one_time_code = signing.dumps(
-        {"user_id": request.user.pk, "nonce": secrets.token_urlsafe(16)},
+        {"user_id": request.user.pk, "nonce": uuid4().hex},
         salt="mobile-google-auth",
         compress=True,
     )
