@@ -12,7 +12,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -20,6 +20,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
+from django.core import signing
 from django.core.files import File
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
@@ -73,7 +74,19 @@ def download_latest_testing_app(request):
             {"detail": "Testing mobile app is not available yet."},
             status=404,
         )
-    return redirect(request.build_absolute_uri(release.testing_apk.url))
+    version_slug = re.sub(r"[^A-Za-z0-9._-]+", "-", release.version_name).strip("-") or str(release.version_code)
+    filename = f"The-UP-Media-{version_slug}.apk"
+    try:
+        release.testing_apk.open("rb")
+    except FileNotFoundError:
+        # Development databases can reference production media that is not copied locally.
+        return redirect(request.build_absolute_uri(release.testing_apk.url))
+    return FileResponse(
+        release.testing_apk.file,
+        as_attachment=True,
+        filename=filename,
+        content_type="application/vnd.android.package-archive",
+    )
 
 
 @csrf_exempt
@@ -3064,7 +3077,42 @@ def mobile_user_delete_account_api(request):
 @require_GET
 def mobile_google_auth_config_api(request):
     configured = bool(getattr(settings, "SOCIAL_AUTH_GOOGLE_OAUTH2_KEY", ""))
-    return JsonResponse({"configured": configured, "authorize_url": request.build_absolute_uri("/auth/login/google-oauth2/") if configured else ""})
+    channel = request.GET.get("release_channel", MobileAppRelease.Channel.PLAY_STORE)
+    if channel not in MobileAppRelease.Channel.values:
+        channel = MobileAppRelease.Channel.PLAY_STORE
+    callback_url = request.build_absolute_uri(f"{reverse('live_tv:api_mobile_google_complete')}?channel={channel}")
+    authorize_path = f"/auth/login/google-oauth2/?next={urlencode({'next': callback_url})[5:]}"
+    return JsonResponse({"configured": configured, "authorize_url": request.build_absolute_uri(authorize_path) if configured else ""})
+
+
+@login_required
+@require_GET
+def mobile_google_auth_complete(request):
+    one_time_code = signing.dumps(
+        {"user_id": request.user.pk, "nonce": secrets.token_urlsafe(16)},
+        salt="mobile-google-auth",
+        compress=True,
+    )
+    channel = request.GET.get("channel", MobileAppRelease.Channel.PLAY_STORE)
+    scheme = "com.upmedia.livetv.testing" if channel == MobileAppRelease.Channel.TESTING else "com.upmedia.livetv"
+    params = urlencode({"code": one_time_code})
+    return redirect(f"{scheme}://auth/google?{params}")
+
+
+@csrf_exempt
+@require_POST
+def mobile_google_auth_exchange(request):
+    code = request.POST.get("code", "").strip()
+    if not code:
+        return JsonResponse({"detail": "Google login code required."}, status=400)
+    try:
+        payload = signing.loads(code, salt="mobile-google-auth", max_age=300)
+        user_id = payload.get("user_id")
+    except (signing.BadSignature, signing.SignatureExpired):
+        return JsonResponse({"detail": "Google login code invalid ya expire ho gaya."}, status=400)
+    user = get_object_or_404(get_user_model(), pk=user_id, is_active=True)
+    token = MobileAdminToken.create_for_user(user, request.POST.get("device_name", "Google Mobile App"))
+    return JsonResponse({"token": token.key, "user": serialize_mobile_user(user)})
 
 
 @require_GET
