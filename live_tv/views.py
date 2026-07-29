@@ -53,6 +53,28 @@ from services.models import Service
 logger = logging.getLogger(__name__)
 
 
+@require_GET
+def download_latest_testing_app(request):
+    """Redirect to the newest active APK uploaded in Django Admin."""
+    release = (
+        MobileAppRelease.objects
+        .filter(
+            is_active=True,
+            channel=MobileAppRelease.Channel.TESTING,
+            testing_apk__isnull=False,
+        )
+        .exclude(testing_apk="")
+        .order_by("-version_code", "-published_at")
+        .first()
+    )
+    if not release:
+        return JsonResponse(
+            {"detail": "Testing mobile app is not available yet."},
+            status=404,
+        )
+    return redirect(request.build_absolute_uri(release.testing_apk.url))
+
+
 @csrf_exempt
 @require_POST
 def register_push_device_api(request):
@@ -2598,6 +2620,17 @@ def app_home_api(request):
     if requested_channel not in MobileAppRelease.Channel.values:
         requested_channel = MobileAppRelease.Channel.TESTING
     latest_release = MobileAppRelease.objects.filter(is_active=True, channel=requested_channel).first()
+    latest_testing_release = (
+        MobileAppRelease.objects
+        .filter(
+            is_active=True,
+            channel=MobileAppRelease.Channel.TESTING,
+            testing_apk__isnull=False,
+        )
+        .exclude(testing_apk="")
+        .order_by("-version_code", "-published_at")
+        .first()
+    )
     data = {
         "success": True,
         "menu": [
@@ -2636,6 +2669,11 @@ def app_home_api(request):
             "channel": latest_release.channel if latest_release else requested_channel,
             "force_update": latest_release.force_update if latest_release else False,
             "published_at": latest_release.published_at.isoformat() if latest_release else "",
+            "testing_download_url": request.build_absolute_uri(reverse("live_tv:download_latest_testing_app")) if latest_testing_release else "",
+            "testing_channel_label": latest_testing_release.get_channel_display() if latest_testing_release else "",
+            "testing_version_name": latest_testing_release.version_name if latest_testing_release else "",
+            "testing_version_code": latest_testing_release.version_code if latest_testing_release else 0,
+            "testing_apk_name": Path(latest_testing_release.testing_apk.name).name if latest_testing_release else "",
         },
     }
     return JsonResponse(data)

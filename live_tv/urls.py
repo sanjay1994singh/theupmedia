@@ -12,6 +12,7 @@ urlpatterns = [
     path("api/app/news/categories/<slug:slug>/", views.mobile_category_articles_api, name="api_category_articles"),
     path("api/app/news/articles/<slug:slug>/", views.mobile_article_detail_api, name="api_article_detail"),
     path("api/app/notifications/", views.mobile_content_notifications_api, name="api_content_notifications"),
+    path("mobile-app/download/", views.download_latest_testing_app, name="download_latest_testing_app"),
     path("api/live/current/", views.current_live_api, name="api_live_current"),
     path("api/live/channels/<slug:slug>/current/", views.current_live_api, name="api_live_channel_current"),
     path("api/live-tv/current/", views.current_live_tv_api, name="api_current"),
