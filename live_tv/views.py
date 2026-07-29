@@ -44,7 +44,7 @@ except ImportError:  # pragma: no cover - server requirements include Pillow
     Image = ImageDraw = ImageFont = None
 
 from .hls import hls_processing_lock_is_active, validate_uploaded_video
-from .account_emails import send_account_email
+from .account_emails import queue_account_email
 from .models import AccountDeletionRequest, AppMenu, BlockedUser, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, MobileAppRelease, PushDevice, ShortsComment, ShortsCommentLike, ShortsCommentReport, ShortsLike, ShortsVideo, SocialRenderedVideo
 from .services import calculate_current_playback, delete_live_video_source, enqueue_completed_broadcast_renders, expanded_video_headlines, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
 from blog.models import BlogPost
@@ -3093,7 +3093,7 @@ def mobile_user_delete_account_api(request):
             user.is_active = False
             user.save(update_fields=["is_active"])
     if created:
-        send_account_email("deletion_scheduled", deletion.email_snapshot, display_name=deletion.full_name_snapshot or deletion.username_snapshot, details=f"Deletion time: {timezone.localtime(scheduled_for):%d %B %Y, %I:%M %p %Z}")
+        queue_account_email("deletion_scheduled", deletion.email_snapshot, display_name=deletion.full_name_snapshot or deletion.username_snapshot, details=f"Deletion time: {timezone.localtime(scheduled_for):%d %B %Y, %I:%M %p %Z}")
     return JsonResponse({"ok": True, "status": "pending", "scheduled_for": scheduled_for.isoformat()})
 
 

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ subject }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f3f4f6;color:#171717;font-family:Arial,'Noto Sans Devanagari',sans-serif">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f4f6;padding:24px 12px">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 8px 28px rgba(0,0,0,.08)">
+        <tr>
+          <td style="background:#090909;padding:28px 24px;text-align:center">
+            <span style="color:#fff;font-size:25px;font-weight:800;letter-spacing:.4px">THE </span>
+            <span style="display:inline-block;background:#e31b23;color:#fff;font-size:25px;font-weight:800;padding:5px 9px;border-radius:5px">UP</span>
+            <span style="color:#fff;font-size:25px;font-weight:800;letter-spacing:.4px"> MEDIA</span>
+          </td>
+        </tr>
+        <tr><td style="height:5px;background:{{ accent }}"></td></tr>
+        <tr>
+          <td style="padding:34px 30px 24px">
+            <p style="margin:0 0 10px;color:#6b7280;font-size:14px">ACCOUNT NOTIFICATION</p>
+            <h1 style="margin:0 0 22px;font-size:26px;line-height:1.25;color:#111827">{{ heading }}</h1>
+            <p style="margin:0 0 16px;font-size:16px;line-height:1.65">Hello {{ display_name }},</p>
+            <p style="margin:0 0 18px;font-size:16px;line-height:1.65">{{ message }}</p>
+            {% if details %}
+              <div style="margin:20px 0;padding:16px 18px;border-left:4px solid {{ accent }};background:#f9fafb;border-radius:8px;font-size:15px;line-height:1.6;white-space:pre-line">{{ details }}</div>
+            {% endif %}
+            {% if security %}
+              <div style="margin:22px 0 0;padding:16px 18px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;color:#9a3412;font-size:14px;line-height:1.55">
+                If you did not make this request, please contact The UP Media immediately and secure your account.
+              </div>
+            {% endif %}
+            <div style="margin-top:28px;text-align:center">
+              <a href="{{ site_url }}" style="display:inline-block;background:{{ accent }};color:#fff;text-decoration:none;font-weight:700;padding:13px 24px;border-radius:9px">Open The UP Media</a>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:22px 30px;background:#111827;color:#d1d5db;font-size:12px;line-height:1.65;text-align:center">
+            <div>Need help? <a href="mailto:{{ support_email }}" style="color:#fff">{{ support_email }}</a>{% if support_phone %} · {{ support_phone }}{% endif %}</div>
+            <div style="margin-top:8px">
+              <a href="{{ site_url }}/privacy-policy/" style="color:#d1d5db">Privacy Policy</a> ·
+              <a href="{{ site_url }}/terms-and-conditions/" style="color:#d1d5db">Terms</a> ·
+              <a href="{{ site_url }}/account-deletion/" style="color:#d1d5db">Account Deletion</a>
+            </div>
+            <div style="margin-top:9px">© {{ year }} The UP Media. This is an automated account email.</div>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>

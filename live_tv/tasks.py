@@ -15,6 +15,26 @@ from .services import cleanup_expired_live_video_sources, live_playlist_cutoff, 
 logger = logging.getLogger(__name__)
 
 
+@shared_task(
+    bind=True,
+    name="live_tv.send_account_email",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": 3},
+)
+def send_account_email_task(self, event, email, display_name="", details=""):
+    sent = send_account_email(
+        event,
+        email,
+        display_name=display_name,
+        details=details,
+    )
+    if not sent:
+        raise RuntimeError(f"Account email '{event}' could not be sent")
+    return True
+
+
 @shared_task(name="live_tv.render_social_video")
 def render_social_video_task(job_id):
     run_social_render_job(job_id)

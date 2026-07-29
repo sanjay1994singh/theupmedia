@@ -1,0 +1,21 @@
+THE UP MEDIA
+
+{{ heading }}
+
+Hello {{ display_name }},
+
+{{ message }}
+{% if details %}
+{{ details }}
+{% endif %}
+{% if security %}
+If you did not make this request, contact The UP Media immediately and secure your account.
+{% endif %}
+
+Open The UP Media: {{ site_url }}
+Support: {{ support_email }}{% if support_phone %} | {{ support_phone }}{% endif %}
+Privacy: {{ site_url }}/privacy-policy/
+Terms: {{ site_url }}/terms-and-conditions/
+Account deletion: {{ site_url }}/account-deletion/
+
+© {{ year }} The UP Media
