@@ -149,13 +149,13 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "/static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT = str(BASE_DIR / 'staticfiles')
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
 
 MEDIA_URL = os.getenv("MEDIA_URL", "https://theupmedia.in/media/")
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = str(BASE_DIR / 'media')
 
 CKEDITOR_5_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
 CKEDITOR_5_UPLOAD_FILE_TYPES = ["jpeg", "jpg", "png", "gif", "bmp", "webp"]
