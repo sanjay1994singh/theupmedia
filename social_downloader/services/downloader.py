@@ -130,8 +130,14 @@ def run_download_job(job_id):
                 SocialMediaDownload.objects.filter(pk=job.pk).update(progress_percent=96)
 
         YoutubeDL, _DownloadError = import_ytdlp()
+
+        # 1. Pehle options build hone dein
         ydl_opts = build_download_options(job, output_dir)
+
+        # 2. AB cookiefile aur progress_hooks add karein (overwrites won't happen now)
+        ydl_opts['cookiefile'] = '/var/www/theupmedia/cookies.txt'
         ydl_opts["progress_hooks"] = [hook]
+
         before_files = set(output_dir.iterdir())
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(job.source_url, download=True)
@@ -149,7 +155,7 @@ def run_download_job(job_id):
         final_name = safe_filename(job.title, extension)
         final_path = output_dir / final_name
         if output_file != final_path:
-            output_file.rename(final_path)
+            shutil.move(str(output_file), str(final_path))  # rename ki jagah move safe hota hai
         relative_file = Path(relative_dir) / final_name
 
         job.status = SocialMediaDownload.Status.COMPLETED
