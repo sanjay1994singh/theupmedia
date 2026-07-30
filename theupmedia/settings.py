@@ -157,8 +157,9 @@ STATICFILES_DIRS = [
 MEDIA_URL = os.getenv("MEDIA_URL", "https://theupmedia.in/media/")
 MEDIA_ROOT = str(BASE_DIR / 'media')
 # Django request & file size limits ko Unlimited (None) karne ke liye
-DATA_UPLOAD_MAX_MEMORY_SIZE = None
-FILE_UPLOAD_MAX_MEMORY_SIZE = None
+# 10 GB Limit (Practically Unlimited)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10737418240
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10737418240
 
 CKEDITOR_5_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
 CKEDITOR_5_UPLOAD_FILE_TYPES = ["jpeg", "jpg", "png", "gif", "bmp", "webp"]
