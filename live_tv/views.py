@@ -222,73 +222,12 @@ def enqueue_short_hls_job(short_id):
     return "thread"
 
 
-# def enqueue_live_channel_hls_job(channel_id):
-#     try:
-#         channel = LiveTVChannel.objects.only("pk", "hls_master_url", "hls_status", "updated_at").get(pk=channel_id)
-#     except LiveTVChannel.DoesNotExist:
-#         return "missing"
-#
-#     if channel.hls_status == LiveTVChannel.HLSStatus.COMPLETED and channel.hls_master_url:
-#         if channel.hls_progress_percent != 100:
-#             LiveTVChannel.objects.filter(pk=channel_id).update(
-#                 hls_progress_percent=100,
-#                 processing_error="",
-#                 updated_at=timezone.now(),
-#             )
-#         return "completed"
-#
-#     stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
-#     if channel.hls_status == LiveTVChannel.HLSStatus.PROCESSING and channel.updated_at >= stale_cutoff:
-#         return "processing"
-#
-#     if hls_processing_lock_is_active("live-channel"):
-#         # The filesystem lock is authoritative even if a racing health request
-#         # has not observed the latest database status yet.
-#         return "processing"
-#
-#     other_active = (
-#         LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.PROCESSING, updated_at__gte=stale_cutoff)
-#         .exclude(pk=channel_id)
-#         .exists()
-#     )
-#     if other_active:
-#         if channel.hls_status != LiveTVChannel.HLSStatus.PENDING:
-#             LiveTVChannel.objects.filter(pk=channel_id).update(
-#                 hls_status=LiveTVChannel.HLSStatus.PENDING,
-#                 hls_progress_percent=0,
-#                 updated_at=timezone.now(),
-#             )
-#         return "pending"
-#
-#     if getattr(settings, "LIVE_TV_RENDER_USE_CELERY", True):
-#         try:
-#             from .tasks import process_live_channel_hls_task
-#
-#             process_live_channel_hls_task.delay(channel_id)
-#             return "celery"
-#         except Exception as exc:
-#             LiveTVChannel.objects.filter(pk=channel_id).update(
-#                 processing_error=f"Celery enqueue failed, fallback thread started: {exc}",
-#             )
-#
-#     import threading
-#
-#     from .hls import convert_live_channel_to_hls
-#
-#     threading.Thread(target=convert_live_channel_to_hls, args=(channel_id,), daemon=True).start()
-#     return "thread"
-
-
 def enqueue_live_channel_hls_job(channel_id):
     try:
-        # Fixed: hls_progress_percent field include kar di taaki model load me issue na aaye
-        channel = LiveTVChannel.objects.only(
-            "pk", "hls_master_url", "hls_status", "hls_progress_percent", "updated_at"
-        ).get(pk=channel_id)
+        channel = LiveTVChannel.objects.only("pk", "hls_master_url", "hls_status", "updated_at").get(pk=channel_id)
     except LiveTVChannel.DoesNotExist:
         return "missing"
 
-    # 1. Status already COMPLETED hai toh Seedha Exit karein (No Re-HLS)
     if channel.hls_status == LiveTVChannel.HLSStatus.COMPLETED and channel.hls_master_url:
         if channel.hls_progress_percent != 100:
             LiveTVChannel.objects.filter(pk=channel_id).update(
@@ -298,15 +237,15 @@ def enqueue_live_channel_hls_job(channel_id):
             )
         return "completed"
 
-    # 2. Check stale processing window
     stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
     if channel.hls_status == LiveTVChannel.HLSStatus.PROCESSING and channel.updated_at >= stale_cutoff:
         return "processing"
 
     if hls_processing_lock_is_active("live-channel"):
+        # The filesystem lock is authoritative even if a racing health request
+        # has not observed the latest database status yet.
         return "processing"
 
-    # 3. Check if any other video is currently processing
     other_active = (
         LiveTVChannel.objects.filter(hls_status=LiveTVChannel.HLSStatus.PROCESSING, updated_at__gte=stale_cutoff)
         .exclude(pk=channel_id)
@@ -320,18 +259,6 @@ def enqueue_live_channel_hls_job(channel_id):
                 updated_at=timezone.now(),
             )
         return "pending"
-
-    # 4. FIX: Stop Re-trigger Loop!
-    # Agar channel status pehle se PENDING ya PROCESSING me queue mein hai,
-    # toh Celery/Thread ko DUBARA dispatch mat karo!
-    if channel.hls_status == LiveTVChannel.HLSStatus.PENDING and channel.updated_at >= stale_cutoff:
-        return "pending"
-
-    # 5. Lock Database Row immediately to Processing to prevent racing HTTP Polling requests
-    LiveTVChannel.objects.filter(pk=channel_id).update(
-        hls_status=LiveTVChannel.HLSStatus.PROCESSING,
-        updated_at=timezone.now(),
-    )
 
     if getattr(settings, "LIVE_TV_RENDER_USE_CELERY", True):
         try:
@@ -350,6 +277,7 @@ def enqueue_live_channel_hls_job(channel_id):
 
     threading.Thread(target=convert_live_channel_to_hls, args=(channel_id,), daemon=True).start()
     return "thread"
+
 
 
 def next_live_tv_channel(active_channel, channels):
