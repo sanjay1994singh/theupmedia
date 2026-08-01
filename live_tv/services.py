@@ -296,12 +296,16 @@ def _create_cycle(channel, items, starts_at, version):
     items = [item for item in items if item.is_active and item.duration_seconds > 0]
     if not items:
         return None
-    cycle = LiveTVPlaylistCycle.objects.create(
+    cycle, created = LiveTVPlaylistCycle.objects.get_or_create(
         channel=channel,
         version=version,
-        starts_at=starts_at,
-        total_duration_seconds=sum(item.duration_seconds for item in items),
+        defaults={
+            "starts_at": starts_at,
+            "total_duration_seconds": sum(item.duration_seconds for item in items),
+        },
     )
+    if not created:
+        return cycle
     LiveTVPlaylistCycleItem.objects.bulk_create(
         [
             LiveTVPlaylistCycleItem(

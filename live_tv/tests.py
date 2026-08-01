@@ -13,7 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, LiveTVVideoHeadline, ShortsVideo, SocialRenderedVideo
-from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, cleanup_expired_live_video_sources, create_broadcast_render_job, delete_live_video_source, enqueue_completed_broadcast_renders, get_main_live_channel, rebuild_live_playlist, recover_stale_render_jobs, repair_live_tv_health, split_headline_parts
+from .services import _create_cycle, add_uploaded_video_to_live_playlist, calculate_current_playback, cleanup_expired_live_video_sources, create_broadcast_render_job, delete_live_video_source, enqueue_completed_broadcast_renders, get_main_live_channel, rebuild_live_playlist, recover_stale_render_jobs, repair_live_tv_health, split_headline_parts
 from .tasks import process_live_channel_hls_task
 from .views import enqueue_live_channel_hls_job, video_headline_payload
 
@@ -39,6 +39,35 @@ class CeleryQueueRoutingTests(SimpleTestCase):
 
 
 class HLSIdempotencyTests(TestCase):
+    def test_playlist_cycle_creation_is_idempotent_per_version(self):
+        LiveTVChannel.objects.all().delete()
+        main = LiveTVChannel.objects.create(
+            title="Cycle main",
+            slug="cycle-main",
+            source_type=LiveTVChannel.SourceType.PLAYLIST,
+            auto_playlist_enabled=True,
+            auto_add_to_live=False,
+        )
+        video = LiveTVChannel.objects.create(
+            title="Cycle video",
+            slug="cycle-video",
+            source_type=LiveTVChannel.SourceType.DIRECT,
+            video_file="live-tv/videos/cycle.mp4",
+            hls_master_url="live-tv/hls/cycle/master.m3u8",
+            hls_status=LiveTVChannel.HLSStatus.COMPLETED,
+            duration_seconds=30,
+            auto_playlist_enabled=False,
+            auto_add_to_live=True,
+        )
+        item = LiveTVPlaylistItem.objects.create(channel=main, video=video, duration_seconds=30)
+        started_at = timezone.now()
+
+        first = _create_cycle(main, [item], started_at, 7)
+        second = _create_cycle(main, [item], started_at, 7)
+
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(main.playlist_cycles.filter(version=7).count(), 1)
+
     @override_settings(LIVE_TV_RENDER_USE_CELERY=True)
     @patch("live_tv.tasks.process_live_channel_hls_task.delay")
     def test_simultaneous_enqueue_is_deduplicated(self, delay):
