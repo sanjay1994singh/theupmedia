@@ -968,6 +968,10 @@ def repair_live_tv_health(queue_hls=True, queue_renders=True, at=None):
 
     if queue_hls:
         for video in candidates.order_by("created_at", "pk")[:100]:
+            from .hls import restore_existing_hls_completion
+
+            if restore_existing_hls_completion(video):
+                continue
             processing_is_fresh = (
                 video.hls_status == LiveTVChannel.HLSStatus.PROCESSING
                 and video.updated_at
@@ -1019,7 +1023,10 @@ def repair_live_tv_health(queue_hls=True, queue_renders=True, at=None):
 
     if report["playlist_added"] or report["removed_unstreamable_items"] or report["expired_playlist_items"]:
         channel.refresh_from_db()
-        ensure_current_cycle(channel, at=at)
+        # add_uploaded_video_to_live_playlist() already schedules the updated
+        # cycle. Creating another cycle here can race on (channel, version).
+        if not report["playlist_added"]:
+            ensure_current_cycle(channel, at=at)
 
     if queue_renders:
         report["stale_renders_queued"] = len(recover_stale_render_jobs(at=at))

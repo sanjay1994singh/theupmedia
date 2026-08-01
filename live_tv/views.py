@@ -43,7 +43,7 @@ try:
 except ImportError:  # pragma: no cover - server requirements include Pillow
     Image = ImageDraw = ImageFont = None
 
-from .hls import hls_processing_lock_is_active, validate_uploaded_video
+from .hls import acquire_hls_enqueue_lock, hls_processing_lock_is_active, release_hls_enqueue_lock, restore_existing_hls_completion, validate_uploaded_video
 from .account_emails import queue_account_email
 from .models import AccountDeletionRequest, AppMenu, BlockedUser, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, MobileAppRelease, PushDevice, ShortsComment, ShortsCommentLike, ShortsCommentReport, ShortsLike, ShortsVideo, SocialRenderedVideo
 from .services import calculate_current_playback, delete_live_video_source, enqueue_completed_broadcast_renders, expanded_video_headlines, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
@@ -182,7 +182,7 @@ def enqueue_short_hls_job(short_id):
     except ShortsVideo.DoesNotExist:
         return "missing"
 
-    if short.hls_status == ShortsVideo.HLSStatus.COMPLETED and short.hls_master_url:
+    if restore_existing_hls_completion(short):
         return "completed"
 
     stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
@@ -197,6 +197,10 @@ def enqueue_short_hls_job(short_id):
     if other_active:
         return "pending"
 
+    enqueue_lock = acquire_hls_enqueue_lock("short", short_id)
+    if enqueue_lock is None:
+        return "queued"
+
     if getattr(settings, "LIVE_TV_RENDER_USE_CELERY", True):
         try:
             from .tasks import process_short_hls_task
@@ -204,6 +208,7 @@ def enqueue_short_hls_job(short_id):
             process_short_hls_task.delay(short_id)
             return "celery"
         except Exception as exc:
+            release_hls_enqueue_lock("short", short_id)
             ShortsVideo.objects.filter(pk=short_id).update(
                 processing_error=f"Celery enqueue failed, fallback thread started: {exc}",
             )
@@ -213,6 +218,7 @@ def enqueue_short_hls_job(short_id):
     from .hls import convert_short_to_hls, render_short_frame
 
     def render_then_hls():
+        release_hls_enqueue_lock("short", short_id)
         short = ShortsVideo.objects.filter(pk=short_id).first()
         if short and not short.rendered_video:
             render_short_frame(short_id)
@@ -228,13 +234,7 @@ def enqueue_live_channel_hls_job(channel_id):
     except LiveTVChannel.DoesNotExist:
         return "missing"
 
-    if channel.hls_status == LiveTVChannel.HLSStatus.COMPLETED and channel.hls_master_url:
-        if channel.hls_progress_percent != 100:
-            LiveTVChannel.objects.filter(pk=channel_id).update(
-                hls_progress_percent=100,
-                processing_error="",
-                updated_at=timezone.now(),
-            )
+    if restore_existing_hls_completion(channel):
         return "completed"
 
     stale_cutoff = timezone.now() - timedelta(minutes=getattr(settings, "LIVE_TV_HLS_PROCESSING_STALE_MINUTES", 20))
@@ -260,6 +260,10 @@ def enqueue_live_channel_hls_job(channel_id):
             )
         return "pending"
 
+    enqueue_lock = acquire_hls_enqueue_lock("live", channel_id)
+    if enqueue_lock is None:
+        return "queued"
+
     if getattr(settings, "LIVE_TV_RENDER_USE_CELERY", True):
         try:
             from .tasks import process_live_channel_hls_task
@@ -267,6 +271,7 @@ def enqueue_live_channel_hls_job(channel_id):
             process_live_channel_hls_task.delay(channel_id)
             return "celery"
         except Exception as exc:
+            release_hls_enqueue_lock("live", channel_id)
             LiveTVChannel.objects.filter(pk=channel_id).update(
                 processing_error=f"Celery enqueue failed, fallback thread started: {exc}",
             )
@@ -275,7 +280,11 @@ def enqueue_live_channel_hls_job(channel_id):
 
     from .hls import convert_live_channel_to_hls
 
-    threading.Thread(target=convert_live_channel_to_hls, args=(channel_id,), daemon=True).start()
+    def convert_in_thread():
+        release_hls_enqueue_lock("live", channel_id)
+        convert_live_channel_to_hls(channel_id)
+
+    threading.Thread(target=convert_in_thread, daemon=True).start()
     return "thread"
 
 

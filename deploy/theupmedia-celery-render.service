@@ -9,7 +9,7 @@ User=www-data
 Group=www-data
 WorkingDirectory=/var/www/theupmedia
 Environment="DJANGO_SETTINGS_MODULE=theupmedia.settings"
-ExecStart=/var/www/theupmedia/env/bin/celery -A theupmedia worker --loglevel=INFO --concurrency=1 --queues=render --hostname=render@%%h
+ExecStart=/var/www/theupmedia/venv/bin/celery -A theupmedia worker --loglevel=INFO --concurrency=1 --queues=render --hostname=render@%%h
 Restart=always
 RestartSec=10
 Nice=10

@@ -13,9 +13,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, LiveTVVideoHeadline, ShortsVideo, SocialRenderedVideo
-from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, cleanup_expired_live_video_sources, create_broadcast_render_job, delete_live_video_source, enqueue_completed_broadcast_renders, get_main_live_channel, rebuild_live_playlist, recover_stale_render_jobs, split_headline_parts
+from .services import add_uploaded_video_to_live_playlist, calculate_current_playback, cleanup_expired_live_video_sources, create_broadcast_render_job, delete_live_video_source, enqueue_completed_broadcast_renders, get_main_live_channel, rebuild_live_playlist, recover_stale_render_jobs, repair_live_tv_health, split_headline_parts
 from .tasks import process_live_channel_hls_task
-from .views import video_headline_payload
+from .views import enqueue_live_channel_hls_job, video_headline_payload
 
 
 class LegacyDashboardRedirectTests(SimpleTestCase):
@@ -36,6 +36,72 @@ class CeleryQueueRoutingTests(SimpleTestCase):
         self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.process_short_hls"]["queue"], "hls")
         self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.render_social_video"]["queue"], "render")
         self.assertEqual(settings.CELERY_TASK_ROUTES["live_tv.render_live_broadcast_video"]["queue"], "render")
+
+
+class HLSIdempotencyTests(TestCase):
+    @override_settings(LIVE_TV_RENDER_USE_CELERY=True)
+    @patch("live_tv.tasks.process_live_channel_hls_task.delay")
+    def test_simultaneous_enqueue_is_deduplicated(self, delay):
+        with TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            video = LiveTVChannel.objects.create(
+                title="Queue once",
+                slug="queue-once",
+                source_type=LiveTVChannel.SourceType.DIRECT,
+                video_file="live-tv/videos/queue-once.mp4",
+                hls_status=LiveTVChannel.HLSStatus.PENDING,
+                auto_add_to_live=True,
+                is_active=True,
+            )
+
+            self.assertEqual(enqueue_live_channel_hls_job(video.pk), "celery")
+            self.assertEqual(enqueue_live_channel_hls_job(video.pk), "queued")
+            delay.assert_called_once_with(video.pk)
+
+    def test_health_repair_restores_existing_hls_and_playlist(self):
+        with TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            LiveTVChannel.objects.all().delete()
+            main = LiveTVChannel.objects.create(
+                title="Main",
+                slug="hls-repair-main",
+                source_type=LiveTVChannel.SourceType.PLAYLIST,
+                auto_playlist_enabled=True,
+                auto_add_to_live=False,
+                is_active=True,
+                is_live=True,
+            )
+            video = LiveTVChannel.objects.create(
+                title="Already encoded",
+                slug="already-encoded",
+                source_type=LiveTVChannel.SourceType.DIRECT,
+                video_file="live-tv/videos/already-encoded.mp4",
+                hls_master_url="live-tv/hls/987/master.m3u8",
+                hls_status=LiveTVChannel.HLSStatus.PENDING,
+                hls_progress_percent=0,
+                processing_error="Queued by Live TV health repair.",
+                duration=90,
+                duration_seconds=90,
+                auto_playlist_enabled=False,
+                auto_add_to_live=True,
+                is_active=True,
+            )
+            master = Path(media_root) / video.hls_master_url
+            master.parent.mkdir(parents=True)
+            master.write_text("#EXTM3U\n", encoding="utf-8")
+            source = Path(media_root) / video.video_file.name
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes(b"test-video")
+
+            report = repair_live_tv_health(queue_hls=True, queue_renders=False)
+
+            video.refresh_from_db()
+            self.assertEqual(video.hls_status, LiveTVChannel.HLSStatus.COMPLETED)
+            self.assertEqual(video.hls_progress_percent, 100)
+            self.assertEqual(video.processing_error, "")
+            self.assertTrue(
+                LiveTVPlaylistItem.objects.filter(channel=main, video=video, is_active=True).exists(),
+                msg=f"report={report}; items={list(LiveTVPlaylistItem.objects.values())}",
+            )
+            self.assertEqual(report["hls_queued"], 0)
 
 
 class LiveVideoDeletionTests(TestCase):

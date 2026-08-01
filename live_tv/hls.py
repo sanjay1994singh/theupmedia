@@ -191,6 +191,48 @@ def hls_media_file_exists(media_path):
     return bool(media_path and (Path(settings.MEDIA_ROOT) / media_path).exists())
 
 
+def restore_existing_hls_completion(instance):
+    """Trust an atomically published HLS tree over a stale database status."""
+    if not instance or not instance.pk or not instance.hls_master_url:
+        return False
+    if not hls_media_file_exists(instance.hls_master_url):
+        return False
+    model = type(instance)
+    updates = {}
+    if instance.hls_status != model.HLSStatus.COMPLETED:
+        updates["hls_status"] = model.HLSStatus.COMPLETED
+    if instance.hls_progress_percent != 100:
+        updates["hls_progress_percent"] = 100
+    if instance.processing_error:
+        updates["processing_error"] = ""
+    if updates:
+        updates["updated_at"] = timezone.now()
+        model.objects.filter(pk=instance.pk).update(**updates)
+        for field, value in updates.items():
+            setattr(instance, field, value)
+    return True
+
+
+def acquire_hls_enqueue_lock(kind, object_id, stale_seconds=120):
+    lock_dir = Path(settings.MEDIA_ROOT) / "live-tv" / "hls" / ".queue-locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = lock_dir / f"{kind}-{object_id}.lock"
+    try:
+        if lock_path.exists() and (timezone.now().timestamp() - lock_path.stat().st_mtime) > stale_seconds:
+            lock_path.unlink(missing_ok=True)
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, str(os.getpid()).encode("ascii", errors="ignore"))
+        os.close(fd)
+        return lock_path
+    except FileExistsError:
+        return None
+
+
+def release_hls_enqueue_lock(kind, object_id):
+    lock_path = Path(settings.MEDIA_ROOT) / "live-tv" / "hls" / ".queue-locks" / f"{kind}-{object_id}.lock"
+    lock_path.unlink(missing_ok=True)
+
+
 def hls_processing_lock_is_active(name):
     lock_path = Path(settings.MEDIA_ROOT) / "live-tv" / "hls" / ".locks" / f"{name}.lock"
     if not lock_path.exists():
@@ -673,6 +715,9 @@ def render_short_frame(short_id):
 
 def convert_short_to_hls(short_id):
     short = ShortsVideo.objects.get(pk=short_id)
+    if restore_existing_hls_completion(short):
+        logger.info("Restored completed Shorts HLS state for %s from existing media.", short.pk)
+        return short.hls_master_url
     if not short.video_file:
         raise HLSProcessingError("Short has no video file.")
 
@@ -798,6 +843,9 @@ def convert_short_to_hls(short_id):
 
 def convert_live_channel_to_hls(channel_id):
     channel = LiveTVChannel.objects.get(pk=channel_id)
+    if restore_existing_hls_completion(channel):
+        logger.info("Restored completed Live TV HLS state for %s from existing media.", channel.pk)
+        return channel.hls_master_url
     if not channel.video_file:
         raise HLSProcessingError("Live TV channel has no video file.")
 

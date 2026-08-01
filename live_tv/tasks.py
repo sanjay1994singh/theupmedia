@@ -5,7 +5,7 @@ from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
 
-from .hls import convert_live_channel_to_hls, convert_short_to_hls, render_short_frame
+from .hls import convert_live_channel_to_hls, convert_short_to_hls, release_hls_enqueue_lock, render_short_frame
 from .account_emails import send_account_email
 from .models import AccountDeletionRequest, LiveTVChannel, MobileAdminToken, ShortsVideo
 from .views import run_media_download_job, run_social_render_job
@@ -54,6 +54,7 @@ def download_media_task(job_id):
 
 @shared_task(name="live_tv.process_short_hls")
 def process_short_hls_task(short_id):
+    release_hls_enqueue_lock("short", short_id)
     short = ShortsVideo.objects.filter(pk=short_id).first()
     if not short:
         return
@@ -74,6 +75,7 @@ def process_short_hls_task(short_id):
 
 @shared_task(name="live_tv.process_live_channel_hls")
 def process_live_channel_hls_task(channel_id):
+    release_hls_enqueue_lock("live", channel_id)
     initial_status = (
         LiveTVChannel.objects.filter(pk=channel_id)
         .values_list("hls_status", flat=True)
