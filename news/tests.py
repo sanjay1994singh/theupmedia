@@ -1,5 +1,6 @@
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from news.models import Article, Category
 
@@ -28,3 +29,17 @@ class ArticleDetailSeoTests(TestCase):
         self.assertContains(response, "BreadcrumbList")
         self.assertContains(response, "1 min read")
         self.assertContains(response, "Reference:")
+
+    def test_future_published_articles_are_not_public_yet(self):
+        category = Category.objects.create(name="Education", slug="education")
+        Article.objects.create(
+            title="Scheduled education analysis",
+            slug="scheduled-education-analysis",
+            category=category,
+            summary="A scheduled report summary with enough context for readers.",
+            content="<p>This article should become public only after its scheduled time.</p>",
+            status=Article.Status.PUBLISHED,
+            published_at=timezone.now() + timezone.timedelta(hours=2),
+        )
+
+        self.assertEqual(Article.published.count(), 0)
