@@ -140,11 +140,19 @@ def generate_editorial_topics(limit=100):
         "सोशल मीडिया",
         "न्याय व्यवस्था",
     ]
+    perspective_variants = [
+        "जनभावना का विश्लेषण",
+        "नीति सुधार की जरूरत",
+        "जवाबदेही का सवाल",
+        "आर्थिक और सामाजिक असर",
+        "आगे की राह",
+    ]
     for index in range(limit):
         base_title, category, angle, key = BASE_TOPICS[index % len(BASE_TOPICS)]
         focus = focus_variants[index % len(focus_variants)]
+        perspective = perspective_variants[(index // len(focus_variants)) % len(perspective_variants)]
         reference_name, reference_url = CORE_REFERENCES[key]
-        title = f"{base_title}: {focus} के लिए क्या मायने हैं"
+        title = f"{base_title}: {focus} के लिए {perspective}"
         topics.append(
             EditorialTopic(
                 title=title,
