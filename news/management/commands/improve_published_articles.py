@@ -80,6 +80,9 @@ class Command(BaseCommand):
             article.image_caption = article.image_caption or f"{article.title} से जुड़ी प्रतीकात्मक तस्वीर"
             article.image_credit = article.image_credit or "The Up Media"
             article.source_name = article.source_name or guide["source"]
+            if article.author_id:
+                article.reviewed_by = article.reviewed_by or article.author
+                article.fact_checked_by = article.fact_checked_by or article.author
             article.save()
             if not article.featured_image:
                 self._attach_thumbnail(article)
