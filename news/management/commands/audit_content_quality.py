@@ -57,8 +57,9 @@ class Command(BaseCommand):
         self.stdout.write(f"Active empty categories: {len(empty_categories)}")
 
         for row in issues[:50]:
+            safe_title = row["title"].encode("ascii", "ignore").decode("ascii").strip() or f"article-{row['id']}"
             self.stdout.write(
-                f"[{row['id']}] {row['title']} ({row['word_count']} words): {row['warnings']}"
+                f"[{row['id']}] {safe_title} ({row['word_count']} words): {row['warnings']}"
             )
 
         if options["csv_path"]:

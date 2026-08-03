@@ -52,7 +52,12 @@ class ArticleAdmin(admin.ModelAdmin):
     search_fields = ("title", "summary", "content", "meta_keywords", "state__name", "city__name")
     autocomplete_fields = ("state", "city", "author", "reviewed_by", "fact_checked_by")
     readonly_fields = ("unique_reads", "facebook_post_id", "facebook_posted_at", "facebook_post_error", "created_at", "updated_at")
-    actions = ("repair_hindi_encoding", "post_selected_to_facebook", "clear_facebook_post_tracking")
+    actions = (
+        "repair_hindi_encoding",
+        "schedule_selected_every_two_hours",
+        "post_selected_to_facebook",
+        "clear_facebook_post_tracking",
+    )
     fieldsets = (
         ("Article", {"fields": ("title", "slug", "category", "state", "city", "author", "summary", "content", "featured_image", "image_alt_text", "image_caption", "image_credit")}),
         ("Publishing", {"fields": ("status", "is_featured", "published_at", "source_name", "source_url", "reviewed_by", "fact_checked_by", "correction_note")}),
@@ -91,7 +96,11 @@ class ArticleAdmin(admin.ModelAdmin):
             old_status = Article.objects.filter(pk=obj.pk).values_list("status", flat=True).first()
         if not obj.author_id:
             obj.author = request.user
-        if obj.status == Article.Status.PUBLISHED and old_status != Article.Status.PUBLISHED:
+        if (
+            obj.status == Article.Status.PUBLISHED
+            and old_status != Article.Status.PUBLISHED
+            and obj.published_at <= timezone.now()
+        ):
             obj.published_at = timezone.now()
         super().save_model(request, obj, form, change)
         became_published = obj.status == Article.Status.PUBLISHED and old_status != Article.Status.PUBLISHED
@@ -129,6 +138,34 @@ class ArticleAdmin(admin.ModelAdmin):
             article.save()
             updated += 1
         self.message_user(request, f"Hindi encoding repaired for {updated} article(s).", messages.INFO)
+
+    @admin.action(description="Schedule selected drafts every 2 hours after review")
+    def schedule_selected_every_two_hours(self, request, queryset):
+        scheduled = 0
+        skipped = 0
+        start_at = timezone.now() + timezone.timedelta(hours=2)
+        for article in queryset.order_by("published_at", "pk"):
+            if article.status != Article.Status.DRAFT:
+                skipped += 1
+                continue
+            warnings = article_quality_warnings(article)
+            blocking = [
+                warning
+                for warning in warnings
+                if not warning.startswith("Reviewed by") and not warning.startswith("Fact checked by")
+            ]
+            if blocking:
+                skipped += 1
+                continue
+            if not article.reviewed_by_id:
+                article.reviewed_by = request.user
+            if not article.fact_checked_by_id:
+                article.fact_checked_by = request.user
+            article.status = Article.Status.PUBLISHED
+            article.published_at = start_at + timezone.timedelta(hours=2 * scheduled)
+            article.save()
+            scheduled += 1
+        self.message_user(request, f"Scheduled: {scheduled}, skipped: {skipped}", messages.INFO)
 
     @admin.action(description="Post selected published articles to Facebook")
     def post_selected_to_facebook(self, request, queryset):
