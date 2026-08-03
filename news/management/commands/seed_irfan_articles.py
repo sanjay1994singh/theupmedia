@@ -1,14 +1,10 @@
-from pathlib import Path
-
-from django.conf import settings
-from django.contrib.auth import get_user_model
-from django.core.files import File
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from PIL import Image, ImageDraw
 
+from news.article_defaults import get_default_author, get_or_make_location
 from news.models import Article, Category
 from news.slug_utils import seo_slugify, unique_article_slug
+from news.thumbnail_utils import attach_text_thumbnail
 
 
 IRFAN_TOPICS = [
@@ -72,7 +68,8 @@ class Command(BaseCommand):
             start_date = timezone.datetime.fromisoformat(options["start_date"]).date()
         created = 0
         skipped = 0
-        author = get_user_model().objects.filter(is_superuser=True).order_by("id").first()
+        author = get_default_author()
+        state, city = get_or_make_location("Delhi", "Delhi")
         for index, (title, angle) in enumerate(IRFAN_TOPICS):
             day = index // 2
             hour = 11 if index % 2 == 0 else 19
@@ -95,6 +92,8 @@ class Command(BaseCommand):
                 title=title,
                 slug=unique_article_slug(Article, title),
                 category=category,
+                state=state,
+                city=city,
                 summary=summary,
                 content=self._content(title, angle),
                 status=Article.Status.PUBLISHED,
@@ -111,7 +110,7 @@ class Command(BaseCommand):
                 reviewed_by=author,
                 fact_checked_by=author,
             )
-            self._attach_thumbnail(article)
+            attach_text_thumbnail(article, folder="irfan", prefix="irfan")
             created += 1
         self.stdout.write(self.style.SUCCESS(f"Created scheduled articles: {created}, skipped duplicates: {skipped}"))
 
@@ -152,20 +151,3 @@ class Command(BaseCommand):
 
 <p><strong>Editorial note:</strong> यह लेख उपलब्ध सार्वजनिक रिपोर्टों और बयानों के आधार पर स्वतंत्र रूप से लिखा गया है। इरफान की आर्थिक स्थिति, स्थानीय drug claims या political impact जैसे पहलुओं को अंतिम तथ्य नहीं, बल्कि रिपोर्टेड information और public-interest questions के रूप में प्रस्तुत किया गया है।</p>
 """.strip()
-
-    def _attach_thumbnail(self, article):
-        thumb_dir = Path(settings.MEDIA_ROOT) / "articles" / "irfan"
-        thumb_dir.mkdir(parents=True, exist_ok=True)
-        file_path = thumb_dir / f"irfan-{article.pk}-thumb.jpg"
-        image = Image.new("RGB", (1200, 675), "#111827")
-        draw = ImageDraw.Draw(image)
-        draw.rectangle((0, 0, 1200, 675), fill="#111827")
-        draw.rectangle((0, 0, 1200, 155), fill="#b91c1c")
-        draw.rectangle((46, 195, 1154, 615), outline="#ef4444", width=7)
-        draw.text((66, 50), "THE UP MEDIA", fill="#ffffff")
-        draw.text((76, 245), "MOHAMMAD IRFAN", fill="#ffffff")
-        draw.text((76, 310), "Jantar Mantar Voice", fill="#fca5a5")
-        draw.text((76, 548), article.category.name.upper(), fill="#ffffff")
-        image.save(file_path, "JPEG", quality=88, optimize=True)
-        with file_path.open("rb") as image_file:
-            article.featured_image.save(file_path.name, File(image_file), save=True)

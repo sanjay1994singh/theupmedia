@@ -1,12 +1,8 @@
-from pathlib import Path
-
-from django.conf import settings
-from django.core.files import File
 from django.core.management.base import BaseCommand
 from django.utils.html import strip_tags
-from PIL import Image, ImageDraw, ImageFont
 
 from news.models import Article
+from news.thumbnail_utils import attach_text_thumbnail
 
 
 ARTICLE_GUIDES = {
@@ -85,7 +81,7 @@ class Command(BaseCommand):
                 article.fact_checked_by = article.fact_checked_by or article.author
             article.save()
             if not article.featured_image:
-                self._attach_thumbnail(article)
+                attach_text_thumbnail(article, folder="generated", prefix="article")
             updated += 1
         self.stdout.write(self.style.SUCCESS(f"Updated articles: {updated}"))
 
@@ -148,21 +144,3 @@ class Command(BaseCommand):
 
 <p><strong>Editorial note:</strong> यह लेख उपलब्ध जानकारी के आधार पर स्वतंत्र रूप से लिखा गया है। इसमें किसी दूसरे प्रकाशन की भाषा या पैराग्राफ संरचना का उपयोग नहीं किया गया है। नई आधिकारिक जानकारी आने पर लेख को अपडेट किया जा सकता है। संदर्भ: {guide['source']}।</p>
 """.strip()
-
-    def _attach_thumbnail(self, article):
-        thumb_dir = settings.MEDIA_ROOT / "articles" / "generated"
-        thumb_dir.mkdir(parents=True, exist_ok=True)
-        file_path = thumb_dir / f"article-{article.pk}-thumb.jpg"
-
-        image = Image.new("RGB", (1200, 675), "#111827")
-        draw = ImageDraw.Draw(image)
-        draw.rectangle((0, 0, 1200, 675), fill="#111827")
-        draw.rectangle((0, 0, 1200, 150), fill="#b91c1c")
-        draw.rectangle((42, 192, 1158, 620), outline="#ef4444", width=6)
-        draw.text((64, 46), "THE UP MEDIA", fill="#ffffff")
-        draw.text((72, 230), article.title[:90], fill="#ffffff")
-        draw.text((72, 548), article.category.name.upper(), fill="#fca5a5")
-        image.save(file_path, "JPEG", quality=88, optimize=True)
-
-        with file_path.open("rb") as image_file:
-            article.featured_image.save(file_path.name, File(image_file), save=True)
