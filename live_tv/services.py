@@ -385,7 +385,7 @@ def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
         "show_live_badge": setting.show_live_badge,
         "show_lower_third": setting.show_lower_third and bool(lower_label or headlines),
         "show_ticker": setting.show_ticker,
-        "render_format": "16:9",
+        "render_format": "fast_720p",
         "frame_template": "broadcast_live_tv",
         "frame_category": "live_broadcast",
         "source_video_id": video.pk,
@@ -438,7 +438,7 @@ def same_live_broadcast_render_jobs(channel, video, playlist_item):
         source_video=video,
         frame_category="live_broadcast",
         frame_template="broadcast_live_tv",
-        render_format="16:9",
+        render_format__in=["16:9", "fast_720p"],
         is_active=True,
     )
 
