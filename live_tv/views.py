@@ -1743,6 +1743,7 @@ def parse_ffmpeg_time(line):
 def update_render_progress(job_id, percent):
     percent = max(0, min(99, int(percent)))
     SocialRenderedVideo.objects.filter(pk=job_id).update(
+        status=SocialRenderedVideo.Status.PROCESSING,
         progress_percent=percent,
         updated_at=timezone.now(),
     )

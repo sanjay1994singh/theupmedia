@@ -222,9 +222,9 @@ def queue_broadcast_render_task(job_id):
     queued_with_celery = False
     if getattr(settings, "LIVE_TV_RENDER_USE_CELERY", True):
         try:
-            from .tasks import render_live_broadcast_video_task
+            from celery import current_app
 
-            render_live_broadcast_video_task.delay(job_id)
+            current_app.send_task("live_tv.render_live_broadcast_video", args=[job_id], queue="render")
             queued_with_celery = True
         except Exception as exc:
             SocialRenderedVideo.objects.filter(pk=job_id).update(
