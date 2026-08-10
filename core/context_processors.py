@@ -9,6 +9,8 @@ def site_settings(request):
         "SITE_NAME": settings.SITE_NAME,
         "SITE_DOMAIN": settings.SITE_DOMAIN,
         "NAV_CATEGORIES": Category.objects.filter(is_active=True)
+        .order_by()
         .annotate(published_count=Count("articles", filter=Q(articles__status="published")))
-        .filter(published_count__gt=0)[:8],
+        .filter(published_count__gt=0)
+        .order_by("-published_count", "name")[:8],
     }
