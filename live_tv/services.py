@@ -231,11 +231,13 @@ def queue_broadcast_render_task(job_id):
                 error_message=f"Celery enqueue failed, fallback thread started: {exc}",
             )
 
-    if queued_with_celery and getattr(settings, "LIVE_TV_RENDER_THREAD_FALLBACK", True):
-        from .views import run_social_render_job_if_stale
+    if queued_with_celery:
+        if getattr(settings, "LIVE_TV_RENDER_THREAD_FALLBACK", True):
+            from .views import run_social_render_job_if_stale
 
-        threading.Thread(target=run_social_render_job_if_stale, args=(job_id, 45), daemon=True).start()
-        return "celery+fallback"
+            threading.Thread(target=run_social_render_job_if_stale, args=(job_id, 45), daemon=True).start()
+            return "celery+fallback"
+        return "celery"
 
     from .views import run_social_render_job
 
