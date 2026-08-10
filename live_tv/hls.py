@@ -985,7 +985,19 @@ def convert_live_channel_to_hls(channel_id):
             try:
                 from .services import add_uploaded_video_to_live_playlist
 
-                add_uploaded_video_to_live_playlist(channel)
+                playlist_item, _created = add_uploaded_video_to_live_playlist(channel)
+                try:
+                    from .services import enqueue_broadcast_render_job_for_cycle_item
+
+                    active_cycle_item = playlist_item.cycle_items.order_by(
+                        "-cycle__starts_at",
+                        "-cycle__version",
+                        "-pk",
+                    ).first()
+                    if active_cycle_item:
+                        enqueue_broadcast_render_job_for_cycle_item(active_cycle_item)
+                except Exception:
+                    logger.exception("Immediate live broadcast render enqueue failed for channel %s", channel.pk)
             except Exception:
                 logger.exception("Live playlist auto-add failed for channel %s", channel.pk)
         try:

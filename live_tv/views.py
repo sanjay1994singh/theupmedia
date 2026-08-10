@@ -269,6 +269,24 @@ def enqueue_live_channel_hls_job(channel_id):
             from .tasks import process_live_channel_hls_task
 
             process_live_channel_hls_task.delay(channel_id)
+            if getattr(settings, "LIVE_TV_HLS_THREAD_FALLBACK", True):
+                import threading
+
+                from .hls import convert_live_channel_to_hls
+
+                def convert_if_still_pending():
+                    import time
+
+                    time.sleep(getattr(settings, "LIVE_TV_HLS_FALLBACK_DELAY_SECONDS", 20))
+                    stale_channel = LiveTVChannel.objects.filter(pk=channel_id).first()
+                    if not stale_channel or stale_channel.hls_status != LiveTVChannel.HLSStatus.PENDING:
+                        return
+                    if hls_processing_lock_is_active("live-channel"):
+                        return
+                    release_hls_enqueue_lock("live", channel_id)
+                    convert_live_channel_to_hls(channel_id)
+
+                threading.Thread(target=convert_if_still_pending, daemon=True).start()
             return "celery"
         except Exception as exc:
             release_hls_enqueue_lock("live", channel_id)

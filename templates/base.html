@@ -55,7 +55,9 @@
 <!--        {% endif %}-->
         <a href="{% url 'blog:post_list' %}">Blog</a>
         <a href="{% url 'services:service_list' %}">Services</a>
-        <a href="{% url 'social_downloader:home' %}">Downloader</a>
+        {% if user.is_staff %}
+          <a href="{% url 'social_downloader:home' %}">Downloader</a>
+        {% endif %}
         <a class="nav-app-download" href="{% url 'live_tv:download_latest_testing_app' %}" title="Download the latest The UP Media testing app">Mobile App</a>
 
 <!--        {% if user.is_staff %}<a href="{% url 'distribution:dashboard' %}">Distribution</a>{% endif %}-->
@@ -124,7 +126,9 @@
         <a href="{% url 'subscriptions:cart' %}">Cart</a>
         <a href="{% url 'subscriptions:my_subscriptions' %}">My Services</a>
       {% endif %}
-      <a href="{% url 'social_downloader:home' %}">Downloader</a>
+      {% if user.is_staff %}
+        <a href="{% url 'social_downloader:home' %}">Downloader</a>
+      {% endif %}
       <a href="{% url 'live_tv:download_latest_testing_app' %}">Download Mobile App</a>
       <a href="{% url 'core:privacy_policy' %}">Privacy Policy</a>
       <a href="{% url 'core:terms' %}">Terms</a>
