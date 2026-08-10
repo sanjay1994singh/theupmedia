@@ -46,7 +46,7 @@ except ImportError:  # pragma: no cover - server requirements include Pillow
 from .hls import acquire_hls_enqueue_lock, hls_processing_lock_is_active, release_hls_enqueue_lock, restore_existing_hls_completion, validate_uploaded_video
 from .account_emails import queue_account_email
 from .models import AccountDeletionRequest, AppMenu, BlockedUser, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, MobileAppRelease, PushDevice, ShortsComment, ShortsCommentLike, ShortsCommentReport, ShortsLike, ShortsVideo, SocialRenderedVideo
-from .services import calculate_current_playback, delete_live_video_source, enqueue_completed_broadcast_renders, expanded_video_headlines, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
+from .services import calculate_current_playback, delete_live_video_source, enqueue_completed_broadcast_renders, expanded_video_headlines, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, prepare_uploaded_video_for_instant_live, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
 from blog.models import BlogPost
 from news.models import Article, Category
 from services.models import Service
@@ -746,11 +746,12 @@ def serialize_synced_live_state(request, channel, server_time=None):
     video = state["video"]
     setting = live_tv_setting()
     ticker_setting = news_ticker_setting()
-    if not live_video_hls_ready(video):
+    hls_ready = live_video_hls_ready(video)
+    if not hls_ready and not video.video_file:
         return None
-    hls_url = absolute_media_path_url(request, video.hls_master_url)
-    video_url = ""
-    stream_url = hls_url
+    hls_url = absolute_media_path_url(request, video.hls_master_url) if hls_ready else ""
+    video_url = "" if hls_ready else absolute_media_url(request, video.video_file)
+    stream_url = hls_url or video_url
     next_video = state["next_entry"].video if state.get("next_entry") else None
     ticker = ticker_items_from_text(ticker_setting.text)
     ticker_started_at = setting.ticker_started_at or setting.updated_at or server_time
@@ -765,7 +766,7 @@ def serialize_synced_live_state(request, channel, server_time=None):
         "channel_title": channel.title,
         "channel": {"id": channel.pk, "slug": channel.slug, "title": channel.title},
         "source_type": LiveTVChannel.SourceType.PLAYLIST,
-        "player_type": LiveTVChannel.SourceType.HLS,
+        "player_type": LiveTVChannel.SourceType.HLS if hls_ready else LiveTVChannel.SourceType.DIRECT,
         "video_id": video.pk,
         "title": video.title,
         **headline_data,
@@ -3464,6 +3465,7 @@ def mobile_admin_channel_save_api(request):
     channel.meta_description = request.POST.get("meta_description", "").strip()[:220]
     channel.save()
     if channel.source_type == LiveTVChannel.SourceType.DIRECT and channel.video_file:
+        prepare_uploaded_video_for_instant_live(channel)
         enqueue_live_channel_hls_job(channel.pk)
     return JsonResponse({"channel": serialize_channel_for_admin(request, channel)})
 

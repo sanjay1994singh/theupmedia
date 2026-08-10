@@ -167,8 +167,25 @@ def live_video_hls_ready(video):
         return False
 
 
+def live_video_file_ready(video):
+    if not video or video.source_type != LiveTVChannel.SourceType.DIRECT:
+        return False
+    return bool(video.video_file and video.video_file.name and video.effective_duration_seconds > 0)
+
+
+def playlist_streamable_video_filter(at=None):
+    return Q(
+        video__created_at__gte=live_playlist_cutoff(at),
+        video__source_type=LiveTVChannel.SourceType.DIRECT,
+        video__video_file__gt="",
+    ) & (
+        Q(video__hls_status=LiveTVChannel.HLSStatus.COMPLETED, video__hls_master_url__gt="")
+        | Q(video__video_file__gt="")
+    )
+
+
 def live_playlist_video_is_streamable(video, at=None):
-    return bool(live_playlist_video_is_fresh(video, at=at) and live_video_hls_ready(video))
+    return bool(live_playlist_video_is_fresh(video, at=at) and (live_video_hls_ready(video) or live_video_file_ready(video)))
 
 
 def expire_old_live_playlist_items(channel, at=None):
@@ -194,7 +211,7 @@ def expire_old_live_playlist_items(channel, at=None):
         normalize_playlist_positions(locked_channel)
         locked_channel.playlist_version += 1
         locked_channel.last_playlist_update = at
-        if not locked_channel.playlist_items.filter(is_active=True, duration_seconds__gt=0, video__hls_status=LiveTVChannel.HLSStatus.COMPLETED, video__hls_master_url__gt="").exists():
+        if not locked_channel.playlist_items.filter(is_active=True, duration_seconds__gt=0).filter(playlist_streamable_video_filter(at)).exists():
             locked_channel.playback_started_at = None
         locked_channel.playlist_cycles.all().delete()
         locked_channel.save(update_fields=["playlist_version", "last_playlist_update", "playback_started_at", "updated_at"])
@@ -251,7 +268,7 @@ def get_main_live_channel(create=False):
     )
 
 
-def validate_playlist_video(video, check_storage=True):
+def validate_playlist_video(video, check_storage=True, require_hls=False):
     errors = []
     if video.source_type != LiveTVChannel.SourceType.DIRECT:
         errors.append("Only direct uploaded videos are eligible.")
@@ -273,7 +290,7 @@ def validate_playlist_video(video, check_storage=True):
             errors.append(f"Video storage check failed: {exc}")
     if video.effective_duration_seconds <= 0:
         errors.append("Video duration must be greater than zero.")
-    if not live_video_hls_ready(video):
+    if require_hls and not live_video_hls_ready(video):
         errors.append("Video HLS is not ready yet; Live TV uses HLS only.")
     if errors:
         raise ValidationError(errors)
@@ -716,7 +733,7 @@ def ensure_current_cycle(channel, at=None):
         if cycle:
             return cycle
         items = list(
-            channel.playlist_items.filter(is_active=True, duration_seconds__gt=0, video__created_at__gte=live_playlist_cutoff(at), video__hls_status=LiveTVChannel.HLSStatus.COMPLETED, video__hls_master_url__gt="")
+            channel.playlist_items.filter(is_active=True, duration_seconds__gt=0).filter(playlist_streamable_video_filter(at))
             .select_related("video")
             .order_by("position", "pk")
         )
@@ -781,7 +798,7 @@ def _schedule_updated_cycle(channel, current_state, priority, selected_item=None
     at = at or timezone.now()
     expire_old_live_playlist_items(channel, at=at)
     items = list(
-        channel.playlist_items.filter(is_active=True, duration_seconds__gt=0, video__created_at__gte=live_playlist_cutoff(at), video__hls_status=LiveTVChannel.HLSStatus.COMPLETED, video__hls_master_url__gt="")
+        channel.playlist_items.filter(is_active=True, duration_seconds__gt=0).filter(playlist_streamable_video_filter(at))
         .select_related("video")
         .order_by("position", "pk")
     )
@@ -812,7 +829,7 @@ def _trim_playlist(channel, protected_item_ids=None, at=None):
     at = at or timezone.now()
     protected_item_ids = set(protected_item_ids or [])
     expire_old_live_playlist_items(channel, at=at)
-    items = list(channel.playlist_items.filter(is_active=True, video__created_at__gte=live_playlist_cutoff(at), video__hls_status=LiveTVChannel.HLSStatus.COMPLETED, video__hls_master_url__gt="").order_by("added_at", "pk"))
+    items = list(channel.playlist_items.filter(is_active=True).filter(playlist_streamable_video_filter(at)).order_by("added_at", "pk"))
     target = max(1, int(channel.target_playlist_duration_seconds or 10800))
     total = sum(item.duration_seconds for item in items)
     while total > target and len(items) > 1:
@@ -846,7 +863,7 @@ def add_uploaded_video_to_live_playlist(video, channel=None, priority=LiveTVPlay
         if item and item.is_active and priority == LiveTVPlaylistItem.Priority.NORMAL:
             return item, False
         expire_old_live_playlist_items(channel, at=now)
-        max_position = channel.playlist_items.filter(is_active=True, video__created_at__gte=live_playlist_cutoff(now), video__hls_status=LiveTVChannel.HLSStatus.COMPLETED, video__hls_master_url__gt="").aggregate(value=Max("position"))["value"]
+        max_position = channel.playlist_items.filter(is_active=True).filter(playlist_streamable_video_filter(now)).aggregate(value=Max("position"))["value"]
         if item:
             item.is_active = True
             item.removed_at = None
@@ -878,6 +895,28 @@ def add_uploaded_video_to_live_playlist(video, channel=None, priority=LiveTVPlay
         return item, created
 
 
+def prepare_uploaded_video_for_instant_live(video, priority=LiveTVPlaylistItem.Priority.IMMEDIATE):
+    if not video or video.source_type != LiveTVChannel.SourceType.DIRECT or not video.video_file:
+        return None, False
+    if video.effective_duration_seconds <= 0:
+        try:
+            from .hls import probe_video
+
+            metadata = probe_video(video.video_file.path)
+            duration = metadata.get("duration") or 0
+            LiveTVChannel.objects.filter(pk=video.pk).update(
+                duration=duration,
+                duration_seconds=max(1, int(round(duration or 0))),
+                updated_at=timezone.now(),
+            )
+            video.duration = duration
+            video.duration_seconds = max(1, int(round(duration or 0)))
+        except Exception:
+            logger.exception("Could not probe uploaded video duration for instant Live TV playlist: %s", video.pk)
+            return None, False
+    return add_uploaded_video_to_live_playlist(video, priority=priority)
+
+
 def update_playlist_item(item, action):
     if action not in {"move_up", "move_down", "remove", "restore", "next", "immediate"}:
         raise ValidationError("Unknown playlist action.")
@@ -889,7 +928,7 @@ def update_playlist_item(item, action):
         item = LiveTVPlaylistItem.objects.select_for_update().select_related("video").get(pk=item.pk)
         current_state = calculate_current_playback(channel, at=now)
         expire_old_live_playlist_items(channel, at=now)
-        active_items = list(channel.playlist_items.select_for_update().filter(is_active=True, video__created_at__gte=live_playlist_cutoff(now), video__hls_status=LiveTVChannel.HLSStatus.COMPLETED, video__hls_master_url__gt="").order_by("position", "pk"))
+        active_items = list(channel.playlist_items.select_for_update().filter(is_active=True).filter(playlist_streamable_video_filter(now)).order_by("position", "pk"))
         if action == "remove":
             if len(active_items) <= 1:
                 raise ValidationError("At least one playable item must remain active.")
@@ -937,12 +976,7 @@ def deactivate_unstreamable_playlist_items(channel, at=None):
     channel.playlist_version += 1
     channel.last_playlist_update = at
     channel.playlist_cycles.all().delete()
-    if not channel.playlist_items.filter(
-        is_active=True,
-        duration_seconds__gt=0,
-        video__hls_status=LiveTVChannel.HLSStatus.COMPLETED,
-        video__hls_master_url__gt="",
-    ).exists():
+    if not channel.playlist_items.filter(is_active=True, duration_seconds__gt=0).filter(playlist_streamable_video_filter(at)).exists():
         channel.playback_started_at = None
     channel.save(update_fields=["playlist_version", "last_playlist_update", "playback_started_at", "updated_at"])
     return len(remove_ids)

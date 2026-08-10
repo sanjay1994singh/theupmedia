@@ -31,7 +31,7 @@ class ShortsCommentReportAdmin(admin.ModelAdmin):
 class BlockedUserAdmin(admin.ModelAdmin):
     list_display = ("user", "blocked_user", "created_at")
     search_fields = ("user__username", "blocked_user__username")
-from .services import calculate_current_playback, delete_live_video_source, update_playlist_item
+from .services import calculate_current_playback, delete_live_video_source, prepare_uploaded_video_for_instant_live, update_playlist_item
 
 
 def processing_progress_bar(percent, status=""):
@@ -202,7 +202,7 @@ class LiveTVChannelAdmin(admin.ModelAdmin):
         if obj.source_type == LiveTVChannel.SourceType.DIRECT and obj.video_file and video_changed:
             from .views import enqueue_live_channel_hls_job
 
-            transaction.on_commit(lambda: enqueue_live_channel_hls_job(obj.pk))
+            transaction.on_commit(lambda: (prepare_uploaded_video_for_instant_live(obj), enqueue_live_channel_hls_job(obj.pk)))
 
     @admin.display(description="HLS progress")
     def hls_progress_display(self, obj):
