@@ -2657,7 +2657,16 @@ def app_home_api(request):
     content = HomeContent.objects.filter(is_active=True)
     featured = content.filter(section=HomeContent.Section.FEATURED)[:12]
     top_videos = content.filter(section=HomeContent.Section.TOP_VIDEO)[:12]
-    shorts = ShortsVideo.objects.filter(is_published=True).select_related("category", "state", "city").prefetch_related("comments")[:12]
+    shorts = (
+        ShortsVideo.objects
+        .filter(
+            is_published=True,
+            hls_status=ShortsVideo.HLSStatus.COMPLETED,
+            hls_master_url__gt="",
+        )
+        .select_related("category", "state", "city")
+        .prefetch_related("comments")[:12]
+    )
     districts = LiveTVCity.objects.filter(is_active=True).select_related("state")[:30]
 
     website_categories = Category.objects.filter(is_active=True).order_by("name")[:30]
@@ -2838,7 +2847,11 @@ def shorts_list_api(request):
         page_size = 12
     offset = (page - 1) * page_size
     shorts_qs = (
-        ShortsVideo.objects.filter(is_published=True)
+        ShortsVideo.objects.filter(
+            is_published=True,
+            hls_status=ShortsVideo.HLSStatus.COMPLETED,
+            hls_master_url__gt="",
+        )
         .select_related("category", "state", "city", "created_by")
         .prefetch_related("comments")
     )
@@ -3578,6 +3591,7 @@ def mobile_admin_shorts_status_api(request, pk):
         ShortsVideo.objects.select_related("category", "state", "city", "created_by").prefetch_related("comments"),
         pk=pk,
     )
+    return JsonResponse({"short": serialize_shorts_video(request, short)})
 
 
 @csrf_exempt

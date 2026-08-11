@@ -12,9 +12,7 @@ class UserLoginView(LoginView):
     template_name = "accounts/login.html"
 
     def get_success_url(self):
-        if self.request.user.is_superuser:
-            return reverse_lazy("live_tv:control_dashboard")
-        return super().get_success_url()
+        return self.get_redirect_url() or reverse_lazy("core:home")
 
 
 class UserLogoutView(LogoutView):
@@ -36,8 +34,6 @@ def signup(request):
 
 @login_required
 def profile(request):
-    if request.method == "GET" and request.user.is_superuser:
-        return redirect("live_tv:control_dashboard")
     if request.method == "POST":
         form = ProfileForm(request.POST, request.FILES, instance=request.user)
         if form.is_valid():
