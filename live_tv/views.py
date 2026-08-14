@@ -2669,7 +2669,12 @@ def app_home_api(request):
     )
     districts = LiveTVCity.objects.filter(is_active=True).select_related("state")[:30]
 
-    website_categories = Category.objects.filter(is_active=True).order_by("name")[:30]
+    website_categories = (
+        Category.objects
+        .filter(is_active=True, articles__status=Article.Status.PUBLISHED)
+        .distinct()
+        .order_by("name")[:30]
+    )
     requested_channel = request.GET.get("release_channel", MobileAppRelease.Channel.TESTING)
     if requested_channel not in MobileAppRelease.Channel.values:
         requested_channel = MobileAppRelease.Channel.TESTING
@@ -2735,7 +2740,12 @@ def app_home_api(request):
 
 @require_GET
 def mobile_news_categories_api(request):
-    categories = Category.objects.filter(is_active=True).order_by("name")
+    categories = (
+        Category.objects
+        .filter(is_active=True, articles__status=Article.Status.PUBLISHED)
+        .distinct()
+        .order_by("name")
+    )
     return JsonResponse({
         "results": [
             {"id": category.pk, "name": category.name, "slug": category.slug, "description": strip_tags(category.description or ""), "image": mobile_absolute_file_url(request, category.image)}
@@ -2798,6 +2808,9 @@ def mobile_profile_api(request):
         last_name = request.POST.get("last_name", user.last_name).strip()
         user.first_name = first_name
         user.last_name = last_name
+        if request.FILES.get("avatar") and hasattr(user, "avatar"):
+            delete_file_field(user.avatar)
+            user.avatar = request.FILES["avatar"]
         user.save()
     return JsonResponse({"user": serialize_mobile_user(user)})
 

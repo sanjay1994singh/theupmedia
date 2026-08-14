@@ -26,7 +26,11 @@ from .sitemaps import StaticPageSitemap
 def home(request):
     featured = Article.published.select_related("category", "state", "city", "author").filter(is_featured=True)[:5]
     latest = Article.published.select_related("category", "state", "city", "author")[:12]
-    categories = Category.objects.filter(is_active=True)[:8]
+    categories = (
+        Category.objects
+        .filter(is_active=True, articles__status=Article.Status.PUBLISHED)
+        .distinct()[:8]
+    )
     latest_blogs = BlogPost.published.select_related("author")[:3]
     services = Service.objects.filter(is_active=True, is_featured=True)[:6]
     subscription_plans = list(SubscriptionPlan.objects.select_related("service").filter(is_active=True, service__is_active=True)[:6])
