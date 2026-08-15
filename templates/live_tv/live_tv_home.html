@@ -10,7 +10,7 @@
   <div class="live-tv-shell">
     {% if active_channel %}
       <div class="live-tv-main">
-        {% include "live_tv/partials/web_live_broadcast.html" with live_channel=active_channel live_settings=live_settings live_ticker=news_ticker live_next_channel=next_channel live_loop_same=loop_same_channel live_seek_position=live_seek_position live_video_duration=live_video_duration live_server_time=live_server_time %}
+        {% include "live_tv/partials/web_live_broadcast.html" with live_channel=active_channel live_settings=live_settings live_ticker=news_ticker live_next_channel=next_channel live_loop_same=loop_same_channel live_seek_position=live_seek_position live_video_duration=live_video_duration live_server_time=live_server_time live_location_name=live_location_name %}
         {% include "advertisements/news_portal.html" %}
         {% include "advertisements/gen_ai_course.html" %}
 

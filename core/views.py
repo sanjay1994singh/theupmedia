@@ -41,6 +41,7 @@ def home(request):
         plan.home_features = [feature.strip() for feature in plan.features.splitlines() if feature.strip()][:3]
     home_live_tv_channels = list(LiveTVChannel.objects.filter(is_active=True).order_by("display_order", "pk"))
     home_live_tv = get_main_live_channel(create=False) or next((channel for channel in home_live_tv_channels if channel.is_live), None) or (home_live_tv_channels[0] if home_live_tv_channels else None)
+    home_live_tv_parent = home_live_tv
     home_live_tv_next = None
     home_live_seek_position = 0
     home_live_video_duration = 0
@@ -67,6 +68,14 @@ def home(request):
             home_live_video_duration = playlist_state["entry"].duration_seconds
     elif home_live_tv_channels:
         home_live_tv_next = home_live_tv_channels[1] if len(home_live_tv_channels) > 1 else home_live_tv
+    home_live_city = getattr(home_live_tv, "city", None) or getattr(home_live_tv_parent, "city", None)
+    home_live_state = getattr(home_live_tv, "state", None) or getattr(home_live_tv_parent, "state", None)
+    home_live_location_name = ", ".join(
+        part for part in [
+            getattr(home_live_city, "name", ""),
+            getattr(home_live_state, "name", ""),
+        ] if part
+    )
     return render(
         request,
         "core/home.html",
@@ -85,6 +94,7 @@ def home(request):
             "home_live_server_time": home_live_server_time.isoformat(),
             "home_live_settings": home_live_settings,
             "home_news_ticker": home_news_ticker,
+            "home_live_location_name": home_live_location_name,
         },
     )
 

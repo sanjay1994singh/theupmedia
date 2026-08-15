@@ -8,7 +8,7 @@
   <div class="home-showcase">
     <div class="home-showcase-main">
       {% if home_live_tv %}
-        {% include "live_tv/partials/web_live_broadcast.html" with live_channel=home_live_tv live_settings=home_live_settings live_ticker=home_news_ticker live_next_channel=home_live_tv_next live_loop_same=home_live_tv_loop_same live_seek_position=home_live_seek_position live_video_duration=home_live_video_duration live_server_time=home_live_server_time %}
+        {% include "live_tv/partials/web_live_broadcast.html" with live_channel=home_live_tv live_settings=home_live_settings live_ticker=home_news_ticker live_next_channel=home_live_tv_next live_loop_same=home_live_tv_loop_same live_seek_position=home_live_seek_position live_video_duration=home_live_video_duration live_server_time=home_live_server_time live_location_name=home_live_location_name %}
       {% else %}
         <div class="hero-copy">
           <p class="eyebrow">Latest Updates</p>

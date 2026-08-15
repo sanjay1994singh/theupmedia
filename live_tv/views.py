@@ -319,6 +319,7 @@ def next_live_tv_channel(active_channel, channels):
 
 def live_tv_context(active_channel, channels, force_autoplay=False):
     channels = list(channels)
+    parent_live_channel = active_channel
     live_seek_position = 0
     live_video_duration = 0
     live_server_time = timezone.now()
@@ -330,6 +331,7 @@ def live_tv_context(active_channel, channels, force_autoplay=False):
             live_video_duration = playlist_state["entry"].duration_seconds
     next_channel = next_live_tv_channel(active_channel, channels)
     latest_news = Article.published.select_related("category", "state", "city")[:6]
+    live_location = live_channel_location_payload(active_channel, fallback=parent_live_channel)
     return {
         "active_channel": active_channel,
         "channels": channels,
@@ -342,6 +344,7 @@ def live_tv_context(active_channel, channels, force_autoplay=False):
         "latest_news": latest_news,
         "live_settings": live_tv_setting(),
         "news_ticker": news_ticker_setting(),
+        "live_location_name": live_location["location_name"],
     }
 
 
@@ -663,11 +666,11 @@ def video_headline_payload(video, seek_position=0):
     }
 
 
-def live_channel_location_payload(channel):
-    city = getattr(channel, "city", None)
-    state = getattr(channel, "state", None)
-    city_id = getattr(channel, "city_id", None)
-    state_id = getattr(channel, "state_id", None)
+def live_channel_location_payload(channel, fallback=None):
+    city = getattr(channel, "city", None) or getattr(fallback, "city", None)
+    state = getattr(channel, "state", None) or getattr(fallback, "state", None)
+    city_id = getattr(channel, "city_id", None) or getattr(fallback, "city_id", None)
+    state_id = getattr(channel, "state_id", None) or getattr(fallback, "state_id", None)
     city_name = city.name if city_id and city else ""
     state_name = state.name if state_id and state else ""
     location_name = ", ".join(part for part in (city_name, state_name) if part)
@@ -784,7 +787,7 @@ def serialize_synced_live_state(request, channel, server_time=None):
         "channel_slug": channel.slug,
         "channel_title": channel.title,
         "channel": {"id": channel.pk, "slug": channel.slug, "title": channel.title},
-        **live_channel_location_payload(channel),
+        **live_channel_location_payload(video, fallback=channel),
         "source_type": LiveTVChannel.SourceType.PLAYLIST,
         "player_type": LiveTVChannel.SourceType.HLS if hls_ready else LiveTVChannel.SourceType.DIRECT,
         "video_id": video.pk,
@@ -2406,17 +2409,18 @@ def serialize_media_download(request, job):
     }
 
 def render_job_location_payload(job):
-    channel = job.source_video or job.live_channel
-    city = getattr(channel, "city", None) if channel else None
-    state = getattr(channel, "state", None) if channel else None
+    source = job.source_video
+    live_channel = job.live_channel
+    city = getattr(source, "city", None) or getattr(live_channel, "city", None)
+    state = getattr(source, "state", None) or getattr(live_channel, "state", None)
     snapshot = job.snapshot or {}
     city_name = getattr(city, "name", "") or snapshot.get("city_name", "")
     state_name = getattr(state, "name", "") or snapshot.get("state_name", "")
     location_name = ", ".join([part for part in [city_name, state_name] if part])
     return {
-        "city_id": getattr(channel, "city_id", None) if channel else None,
+        "city_id": getattr(source, "city_id", None) or getattr(live_channel, "city_id", None),
         "city_name": city_name,
-        "state_id": getattr(channel, "state_id", None) if channel else None,
+        "state_id": getattr(source, "state_id", None) or getattr(live_channel, "state_id", None),
         "state_name": state_name,
         "location_name": location_name,
         "location": location_name,

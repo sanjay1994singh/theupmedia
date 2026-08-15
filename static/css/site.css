@@ -2397,6 +2397,52 @@ time {
   object-fit: contain;
 }
 
+.web-live-location {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  gap: 7px;
+  left: 14px;
+  max-width: min(46%, 360px);
+  min-height: 32px;
+  padding: 7px 12px;
+  pointer-events: none;
+  position: absolute;
+  top: 16px;
+  z-index: 5;
+}
+
+.web-live-badge + .web-live-logo + .web-live-location,
+.web-live-badge ~ .web-live-location {
+  top: 46px;
+}
+
+.web-live-location svg {
+  display: block;
+  fill: none;
+  flex: 0 0 auto;
+  height: 15px;
+  stroke: #fff;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 15px;
+}
+
+.web-live-location span {
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .web-live-mute {
   align-items: center;
   background: rgba(0, 0, 0, 0.62);
@@ -2660,6 +2706,29 @@ time {
     max-width: 74px;
   }
 
+  .web-live-location {
+    gap: 6px;
+    left: 10px;
+    max-width: 48%;
+    min-height: 28px;
+    padding: 6px 9px;
+    top: 10px;
+  }
+
+  .web-live-badge + .web-live-logo + .web-live-location,
+  .web-live-badge ~ .web-live-location {
+    top: 38px;
+  }
+
+  .web-live-location svg {
+    height: 13px;
+    width: 13px;
+  }
+
+  .web-live-location span {
+    font-size: 11px;
+  }
+
   .web-live-ticker {
     height: 32px;
   }
@@ -2746,6 +2815,23 @@ time {
   .web-live-logo img {
     max-height: 38px;
     max-width: 62px;
+  }
+
+  .web-live-location {
+    left: 8px;
+    max-width: 52%;
+    min-height: 24px;
+    padding: 5px 8px;
+    top: 8px;
+  }
+
+  .web-live-badge + .web-live-logo + .web-live-location,
+  .web-live-badge ~ .web-live-location {
+    top: 32px;
+  }
+
+  .web-live-location span {
+    font-size: 10px;
   }
 }
 
