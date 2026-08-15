@@ -663,6 +663,26 @@ def video_headline_payload(video, seek_position=0):
     }
 
 
+def live_channel_location_payload(channel):
+    city = getattr(channel, "city", None)
+    state = getattr(channel, "state", None)
+    city_id = getattr(channel, "city_id", None)
+    state_id = getattr(channel, "state_id", None)
+    city_name = city.name if city_id and city else ""
+    state_name = state.name if state_id and state else ""
+    location_name = ", ".join(part for part in (city_name, state_name) if part)
+    return {
+        "state": {"id": state_id, "name": state_name} if state_id and state_name else None,
+        "state_id": state_id,
+        "state_name": state_name,
+        "city": {"id": city_id, "name": city_name} if city_id and city_name else None,
+        "city_id": city_id,
+        "city_name": city_name,
+        "location_name": location_name,
+        "location": location_name,
+    }
+
+
 def serialize_channel_for_mobile(request, channel):
     setting = live_tv_setting()
     ticker_setting = news_ticker_setting()
@@ -692,12 +712,7 @@ def serialize_channel_for_mobile(request, channel):
         "category": {"id": channel.category_id, "name": channel.category.name} if channel.category_id else None,
         "category_id": channel.category_id,
         "category_name": channel.category.name if channel.category_id else "",
-        "state": {"id": channel.state_id, "name": channel.state.name} if channel.state_id else None,
-        "state_id": channel.state_id,
-        "state_name": channel.state.name if channel.state_id else "",
-        "city": {"id": channel.city_id, "name": channel.city.name} if channel.city_id else None,
-        "city_id": channel.city_id,
-        "city_name": channel.city.name if channel.city_id else "",
+        **live_channel_location_payload(channel),
         **headline_data,
         "lower_third_label": channel.lower_third_label or "",
         "reporter_label": channel.reporter_label or "",
@@ -769,6 +784,7 @@ def serialize_synced_live_state(request, channel, server_time=None):
         "channel_slug": channel.slug,
         "channel_title": channel.title,
         "channel": {"id": channel.pk, "slug": channel.slug, "title": channel.title},
+        **live_channel_location_payload(channel),
         "source_type": LiveTVChannel.SourceType.PLAYLIST,
         "player_type": LiveTVChannel.SourceType.HLS if hls_ready else LiveTVChannel.SourceType.DIRECT,
         "video_id": video.pk,
@@ -938,7 +954,11 @@ def serialize_empty_live_tv(request):
         "state": None,
         "state_id": None,
         "state_name": "",
-        "city": "",
+        "city": None,
+        "city_id": None,
+        "city_name": "",
+        "location_name": "",
+        "location": "",
         "headline": "",
         "lower_third_label": "",
         "ticker_label": ticker_setting.label or setting.default_ticker_label,
