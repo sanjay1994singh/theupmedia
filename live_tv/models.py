@@ -602,6 +602,16 @@ class LiveTVSetting(models.Model):
         help_text="Mobile app Live badge size in percent (40-200).",
         validators=[MinValueValidator(40), MaxValueValidator(200)],
     )
+    mobile_channel_logo_size_percent = models.PositiveSmallIntegerField(
+        default=100,
+        help_text="Mobile app channel logo size in percent (40-200).",
+        validators=[MinValueValidator(40), MaxValueValidator(200)],
+    )
+    render_channel_logo_size_percent = models.PositiveSmallIntegerField(
+        default=100,
+        help_text="Rendered video channel logo size in percent (40-200).",
+        validators=[MinValueValidator(40), MaxValueValidator(200)],
+    )
     default_lower_third_label = models.CharField(max_length=60, null=True,blank=True)
     default_headline = models.CharField(max_length=180, null=True,blank=True)
     default_ticker_label = models.CharField(max_length=60, null=True,blank=True)

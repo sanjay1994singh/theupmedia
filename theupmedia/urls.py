@@ -2,6 +2,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
+from core import views as core_views
 from subscriptions import views as subscription_views
 
 admin.site.site_header = "The Up Media Admin"
@@ -22,6 +23,7 @@ urlpatterns = [
     path("api/verify-payment/", subscription_views.verify_payment, name="api_verify_payment"),
     path("social-downloader/", include("social_downloader.urls")),
     path("distribution/", include("distribution.urls")),
+    path("app/article/<slug:slug>/", core_views.app_article_link, name="app_article_link"),
     path("", include("live_tv.urls")),
     path("", include("core.urls")),
     path("", include("news.urls")),

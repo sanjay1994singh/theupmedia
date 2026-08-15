@@ -168,6 +168,16 @@ MEDIA_ROOT = str(BASE_DIR / 'media')
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10737418240
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10737418240
 
+ANDROID_APP_LINK_PACKAGES = env_list(
+    "ANDROID_APP_LINK_PACKAGES",
+    "com.upmedia.livetv,com.upmedia.livetv.testing",
+)
+ANDROID_APP_LINK_SHA256_CERT_FINGERPRINTS = env_list("ANDROID_APP_LINK_SHA256_CERT_FINGERPRINTS")
+PLAY_STORE_APP_URL = os.getenv(
+    "PLAY_STORE_APP_URL",
+    "https://play.google.com/store/apps/details?id=com.upmedia.livetv",
+)
+
 CKEDITOR_5_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
 CKEDITOR_5_UPLOAD_FILE_TYPES = ["jpeg", "jpg", "png", "gif", "bmp", "webp"]
 CKEDITOR_5_CONFIGS = {

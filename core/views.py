@@ -1,13 +1,16 @@
+import json
+
 from django.conf import settings
 from django.contrib.sitemaps.views import sitemap
 from django.contrib import messages
 from django.core.mail import send_mail
 from django.http import HttpResponse
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils.html import escape
 from django.utils import timezone
 from types import SimpleNamespace
+from urllib.parse import quote
 
 from news.feeds import LatestNewsFeed
 from news.models import Article, Category
@@ -183,6 +186,92 @@ def ads_txt(request):
     )
     response["X-Content-Type-Options"] = "nosniff"
     return response
+
+
+def assetlinks_json(request):
+    fingerprints = getattr(settings, "ANDROID_APP_LINK_SHA256_CERT_FINGERPRINTS", [])
+    packages = getattr(settings, "ANDROID_APP_LINK_PACKAGES", ["com.upmedia.livetv"])
+    entries = [
+        {
+            "relation": ["delegate_permission/common.handle_all_urls"],
+            "target": {
+                "namespace": "android_app",
+                "package_name": package,
+                "sha256_cert_fingerprints": fingerprints,
+            },
+        }
+        for package in packages
+        if package and fingerprints
+    ]
+    response = HttpResponse(json.dumps(entries), content_type="application/json")
+    response["Cache-Control"] = "public, max-age=3600"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+def app_article_link(request, slug):
+    article = get_object_or_404(Article.published.select_related("category"), slug=slug)
+    encoded_slug = quote(article.slug, safe="")
+    app_url = f"upmedia://article/{encoded_slug}"
+    web_url = request.build_absolute_uri(article.get_absolute_url())
+    share_image_url = request.build_absolute_uri(reverse("news:share_image", kwargs={"slug": article.slug}))
+    share_image_url = f"{share_image_url}?v={int(article.updated_at.timestamp())}"
+    description = article.meta_description or article.summary or article.title
+    play_url = getattr(settings, "PLAY_STORE_APP_URL", "https://play.google.com/store/apps/details?id=com.upmedia.livetv")
+    intent_url = (
+        f"intent://article/{encoded_slug}"
+        "#Intent;scheme=upmedia;package=com.upmedia.livetv;"
+        f"S.browser_fallback_url={quote(play_url, safe='')};end"
+    )
+    android_redirect = ""
+    if "android" in request.META.get("HTTP_USER_AGENT", "").lower():
+        android_redirect = f"""
+  <script>
+    setTimeout(function () {{ window.location.href = "{escape(app_url)}"; }}, 150);
+    setTimeout(function () {{ window.location.href = "{escape(intent_url)}"; }}, 1400);
+  </script>"""
+    html = f"""<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{escape(article.title)} - The UP Media</title>
+  <link rel="canonical" href="{escape(web_url)}">
+  <meta name="description" content="{escape(description)}">
+  <meta property="og:title" content="{escape(article.title)}">
+  <meta property="og:description" content="{escape(description)}">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="{escape(request.build_absolute_uri(request.path))}">
+  <meta property="og:image" content="{escape(share_image_url)}">
+  <meta property="og:image:secure_url" content="{escape(share_image_url)}">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{escape(article.title)}">
+  <meta name="twitter:description" content="{escape(description)}">
+  <meta name="twitter:image" content="{escape(share_image_url)}">
+  <style>
+    body {{ margin: 0; font-family: Arial, sans-serif; background: #07111f; color: #fff; }}
+    main {{ max-width: 560px; margin: 0 auto; padding: 40px 20px; }}
+    h1 {{ font-size: 24px; line-height: 1.25; }}
+    a {{ display: block; margin: 14px 0; padding: 14px 16px; border-radius: 10px; text-align: center; text-decoration: none; font-weight: 700; }}
+    .primary {{ background: #e11d2e; color: #fff; }}
+    .secondary {{ background: #14243a; color: #fff; border: 1px solid #2d4262; }}
+  </style>
+{android_redirect}
+</head>
+<body>
+  <main>
+    <h1>{escape(article.title)}</h1>
+    <p>The UP Media app me article open ho raha hai. Agar app installed nahi hai to Play Store se install karein.</p>
+    <a class="primary" href="{escape(app_url)}">Open in app</a>
+    <a class="secondary" href="{escape(play_url)}">Install from Play Store</a>
+    <a class="secondary" href="{escape(web_url)}">Read on web</a>
+  </main>
+</body>
+</html>"""
+    return HttpResponse(html)
 
 
 def sitemap_xml(request):

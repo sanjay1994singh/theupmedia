@@ -351,6 +351,8 @@ class LiveTVSettingAdmin(admin.ModelAdmin):
                     "web_live_badge_size_percent",
                     "mobile_live_badge_size_percent",
                     "show_channel_logo",
+                    "mobile_channel_logo_size_percent",
+                    "render_channel_logo_size_percent",
                     "show_lower_third",
                     "show_ticker",
                 )

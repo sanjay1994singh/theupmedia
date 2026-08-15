@@ -618,6 +618,8 @@ def serialize_live_tv_setting(request, setting):
         "web_live_badge_size_percent": setting.web_live_badge_size_percent,
         "mobile_live_badge_size_percent": setting.mobile_live_badge_size_percent,
         "show_channel_logo": setting.show_channel_logo,
+        "mobile_channel_logo_size_percent": setting.mobile_channel_logo_size_percent,
+        "render_channel_logo_size_percent": setting.render_channel_logo_size_percent,
         "show_lower_third": setting.show_lower_third,
         "show_ticker": setting.show_ticker,
         "autoplay": setting.autoplay,
@@ -723,6 +725,8 @@ def serialize_channel_for_mobile(request, channel):
         "web_live_badge_size_percent": setting.web_live_badge_size_percent,
         "mobile_live_badge_size_percent": setting.mobile_live_badge_size_percent,
         "show_channel_logo": setting.show_channel_logo,
+        "mobile_channel_logo_size_percent": setting.mobile_channel_logo_size_percent,
+        "render_channel_logo_size_percent": setting.render_channel_logo_size_percent,
         "show_lower_third": setting.show_lower_third and bool((channel.lower_third_label or "").strip() or headline_data["headlines"]),
         "show_ticker": setting.show_ticker,
         "ticker_speed_seconds": ticker_setting.speed_seconds,
@@ -804,6 +808,8 @@ def serialize_synced_live_state(request, channel, server_time=None):
         "web_live_badge_size_percent": setting.web_live_badge_size_percent,
         "mobile_live_badge_size_percent": setting.mobile_live_badge_size_percent,
         "show_channel_logo": setting.show_channel_logo,
+        "mobile_channel_logo_size_percent": setting.mobile_channel_logo_size_percent,
+        "render_channel_logo_size_percent": setting.render_channel_logo_size_percent,
         "show_ticker": setting.show_ticker,
         "channel_logo": absolute_media_url(request, setting.channel_logo),
         "live_label": setting.live_label,
@@ -1202,12 +1208,18 @@ def mobile_absolute_file_url(request, field):
 
 
 def serialize_mobile_article(request, article, include_content=False):
+    app_link = request.build_absolute_uri(reverse("core:app_article_link", kwargs={"slug": article.slug}))
+    web_url = request.build_absolute_uri(article.get_absolute_url())
+    image_url = mobile_absolute_file_url(request, article.featured_image)
     payload = {
         "id": article.pk,
         "title": article.title,
         "slug": article.slug,
         "summary": strip_tags(article.summary or ""),
-        "featured_image": mobile_absolute_file_url(request, article.featured_image),
+        "featured_image": image_url,
+        "image_url": image_url,
+        "thumbnail": image_url,
+        "thumbnail_url": image_url,
         "image_alt_text": article.image_alt_text,
         "image_caption": article.image_caption,
         "image_credit": article.image_credit,
@@ -1221,7 +1233,10 @@ def serialize_mobile_article(request, article, include_content=False):
         "published_at": article.published_at.isoformat(),
         "updated_at": article.updated_at.isoformat(),
         "reads": article.unique_reads,
-        "share_url": request.build_absolute_uri(article.get_absolute_url()),
+        "app_link": app_link,
+        "deep_link_url": app_link,
+        "share_url": app_link,
+        "web_url": web_url,
     }
     if include_content:
         payload["content_html"] = str(article.content or "")
@@ -1873,6 +1888,8 @@ LIVE_BROADCAST_VISUAL_SNAPSHOT_KEYS = (
     "channel_logo",
     "live_label",
     "show_channel_logo",
+    "mobile_channel_logo_size_percent",
+    "render_channel_logo_size_percent",
     "show_live_badge",
     "show_lower_third",
     "show_ticker",
@@ -1998,7 +2015,11 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
     if show_logo and logo_path:
         input_index = add_overlay_input(logo_path)
         next_label = f"v{overlay_index}"
-        filters.append(f"[{input_index}:v]scale=230:-1[logo];[{current}][logo]overlay=x={input_width}-270:y=38[{next_label}]")
+        logo_scale = max(0.4, min(2.0, float(snapshot.get("render_channel_logo_size_percent") or 100) / 100))
+        logo_width = max(92, min(460, round(230 * logo_scale)))
+        logo_margin_x = max(16, round(40 * logo_scale))
+        logo_margin_y = max(16, round(38 * logo_scale))
+        filters.append(f"[{input_index}:v]scale={logo_width}:-1[logo];[{current}][logo]overlay=x={input_width}-{logo_width}-{logo_margin_x}:y={logo_margin_y}[{next_label}]")
         current = next_label
         overlay_index += 1
 
@@ -2353,6 +2374,24 @@ def serialize_media_download(request, job):
         "created_at": job.created_at.isoformat(),
     }
 
+def render_job_location_payload(job):
+    channel = job.source_video or job.live_channel
+    city = getattr(channel, "city", None) if channel else None
+    state = getattr(channel, "state", None) if channel else None
+    snapshot = job.snapshot or {}
+    city_name = getattr(city, "name", "") or snapshot.get("city_name", "")
+    state_name = getattr(state, "name", "") or snapshot.get("state_name", "")
+    location_name = ", ".join([part for part in [city_name, state_name] if part])
+    return {
+        "city_id": getattr(channel, "city_id", None) if channel else None,
+        "city_name": city_name,
+        "state_id": getattr(channel, "state_id", None) if channel else None,
+        "state_name": state_name,
+        "location_name": location_name,
+        "location": location_name,
+    }
+
+
 def serialize_render_job(request, job):
     rendered_url = request.build_absolute_uri(job.rendered_video.url) if job.rendered_video else ""
     original_url = request.build_absolute_uri(job.original_video.url) if job.original_video else ""
@@ -2382,6 +2421,7 @@ def serialize_render_job(request, job):
         "created_at": job.created_at.isoformat(),
         "completed_at": job.completed_at.isoformat() if job.completed_at else "",
         "download_url": request.build_absolute_uri(f"/api/live-tv/rendered-videos/{job.pk}/download/") if job.rendered_video else "",
+        **render_job_location_payload(job),
     }
 
 
@@ -2414,6 +2454,7 @@ def serialize_public_rendered_video(request, job, include_detail=False):
         "video_url": stream_url,
         "download_url": download_url,
         "status": "completed",
+        **render_job_location_payload(job),
     }
     if include_detail:
         data.update(
@@ -2606,7 +2647,7 @@ def rendered_videos_list_api(request):
     queryset = (
         completed_rendered_videos()
         .filter(render_origin=SocialRenderedVideo.Origin.LIVE_BROADCAST)
-        .select_related("source_video", "live_channel")
+        .select_related("source_video__city", "source_video__state", "live_channel__city", "live_channel__state")
         .order_by("-completed_at", "-created_at", "-pk")
     )
     total = queryset.count()
@@ -3381,6 +3422,8 @@ def mobile_admin_settings_save_api(request):
     numeric_limits = {
         "web_live_badge_size_percent": (40, 200, 100),
         "mobile_live_badge_size_percent": (40, 200, 100),
+        "mobile_channel_logo_size_percent": (40, 200, 100),
+        "render_channel_logo_size_percent": (40, 200, 100),
         "ticker_label_width_percent": (10, 40, 18),
         "ticker_label_height_percent": (50, 100, 100),
         "ticker_height_percent": (60, 160, 100),
@@ -3806,7 +3849,11 @@ def mobile_admin_render_social_video_api(request):
         "ticker_height_percent": setting.ticker_height_percent,
         "channel_name": setting.name,
         "channel_logo": logo_name,
+        "city_name": active_channel.city.name if active_channel and active_channel.city_id else "",
+        "state_name": active_channel.state.name if active_channel and active_channel.state_id else "",
         "show_channel_logo": bool(logo_name),
+        "mobile_channel_logo_size_percent": setting.mobile_channel_logo_size_percent,
+        "render_channel_logo_size_percent": setting.render_channel_logo_size_percent,
         "show_live_badge": False,
         "show_lower_third": include_headline and bool(headline),
         "show_ticker": include_ticker and bool(ticker_label or ticker_text),
@@ -3826,6 +3873,7 @@ def mobile_admin_render_social_video_api(request):
         frame_category="manual_mobile",
         frame_template="broadcast_live_tv",
         render_origin=SocialRenderedVideo.Origin.MANUAL_MOBILE,
+        live_channel=active_channel,
         snapshot=snapshot,
         original_video=video,
         created_by=user,
@@ -3866,7 +3914,7 @@ def mobile_admin_manual_rendered_videos_api(request):
     jobs = SocialRenderedVideo.objects.filter(
         created_by=user,
         render_origin=SocialRenderedVideo.Origin.MANUAL_MOBILE,
-    ).order_by("-created_at", "-pk")[:50]
+    ).select_related("source_video__city", "source_video__state", "live_channel__city", "live_channel__state").order_by("-created_at", "-pk")[:50]
     return JsonResponse({"success": True, "results": [serialize_render_job(request, job) for job in jobs]})
 
 

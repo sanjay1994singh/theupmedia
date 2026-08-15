@@ -214,6 +214,7 @@ def article_detail(request, slug):
             },
         ],
     }
+    app_share_url = public_absolute_url(reverse("core:app_article_link", kwargs={"slug": article.slug}))
     return render(
         request,
         "news/article_detail.html",
@@ -221,11 +222,13 @@ def article_detail(request, slug):
             "article": article,
             "related_articles": related_articles,
             "absolute_url": absolute_url,
-            "share_url": public_absolute_url(article.get_absolute_url()),
+            "share_url": app_share_url,
+            "app_share_url": app_share_url,
+            "web_url": public_absolute_url(article.get_absolute_url()),
             "share_image_url": share_image_url,
-            "whatsapp_share_url": f"https://api.whatsapp.com/send?text={quote_plus(article.title + ' ' + public_absolute_url(article.get_absolute_url()))}",
-            "facebook_share_url": f"https://www.facebook.com/sharer/sharer.php?u={quote_plus(public_absolute_url(article.get_absolute_url()))}",
-            "twitter_share_url": f"https://twitter.com/intent/tweet?text={quote_plus(article.title)}&url={quote_plus(public_absolute_url(article.get_absolute_url()))}",
+            "whatsapp_share_url": f"https://api.whatsapp.com/send?text={quote_plus(article.title + ' ' + app_share_url)}",
+            "facebook_share_url": f"https://www.facebook.com/sharer/sharer.php?u={quote_plus(app_share_url)}",
+            "twitter_share_url": f"https://twitter.com/intent/tweet?text={quote_plus(article.title)}&url={quote_plus(app_share_url)}",
             "schema_json": json.dumps(schema),
             "breadcrumb_schema_json": json.dumps(breadcrumb_schema),
         },

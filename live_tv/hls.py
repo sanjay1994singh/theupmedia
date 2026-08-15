@@ -285,11 +285,19 @@ def shorts_font_path():
     candidates = [
         getattr(settings, "FFMPEG_FONT_FILE", ""),
         "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
         "/usr/share/fonts/truetype/noto/NotoSansDevanagariUI-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansDevanagariUI-Regular.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansDevanagari-Bold.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansDevanagari-Regular.ttf",
         "/usr/share/fonts/truetype/noto/NotoSerifDevanagari-Bold.ttf",
         "/usr/share/fonts/truetype/lohit-devanagari/Lohit-Devanagari.ttf",
+        "/usr/share/fonts/truetype/deva/lohit_hi.ttf",
+        "C:/Windows/Fonts/Nirmala.ttc",
         "C:/Windows/Fonts/NirmalaB.ttf",
         "C:/Windows/Fonts/Nirmala.ttf",
+        "C:/Windows/Fonts/mangalb.ttf",
+        "C:/Windows/Fonts/mangal.ttf",
     ]
     for candidate in candidates:
         if candidate and Path(candidate).exists():
@@ -301,8 +309,12 @@ def shorts_latin_font_path():
     candidates = [
         getattr(settings, "FFMPEG_LATIN_FONT_FILE", ""),
         "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSans-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "C:/Windows/Fonts/Nirmala.ttc",
         "C:/Windows/Fonts/arialbd.ttf",
         "C:/Windows/Fonts/arial.ttf",
     ]
@@ -340,6 +352,82 @@ def shorts_latin_image_font(size):
     except Exception:
         logger.exception("Could not load shorts latin font %s.", font_path)
     return ImageFont.load_default()
+
+
+def is_devanagari_char(char):
+    return "\u0900" <= char <= "\u097f" or "\ua8e0" <= char <= "\ua8ff"
+
+
+def text_char_script(char):
+    return "devanagari" if is_devanagari_char(char) else "latin"
+
+
+def split_mixed_script_runs(text):
+    text = text or " "
+    runs = []
+    current_script = None
+    current_text = ""
+    pending_space = ""
+    for char in text:
+        if char.isspace():
+            pending_space += char
+            continue
+        script = text_char_script(char)
+        if current_script is None:
+            current_script = script
+            current_text = pending_space + char
+        elif script == current_script:
+            current_text += pending_space + char
+        else:
+            if pending_space:
+                current_text += pending_space
+            runs.append((current_script, current_text))
+            current_script = script
+            current_text = char
+        pending_space = ""
+    if current_script is None:
+        runs.append(("latin", pending_space or " "))
+    else:
+        current_text += pending_space
+        runs.append((current_script, current_text))
+    return [(script, value) for script, value in runs if value]
+
+
+def font_for_script(size, script):
+    return shorts_latin_image_font(size) if script == "latin" else shorts_image_font(size)
+
+
+def mixed_text_metrics(draw, text, font_size, stroke_width=0):
+    runs = []
+    total_width = 0
+    min_top = 0
+    max_bottom = 1
+    for script, value in split_mixed_script_runs(text):
+        font = font_for_script(font_size, script)
+        bbox = draw.textbbox((0, 0), value or " ", font=font, stroke_width=stroke_width)
+        width = max(0, bbox[2] - bbox[0])
+        runs.append({"text": value, "font": font, "bbox": bbox, "width": width})
+        total_width += width
+        min_top = min(min_top, bbox[1])
+        max_bottom = max(max_bottom, bbox[3])
+    return runs, max(1, total_width), min_top, max_bottom
+
+
+def draw_mixed_text(draw, xy, text, font_size, fill, stroke_width=0, stroke_fill=None):
+    x, y = xy
+    runs, _, min_top, max_bottom = mixed_text_metrics(draw, text, font_size, stroke_width=stroke_width)
+    text_height = max(1, max_bottom - min_top)
+    for run in runs:
+        bbox = run["bbox"]
+        draw.text(
+            (x - bbox[0], y + ((text_height - (bbox[3] - bbox[1])) / 2) - bbox[1]),
+            run["text"],
+            font=run["font"],
+            fill=fill,
+            stroke_width=stroke_width,
+            stroke_fill=stroke_fill,
+        )
+        x += run["width"]
 
 
 def wrap_text_lines(text, max_chars=18, max_lines=3):
@@ -384,6 +472,38 @@ def wrap_text_pixels(draw, text, font, max_width, max_lines=3):
             line = line[:-1].rstrip()
         lines[-1] = f"{line}..." if line else "..."
     return lines or [text or "The Up Media"]
+
+
+def wrap_mixed_text_pixels(draw, text, font_size, max_width, max_lines=3, stroke_width=0):
+    words = " ".join((text or "").split()).split()
+    lines = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        _, width, _, _ = mixed_text_metrics(draw, candidate, font_size, stroke_width=stroke_width)
+        if current and width > max_width:
+            lines.append(current)
+            current = word
+            if len(lines) >= max_lines:
+                break
+        else:
+            current = candidate
+    if current and len(lines) < max_lines:
+        lines.append(current)
+    if len(lines) == max_lines and len(words) > len(" ".join(lines).split()):
+        line = lines[-1].rstrip("!.।")
+        while line:
+            _, width, _, _ = mixed_text_metrics(draw, f"{line}...", font_size, stroke_width=stroke_width)
+            if width <= max_width:
+                break
+            line = line[:-1].rstrip()
+        lines[-1] = f"{line}..." if line else "..."
+    return lines or [text or "The Up Media"]
+
+
+def mixed_text_width(draw, text, font_size, stroke_width=0):
+    _, width, _, _ = mixed_text_metrics(draw, text, font_size, stroke_width=stroke_width)
+    return width
 
 
 def draw_centered_text(draw, box, text, font, fill):
@@ -491,8 +611,8 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
     else:
         bg_draw.rectangle((0, 0, SHORTS_RENDER_WIDTH, 420), fill=background)
 
-    headline_font = shorts_image_font(68 if template == "breaking_big" else 64)
-    headline_lines = wrap_text_pixels(fg_draw, headline, headline_font, 900, max_lines=3)
+    headline_font_size = 68 if template == "breaking_big" else 64
+    headline_lines = wrap_mixed_text_pixels(fg_draw, headline, headline_font_size, 900, max_lines=3, stroke_width=3)
     y = 78
     if template == "breaking_big":
         fg_draw.rounded_rectangle((38, 42, 490, 118), radius=12, fill=primary)
@@ -500,14 +620,13 @@ def create_short_frame_images(short, metadata, bg_path, fg_path, logo_path=None)
         y = 140
     elif template == "hindu_dharmik":
         fg_draw.rounded_rectangle((38, 42, 520, 118), radius=12, fill=primary)
-        fg_draw.text((62, 50), "ॐ  धर्म • संस्कृति", font=shorts_image_font(38), fill="#ffffff")
+        draw_mixed_text(fg_draw, (62, 50), "ॐ  धर्म • संस्कृति", 38, "#ffffff")
         y = 140
     for index, line in enumerate(headline_lines):
-        bbox = fg_draw.textbbox((0, 0), line, font=headline_font, stroke_width=3)
-        line_width = bbox[2] - bbox[0]
+        line_width = mixed_text_width(fg_draw, line, headline_font_size, stroke_width=3)
         x = max(60, int((SHORTS_RENDER_WIDTH - line_width) / 2))
         line_color = highlight_color if index == len(headline_lines) - 1 and template != "breaking_big" else text_color
-        fg_draw.text((x, y), line, font=headline_font, fill=line_color, stroke_width=2, stroke_fill=(0, 0, 0, 120))
+        draw_mixed_text(fg_draw, (x, y), line, headline_font_size, line_color, stroke_width=2, stroke_fill=(0, 0, 0, 120))
         y += 74
 
     video_outer = (18, 370, 1062, 1864)
