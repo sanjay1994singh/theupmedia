@@ -1611,7 +1611,6 @@ time {
 }
 
 .footer-brand img {
-  filter: brightness(0) invert(1);
   height: 42px;
   object-fit: contain;
   width: 42px;
@@ -2000,8 +1999,6 @@ time {
 }
 
 .live-channel-logo img {
-  background: #fff;
-  border: 2px solid #fff;
   max-height: 58px;
   object-fit: contain;
   width: 72px;
@@ -3186,7 +3183,6 @@ time {
 }
 
 .tv-dashboard-brand img {
-  background: #fff;
   border-radius: 6px;
   height: 42px;
   object-fit: contain;
