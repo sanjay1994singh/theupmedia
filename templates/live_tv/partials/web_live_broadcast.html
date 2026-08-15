@@ -26,7 +26,7 @@
     {% endif %}
 
     {% if live_location_name %}
-      <div class="web-live-location" aria-label="Live location">
+      <div class="web-live-location" style="--live-location-scale: {{ live_settings.web_live_location_scale|default:'1.00' }}" aria-label="Live location">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11z"></path>
           <circle cx="12" cy="10" r="2.4"></circle>

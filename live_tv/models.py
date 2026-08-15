@@ -612,6 +612,21 @@ class LiveTVSetting(models.Model):
         help_text="Rendered video channel logo size in percent (40-200).",
         validators=[MinValueValidator(40), MaxValueValidator(200)],
     )
+    web_live_location_size_percent = models.PositiveSmallIntegerField(
+        default=100,
+        help_text="Web Live location badge size in percent (40-200).",
+        validators=[MinValueValidator(40), MaxValueValidator(200)],
+    )
+    mobile_live_location_size_percent = models.PositiveSmallIntegerField(
+        default=100,
+        help_text="Mobile app Live location badge size in percent (40-200).",
+        validators=[MinValueValidator(40), MaxValueValidator(200)],
+    )
+    render_location_size_percent = models.PositiveSmallIntegerField(
+        default=100,
+        help_text="Rendered video location badge size in percent (40-200).",
+        validators=[MinValueValidator(40), MaxValueValidator(200)],
+    )
     default_lower_third_label = models.CharField(max_length=60, null=True,blank=True)
     default_headline = models.CharField(max_length=180, null=True,blank=True)
     default_ticker_label = models.CharField(max_length=60, null=True,blank=True)
@@ -644,6 +659,10 @@ class LiveTVSetting(models.Model):
     @property
     def web_live_badge_scale(self):
         return f"{max(40, min(200, self.web_live_badge_size_percent)) / 100:.2f}"
+
+    @property
+    def web_live_location_scale(self):
+        return f"{max(40, min(200, self.web_live_location_size_percent)) / 100:.2f}"
 
     @classmethod
     def get_solo(cls):

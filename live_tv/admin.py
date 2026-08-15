@@ -353,6 +353,9 @@ class LiveTVSettingAdmin(admin.ModelAdmin):
                     "show_channel_logo",
                     "mobile_channel_logo_size_percent",
                     "render_channel_logo_size_percent",
+                    "web_live_location_size_percent",
+                    "mobile_live_location_size_percent",
+                    "render_location_size_percent",
                     "show_lower_third",
                     "show_ticker",
                 )

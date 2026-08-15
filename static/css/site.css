@@ -2412,6 +2412,8 @@ time {
   pointer-events: none;
   position: absolute;
   top: 16px;
+  transform: scale(var(--live-location-scale, 1));
+  transform-origin: top left;
   z-index: 5;
 }
 
