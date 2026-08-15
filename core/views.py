@@ -5,7 +5,7 @@ from django.contrib.sitemaps.views import sitemap
 from django.contrib import messages
 from django.core.mail import send_mail
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.html import escape
 from django.utils import timezone
@@ -13,7 +13,7 @@ from types import SimpleNamespace
 from urllib.parse import quote
 
 from news.feeds import LatestNewsFeed
-from news.models import Article, Category
+from news.models import Article, ArticleSlugRedirect, Category
 from news.sitemaps import ArticleSitemap, CategorySitemap, CitySitemap, StateSitemap
 from blog.models import BlogPost
 from blog.sitemaps import BlogPostSitemap
@@ -209,12 +209,26 @@ def assetlinks_json(request):
     return response
 
 
+def _get_published_article_for_slug(slug):
+    queryset = Article.published.select_related("category", "state", "city", "author")
+    try:
+        return queryset.get(slug=slug)
+    except Article.DoesNotExist:
+        if str(slug).isdigit():
+            return get_object_or_404(queryset, pk=int(slug))
+        slug_redirect = get_object_or_404(ArticleSlugRedirect.objects.select_related("article"), old_slug=slug)
+        return get_object_or_404(queryset, pk=slug_redirect.article_id)
+
+
 def app_article_link(request, slug):
-    article = get_object_or_404(Article.published.select_related("category"), slug=slug)
+    article = _get_published_article_for_slug(slug)
+    if slug != article.slug:
+        return redirect(reverse("core:app_article_link", kwargs={"slug": article.slug}), permanent=True)
     encoded_slug = quote(article.slug, safe="")
     app_url = f"upmedia://article/{encoded_slug}"
-    web_url = request.build_absolute_uri(article.get_absolute_url())
-    share_image_url = request.build_absolute_uri(reverse("news:share_image", kwargs={"slug": article.slug}))
+    web_url = f"{settings.SITE_DOMAIN}{article.get_absolute_url()}"
+    app_share_url = f"{settings.SITE_DOMAIN}{reverse('core:app_article_link', kwargs={'slug': article.slug})}"
+    share_image_url = f"{settings.SITE_DOMAIN}{reverse('news:share_image', kwargs={'slug': article.slug})}"
     share_image_url = f"{share_image_url}?v={int(article.updated_at.timestamp())}"
     description = article.meta_description or article.summary or article.title
     play_url = getattr(settings, "PLAY_STORE_APP_URL", "https://play.google.com/store/apps/details?id=com.upmedia.livetv")
@@ -241,16 +255,21 @@ def app_article_link(request, slug):
   <meta property="og:title" content="{escape(article.title)}">
   <meta property="og:description" content="{escape(description)}">
   <meta property="og:type" content="article">
-  <meta property="og:url" content="{escape(request.build_absolute_uri(request.path))}">
+  <meta property="og:url" content="{escape(app_share_url)}">
   <meta property="og:image" content="{escape(share_image_url)}">
+  <meta property="og:image:url" content="{escape(share_image_url)}">
   <meta property="og:image:secure_url" content="{escape(share_image_url)}">
   <meta property="og:image:type" content="image/jpeg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="{escape(article.title)}">
+  <meta property="article:published_time" content="{escape(article.published_at.isoformat())}">
+  <meta property="article:modified_time" content="{escape(article.updated_at.isoformat())}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="{escape(article.title)}">
   <meta name="twitter:description" content="{escape(description)}">
   <meta name="twitter:image" content="{escape(share_image_url)}">
+  <meta name="twitter:image:alt" content="{escape(article.title)}">
   <style>
     body {{ margin: 0; font-family: Arial, sans-serif; background: #07111f; color: #fff; }}
     main {{ max-width: 560px; margin: 0 auto; padding: 40px 20px; }}

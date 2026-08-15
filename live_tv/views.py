@@ -48,7 +48,7 @@ from .account_emails import queue_account_email
 from .models import AccountDeletionRequest, AppMenu, BlockedUser, ChannelFollow, FacebookLiveSetting, HomeContent, HomeUtility, LiveTVCategory, LiveTVCity, LiveTVChannel, LiveTVPlaylistItem, LiveTVSetting, LiveTVState, MediaDownload, MobileAdminToken, MobileAppRelease, PushDevice, ShortsComment, ShortsCommentLike, ShortsCommentReport, ShortsLike, ShortsVideo, SocialRenderedVideo
 from .services import calculate_current_playback, delete_live_video_source, enqueue_completed_broadcast_renders, expanded_video_headlines, expire_old_live_playlist_items, get_main_live_channel, live_playlist_cutoff, live_video_hls_ready, prepare_uploaded_video_for_instant_live, rebuild_live_playlist, repair_live_tv_health, update_playlist_item
 from blog.models import BlogPost
-from news.models import Article, Category
+from news.models import Article, ArticleSlugRedirect, Category
 from services.models import Service
 
 
@@ -1241,6 +1241,17 @@ def serialize_mobile_article(request, article, include_content=False):
     if include_content:
         payload["content_html"] = str(article.content or "")
     return payload
+
+
+def get_mobile_article_by_slug_or_redirect(slug):
+    queryset = Article.published.select_related("category", "state", "city", "author")
+    try:
+        return queryset.get(slug=slug)
+    except Article.DoesNotExist:
+        if str(slug).isdigit():
+            return get_object_or_404(queryset, pk=int(slug))
+        slug_redirect = get_object_or_404(ArticleSlugRedirect.objects.select_related("article"), old_slug=slug)
+        return get_object_or_404(queryset, pk=slug_redirect.article_id)
 
 
 def serialize_shorts_comment(request, comment, include_replies=True):
@@ -2816,7 +2827,7 @@ def mobile_category_articles_api(request, slug):
 
 @require_GET
 def mobile_article_detail_api(request, slug):
-    article = get_object_or_404(Article.published.select_related("category", "state", "city", "author"), slug=slug)
+    article = get_mobile_article_by_slug_or_redirect(slug)
     related = Article.published.filter(category=article.category).exclude(pk=article.pk).select_related("category", "state", "city", "author")[:6]
     return JsonResponse({
         "article": serialize_mobile_article(request, article, include_content=True),

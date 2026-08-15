@@ -30,6 +30,17 @@ def public_absolute_url(path):
     return f"{settings.SITE_DOMAIN}{path}"
 
 
+def get_published_article_by_slug_or_redirect(slug):
+    queryset = Article.published.select_related("category", "state", "city", "author")
+    try:
+        return queryset.get(slug=slug)
+    except Article.DoesNotExist:
+        if str(slug).isdigit():
+            return get_object_or_404(queryset, pk=int(slug))
+        slug_redirect = get_object_or_404(ArticleSlugRedirect.objects.select_related("article"), old_slug=slug)
+        return get_object_or_404(queryset, pk=slug_redirect.article_id)
+
+
 def client_ip(request):
     forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
     if forwarded_for:
@@ -64,7 +75,7 @@ def user_agent_hash(request):
 
 
 def share_image(request, slug):
-    article = get_object_or_404(Article.published.select_related("category", "state", "city"), slug=slug)
+    article = get_published_article_by_slug_or_redirect(slug)
     cache_dir = settings.MEDIA_ROOT / "share" / "articles"
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_path = cache_dir / f"{article.slug}-cover.jpg"
@@ -141,14 +152,9 @@ def city_category_detail(request, state_slug, city_slug, category_slug):
 
 
 def article_detail(request, slug):
-    try:
-        article = Article.published.select_related("category", "state", "city", "author").get(slug=slug)
-    except Article.DoesNotExist:
-        if slug.isdigit():
-            article_by_id = get_object_or_404(Article.published.select_related("category", "state", "city", "author"), pk=int(slug))
-            return redirect(article_by_id.get_absolute_url(), permanent=True)
-        slug_redirect = get_object_or_404(ArticleSlugRedirect.objects.select_related("article"), old_slug=slug)
-        return redirect(slug_redirect.article.get_absolute_url(), permanent=True)
+    article = get_published_article_by_slug_or_redirect(slug)
+    if slug != article.slug:
+        return redirect(article.get_absolute_url(), permanent=True)
     if not is_bot_request(request):
         ArticleRead.record(
             article=article,
