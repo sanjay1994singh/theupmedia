@@ -584,6 +584,44 @@ def live_tv_setting():
     return LiveTVSetting.get_solo()
 
 
+LIVE_SETTING_LAYOUT_FIELDS = (
+    "mobile_channel_logo_size_percent",
+    "render_channel_logo_size_percent",
+    "web_channel_logo_left_percent",
+    "web_channel_logo_right_percent",
+    "web_channel_logo_top_percent",
+    "web_channel_logo_bottom_percent",
+    "mobile_channel_logo_left_percent",
+    "mobile_channel_logo_right_percent",
+    "mobile_channel_logo_top_percent",
+    "mobile_channel_logo_bottom_percent",
+    "render_channel_logo_left_percent",
+    "render_channel_logo_right_percent",
+    "render_channel_logo_top_percent",
+    "render_channel_logo_bottom_percent",
+    "web_live_location_size_percent",
+    "web_live_location_left_percent",
+    "web_live_location_right_percent",
+    "web_live_location_top_percent",
+    "web_live_location_bottom_percent",
+    "mobile_live_location_size_percent",
+    "mobile_live_location_left_percent",
+    "mobile_live_location_right_percent",
+    "mobile_live_location_top_percent",
+    "mobile_live_location_bottom_percent",
+    "render_location_size_percent",
+    "render_location_left_percent",
+    "render_location_right_percent",
+    "render_location_top_percent",
+    "render_location_bottom_percent",
+    "live_video_retention_hours",
+)
+
+
+def live_setting_layout_payload(setting):
+    return {field: getattr(setting, field, None) for field in LIVE_SETTING_LAYOUT_FIELDS}
+
+
 def news_ticker_setting():
     setting = live_tv_setting()
     server_time = timezone.now()
@@ -626,6 +664,7 @@ def serialize_live_tv_setting(request, setting):
         "web_live_location_size_percent": setting.web_live_location_size_percent,
         "mobile_live_location_size_percent": setting.mobile_live_location_size_percent,
         "render_location_size_percent": setting.render_location_size_percent,
+        **live_setting_layout_payload(setting),
         "show_lower_third": setting.show_lower_third,
         "show_ticker": setting.show_ticker,
         "autoplay": setting.autoplay,
@@ -751,6 +790,7 @@ def serialize_channel_for_mobile(request, channel):
         "web_live_location_size_percent": setting.web_live_location_size_percent,
         "mobile_live_location_size_percent": setting.mobile_live_location_size_percent,
         "render_location_size_percent": setting.render_location_size_percent,
+        **live_setting_layout_payload(setting),
         "show_lower_third": setting.show_lower_third and bool((channel.lower_third_label or "").strip() or headline_data["headlines"]),
         "show_ticker": setting.show_ticker,
         "ticker_speed_seconds": ticker_setting.speed_seconds,
@@ -838,6 +878,7 @@ def serialize_synced_live_state(request, channel, server_time=None):
         "web_live_location_size_percent": setting.web_live_location_size_percent,
         "mobile_live_location_size_percent": setting.mobile_live_location_size_percent,
         "render_location_size_percent": setting.render_location_size_percent,
+        **live_setting_layout_payload(setting),
         "show_ticker": setting.show_ticker,
         "channel_logo": absolute_media_url(request, setting.channel_logo),
         "live_label": setting.live_label,
@@ -1933,9 +1974,36 @@ LIVE_BROADCAST_VISUAL_SNAPSHOT_KEYS = (
     "show_channel_logo",
     "mobile_channel_logo_size_percent",
     "render_channel_logo_size_percent",
+    "web_channel_logo_left_percent",
+    "web_channel_logo_right_percent",
+    "web_channel_logo_top_percent",
+    "web_channel_logo_bottom_percent",
+    "mobile_channel_logo_left_percent",
+    "mobile_channel_logo_right_percent",
+    "mobile_channel_logo_top_percent",
+    "mobile_channel_logo_bottom_percent",
+    "render_channel_logo_left_percent",
+    "render_channel_logo_right_percent",
+    "render_channel_logo_top_percent",
+    "render_channel_logo_bottom_percent",
     "web_live_location_size_percent",
+    "web_live_location_left_percent",
+    "web_live_location_right_percent",
+    "web_live_location_top_percent",
+    "web_live_location_bottom_percent",
     "mobile_live_location_size_percent",
+    "mobile_live_location_left_percent",
+    "mobile_live_location_right_percent",
+    "mobile_live_location_top_percent",
+    "mobile_live_location_bottom_percent",
     "render_location_size_percent",
+    "render_location_left_percent",
+    "render_location_right_percent",
+    "render_location_top_percent",
+    "render_location_bottom_percent",
+    "city_name",
+    "state_name",
+    "location_name",
     "show_live_badge",
     "show_lower_third",
     "show_ticker",
@@ -2034,6 +2102,29 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
         overlay_paths.append(Path(path))
         return len(overlay_paths)
 
+    def percent_value(value):
+        if value in (None, ""):
+            return None
+        try:
+            return max(0.0, min(100.0, float(value)))
+        except (TypeError, ValueError):
+            return None
+
+    def overlay_axis_position(start_value, end_value, total_size, overlay_size, default_start=None, default_end=None):
+        start = percent_value(start_value)
+        end = percent_value(end_value)
+        if start is not None:
+            position = round(total_size * start / 100)
+        elif end is not None:
+            position = round(total_size - overlay_size - (total_size * end / 100))
+        elif default_start is not None:
+            position = round(total_size * default_start / 100)
+        elif default_end is not None:
+            position = round(total_size - overlay_size - (total_size * default_end / 100))
+        else:
+            position = 0
+        return max(0, min(max(0, total_size - overlay_size), position))
+
     live_label = snapshot.get("live_label") or "LIVE"
     lower_label = snapshot.get("lower_third_label") or snapshot.get("headline_label") or ""
     headline = snapshot.get("headline") or ""
@@ -2056,6 +2147,54 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
             f"drawtext=textfile='{ffmpeg_path(live_file)}'{live_font_arg}:x=72:y=53:fontsize=34:fontcolor=white"
         )
 
+    location_name = (
+        str(snapshot.get("location_name") or "").strip()
+        or ", ".join(
+            part for part in [
+                str(snapshot.get("city_name") or "").strip(),
+                str(snapshot.get("state_name") or "").strip(),
+            ] if part
+        )
+    )
+    if location_name:
+        location_file = add_text_file(location_name, "broadcast-location")
+        location_font_arg = ffmpeg_font_arg_for_text(location_name, devanagari_font, latin_font)
+        pin_file = add_text_file("●", "broadcast-location-pin")
+        pin_font_arg = ffmpeg_font_arg_for_text("●", devanagari_font, latin_font)
+        try:
+            location_scale = max(0.4, min(2.0, float(snapshot.get("render_location_size_percent") or 100) / 100))
+        except (TypeError, ValueError):
+            location_scale = 1.0
+        location_font_size = max(18, min(54, round(30 * location_scale)))
+        pin_font_size = max(14, min(38, round(20 * location_scale)))
+        location_height = max(44, min(92, round(56 * location_scale)))
+        text_width = round(len(location_name) * location_font_size * 0.62)
+        location_width = min(input_width - 48, max(round(230 * location_scale), text_width + round(90 * location_scale)))
+        location_x = overlay_axis_position(
+            snapshot.get("render_location_left_percent"),
+            snapshot.get("render_location_right_percent"),
+            input_width,
+            location_width,
+            default_start=2,
+        )
+        location_y = overlay_axis_position(
+            snapshot.get("render_location_top_percent"),
+            snapshot.get("render_location_bottom_percent"),
+            input_height,
+            location_height,
+            default_start=4,
+        )
+        pin_x = location_x + max(16, round(22 * location_scale))
+        pin_y = location_y + max(12, round(16 * location_scale))
+        text_x = location_x + max(44, round(52 * location_scale))
+        text_y = location_y + max(10, round(13 * location_scale))
+        add_filter(
+            f"drawbox=x={location_x}:y={location_y}:w={location_width}:h={location_height}:color=black@0.58:t=fill,"
+            f"drawbox=x={location_x}:y={location_y}:w={location_width}:h={location_height}:color=white@0.18:t=2,"
+            f"drawtext=textfile='{ffmpeg_path(pin_file)}'{pin_font_arg}:x={pin_x}:y={pin_y}:fontsize={pin_font_size}:fontcolor=white,"
+            f"drawtext=textfile='{ffmpeg_path(location_file)}'{location_font_arg}:x={text_x}:y={text_y}:fontsize={location_font_size}:fontcolor=white"
+        )
+
     show_logo = bool_snapshot(snapshot, "show_channel_logo")
     logo_path = media_storage_path(snapshot.get("channel_logo"))
     if show_logo and logo_path:
@@ -2063,9 +2202,22 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
         next_label = f"v{overlay_index}"
         logo_scale = max(0.4, min(2.0, float(snapshot.get("render_channel_logo_size_percent") or 100) / 100))
         logo_width = max(92, min(460, round(230 * logo_scale)))
-        logo_margin_x = max(16, round(40 * logo_scale))
-        logo_margin_y = max(16, round(38 * logo_scale))
-        filters.append(f"[{input_index}:v]scale={logo_width}:-1[logo];[{current}][logo]overlay=x={input_width}-{logo_width}-{logo_margin_x}:y={logo_margin_y}[{next_label}]")
+        logo_height = max(52, min(320, round(132 * logo_scale)))
+        logo_x = overlay_axis_position(
+            snapshot.get("render_channel_logo_left_percent"),
+            snapshot.get("render_channel_logo_right_percent"),
+            input_width,
+            logo_width,
+            default_end=2,
+        )
+        logo_y = overlay_axis_position(
+            snapshot.get("render_channel_logo_top_percent"),
+            snapshot.get("render_channel_logo_bottom_percent"),
+            input_height,
+            logo_height,
+            default_start=4,
+        )
+        filters.append(f"[{input_index}:v]scale={logo_width}:-1[logo];[{current}][logo]overlay=x={logo_x}:y={logo_y}[{next_label}]")
         current = next_label
         overlay_index += 1
 
@@ -3907,6 +4059,7 @@ def mobile_admin_render_social_video_api(request):
         "web_live_location_size_percent": setting.web_live_location_size_percent,
         "mobile_live_location_size_percent": setting.mobile_live_location_size_percent,
         "render_location_size_percent": setting.render_location_size_percent,
+        **live_setting_layout_payload(setting),
         "show_live_badge": False,
         "show_lower_third": include_headline and bool(headline),
         "show_ticker": include_ticker and bool(ticker_label or ticker_text),

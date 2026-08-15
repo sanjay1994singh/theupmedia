@@ -16,7 +16,10 @@
     {% endif %}
 
     {% if live_settings.show_channel_logo %}
-      <div class="web-live-logo">
+      <div
+        class="web-live-logo"
+        style="--live-logo-left: {% if live_settings.web_channel_logo_left_percent != None %}{{ live_settings.web_channel_logo_left_percent }}%{% else %}auto{% endif %}; --live-logo-right: {% if live_settings.web_channel_logo_right_percent != None %}{{ live_settings.web_channel_logo_right_percent }}%{% else %}auto{% endif %}; --live-logo-top: {% if live_settings.web_channel_logo_top_percent != None %}{{ live_settings.web_channel_logo_top_percent }}%{% else %}auto{% endif %}; --live-logo-bottom: {% if live_settings.web_channel_logo_bottom_percent != None %}{{ live_settings.web_channel_logo_bottom_percent }}%{% else %}auto{% endif %}"
+      >
         {% if live_settings.channel_logo %}
           <img src="{{ live_settings.channel_logo.url }}" alt="{{ SITE_NAME }} logo" loading="eager" decoding="async">
         {% else %}
@@ -26,7 +29,11 @@
     {% endif %}
 
     {% if live_location_name %}
-      <div class="web-live-location" style="--live-location-scale: {{ live_settings.web_live_location_scale|default:'1.00' }}" aria-label="Live location">
+      <div
+        class="web-live-location"
+        style="--live-location-scale: {{ live_settings.web_live_location_scale|default:'1.00' }}; --live-location-left: {% if live_settings.web_live_location_left_percent != None %}{{ live_settings.web_live_location_left_percent }}%{% else %}auto{% endif %}; --live-location-right: {% if live_settings.web_live_location_right_percent != None %}{{ live_settings.web_live_location_right_percent }}%{% else %}auto{% endif %}; --live-location-top: {% if live_settings.web_live_location_top_percent != None %}{{ live_settings.web_live_location_top_percent }}%{% else %}auto{% endif %}; --live-location-bottom: {% if live_settings.web_live_location_bottom_percent != None %}{{ live_settings.web_live_location_bottom_percent }}%{% else %}auto{% endif %}"
+        aria-label="Live location"
+      >
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11z"></path>
           <circle cx="12" cy="10" r="2.4"></circle>

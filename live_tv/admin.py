@@ -340,7 +340,7 @@ class LiveTVPlaylistCycleAdmin(admin.ModelAdmin):
 
 @admin.register(LiveTVSetting)
 class LiveTVSettingAdmin(admin.ModelAdmin):
-    list_display = ("name", "live_label", "splash_screen_seconds", "show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker", "updated_at")
+    list_display = ("name", "live_label", "splash_screen_seconds", "live_video_retention_hours", "show_live_badge", "show_channel_logo", "show_lower_third", "show_ticker", "updated_at")
     fieldsets = (
         ("Branding", {"fields": ("name", "live_label", "channel_logo", "autoplay")}),
         (
@@ -353,16 +353,40 @@ class LiveTVSettingAdmin(admin.ModelAdmin):
                     "show_channel_logo",
                     "mobile_channel_logo_size_percent",
                     "render_channel_logo_size_percent",
+                    "web_channel_logo_left_percent",
+                    "web_channel_logo_right_percent",
+                    "web_channel_logo_top_percent",
+                    "web_channel_logo_bottom_percent",
+                    "mobile_channel_logo_left_percent",
+                    "mobile_channel_logo_right_percent",
+                    "mobile_channel_logo_top_percent",
+                    "mobile_channel_logo_bottom_percent",
+                    "render_channel_logo_left_percent",
+                    "render_channel_logo_right_percent",
+                    "render_channel_logo_top_percent",
+                    "render_channel_logo_bottom_percent",
                     "web_live_location_size_percent",
                     "mobile_live_location_size_percent",
                     "render_location_size_percent",
+                    "web_live_location_left_percent",
+                    "web_live_location_right_percent",
+                    "web_live_location_top_percent",
+                    "web_live_location_bottom_percent",
+                    "mobile_live_location_left_percent",
+                    "mobile_live_location_right_percent",
+                    "mobile_live_location_top_percent",
+                    "mobile_live_location_bottom_percent",
+                    "render_location_left_percent",
+                    "render_location_right_percent",
+                    "render_location_top_percent",
+                    "render_location_bottom_percent",
                     "show_lower_third",
                     "show_ticker",
                 )
             },
         ),
         ("Default Video Text", {"fields": ("default_lower_third_label", "default_headline", "maximum_headline_characters")}),
-        ("Mobile App", {"fields": ("splash_screen_seconds",)}),
+        ("Mobile App", {"fields": ("splash_screen_seconds", "live_video_retention_hours")}),
         ("Ticker", {"fields": ("default_ticker_label", "default_ticker_text", "ticker_speed_seconds", "mobile_ticker_speed_seconds", "ticker_label_width_percent", "ticker_label_height_percent", "ticker_height_percent")}),
     )
 

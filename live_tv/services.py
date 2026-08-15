@@ -136,7 +136,10 @@ def expanded_video_headlines(video, maximum_characters=100):
 
 def live_playlist_max_age_hours():
     try:
-        return max(1, int(getattr(settings, "LIVE_TV_PLAYLIST_MAX_AGE_HOURS", LIVE_PLAYLIST_MAX_AGE_HOURS)))
+        configured = getattr(settings, "LIVE_TV_PLAYLIST_MAX_AGE_HOURS", None)
+        if configured is None:
+            configured = LiveTVSetting.get_solo().live_video_retention_hours
+        return max(1, min(720, int(configured or LIVE_PLAYLIST_MAX_AGE_HOURS)))
     except (TypeError, ValueError):
         return LIVE_PLAYLIST_MAX_AGE_HOURS
 
@@ -364,6 +367,11 @@ def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
     lower_label = video.lower_third_label or ""
     title = headline or video.title or f"{channel.title} {timezone.localtime().strftime('%Y-%m-%d %H:%M')}"
     ticker_time_offset = playlist_item_start_offset_seconds(cycle_item)
+    city = getattr(video, "city", None) or getattr(channel, "city", None)
+    state = getattr(video, "state", None) or getattr(channel, "state", None)
+    city_name = getattr(city, "name", "") or ""
+    state_name = getattr(state, "name", "") or ""
+    location_name = ", ".join(part for part in [city_name, state_name] if part)
     return {
         "title": title,
         "headline": headline,
@@ -386,9 +394,36 @@ def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
         "show_channel_logo": setting.show_channel_logo,
         "mobile_channel_logo_size_percent": setting.mobile_channel_logo_size_percent,
         "render_channel_logo_size_percent": setting.render_channel_logo_size_percent,
+        "web_channel_logo_left_percent": setting.web_channel_logo_left_percent,
+        "web_channel_logo_right_percent": setting.web_channel_logo_right_percent,
+        "web_channel_logo_top_percent": setting.web_channel_logo_top_percent,
+        "web_channel_logo_bottom_percent": setting.web_channel_logo_bottom_percent,
+        "mobile_channel_logo_left_percent": setting.mobile_channel_logo_left_percent,
+        "mobile_channel_logo_right_percent": setting.mobile_channel_logo_right_percent,
+        "mobile_channel_logo_top_percent": setting.mobile_channel_logo_top_percent,
+        "mobile_channel_logo_bottom_percent": setting.mobile_channel_logo_bottom_percent,
+        "render_channel_logo_left_percent": setting.render_channel_logo_left_percent,
+        "render_channel_logo_right_percent": setting.render_channel_logo_right_percent,
+        "render_channel_logo_top_percent": setting.render_channel_logo_top_percent,
+        "render_channel_logo_bottom_percent": setting.render_channel_logo_bottom_percent,
         "web_live_location_size_percent": setting.web_live_location_size_percent,
+        "web_live_location_left_percent": setting.web_live_location_left_percent,
+        "web_live_location_right_percent": setting.web_live_location_right_percent,
+        "web_live_location_top_percent": setting.web_live_location_top_percent,
+        "web_live_location_bottom_percent": setting.web_live_location_bottom_percent,
         "mobile_live_location_size_percent": setting.mobile_live_location_size_percent,
+        "mobile_live_location_left_percent": setting.mobile_live_location_left_percent,
+        "mobile_live_location_right_percent": setting.mobile_live_location_right_percent,
+        "mobile_live_location_top_percent": setting.mobile_live_location_top_percent,
+        "mobile_live_location_bottom_percent": setting.mobile_live_location_bottom_percent,
         "render_location_size_percent": setting.render_location_size_percent,
+        "render_location_left_percent": setting.render_location_left_percent,
+        "render_location_right_percent": setting.render_location_right_percent,
+        "render_location_top_percent": setting.render_location_top_percent,
+        "render_location_bottom_percent": setting.render_location_bottom_percent,
+        "city_name": city_name,
+        "state_name": state_name,
+        "location_name": location_name,
         "show_live_badge": setting.show_live_badge,
         "show_lower_third": setting.show_lower_third and bool(lower_label or headlines),
         "show_ticker": setting.show_ticker,
@@ -422,9 +457,36 @@ LIVE_BROADCAST_VISUAL_SNAPSHOT_KEYS = (
     "show_channel_logo",
     "mobile_channel_logo_size_percent",
     "render_channel_logo_size_percent",
+    "web_channel_logo_left_percent",
+    "web_channel_logo_right_percent",
+    "web_channel_logo_top_percent",
+    "web_channel_logo_bottom_percent",
+    "mobile_channel_logo_left_percent",
+    "mobile_channel_logo_right_percent",
+    "mobile_channel_logo_top_percent",
+    "mobile_channel_logo_bottom_percent",
+    "render_channel_logo_left_percent",
+    "render_channel_logo_right_percent",
+    "render_channel_logo_top_percent",
+    "render_channel_logo_bottom_percent",
     "web_live_location_size_percent",
+    "web_live_location_left_percent",
+    "web_live_location_right_percent",
+    "web_live_location_top_percent",
+    "web_live_location_bottom_percent",
     "mobile_live_location_size_percent",
+    "mobile_live_location_left_percent",
+    "mobile_live_location_right_percent",
+    "mobile_live_location_top_percent",
+    "mobile_live_location_bottom_percent",
     "render_location_size_percent",
+    "render_location_left_percent",
+    "render_location_right_percent",
+    "render_location_top_percent",
+    "render_location_bottom_percent",
+    "city_name",
+    "state_name",
+    "location_name",
     "show_live_badge",
     "show_lower_third",
     "show_ticker",

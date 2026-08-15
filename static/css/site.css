@@ -2384,10 +2384,12 @@ time {
   align-items: center;
   display: grid;
   justify-items: center;
+  left: var(--live-logo-left, auto);
+  bottom: var(--live-logo-bottom, auto);
   pointer-events: none;
   position: absolute;
-  right: 16px;
-  top: 16px;
+  right: var(--live-logo-right, 4%);
+  top: var(--live-logo-top, 4%);
   z-index: 4;
 }
 
@@ -2405,21 +2407,18 @@ time {
   color: #fff;
   display: inline-flex;
   gap: 7px;
-  left: 14px;
+  left: var(--live-location-left, 3%);
+  right: var(--live-location-right, auto);
+  bottom: var(--live-location-bottom, auto);
   max-width: min(46%, 360px);
   min-height: 32px;
   padding: 7px 12px;
   pointer-events: none;
   position: absolute;
-  top: 16px;
+  top: var(--live-location-top, 4%);
   transform: scale(var(--live-location-scale, 1));
   transform-origin: top left;
   z-index: 5;
-}
-
-.web-live-badge + .web-live-logo + .web-live-location,
-.web-live-badge ~ .web-live-location {
-  top: 46px;
 }
 
 .web-live-location svg {
@@ -2699,8 +2698,8 @@ time {
   }
 
   .web-live-logo {
-    right: 12px;
-    top: 12px;
+    right: var(--live-logo-right, 4%);
+    top: var(--live-logo-top, 4%);
   }
 
   .web-live-logo img {
@@ -2710,16 +2709,9 @@ time {
 
   .web-live-location {
     gap: 6px;
-    left: 10px;
     max-width: 48%;
     min-height: 28px;
     padding: 6px 9px;
-    top: 10px;
-  }
-
-  .web-live-badge + .web-live-logo + .web-live-location,
-  .web-live-badge ~ .web-live-location {
-    top: 38px;
   }
 
   .web-live-location svg {
@@ -2820,16 +2812,9 @@ time {
   }
 
   .web-live-location {
-    left: 8px;
     max-width: 52%;
     min-height: 24px;
     padding: 5px 8px;
-    top: 8px;
-  }
-
-  .web-live-badge + .web-live-logo + .web-live-location,
-  .web-live-badge ~ .web-live-location {
-    top: 32px;
   }
 
   .web-live-location span {

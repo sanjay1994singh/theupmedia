@@ -612,6 +612,18 @@ class LiveTVSetting(models.Model):
         help_text="Rendered video channel logo size in percent (40-200).",
         validators=[MinValueValidator(40), MaxValueValidator(200)],
     )
+    web_channel_logo_left_percent = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Web logo left offset percent. Leave blank to use right.")
+    web_channel_logo_right_percent = models.PositiveSmallIntegerField(default=4, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Web logo right offset percent.")
+    web_channel_logo_top_percent = models.PositiveSmallIntegerField(default=4, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Web logo top offset percent.")
+    web_channel_logo_bottom_percent = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Web logo bottom offset percent. Leave blank to use top.")
+    mobile_channel_logo_left_percent = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Mobile logo left offset percent. Leave blank to use right.")
+    mobile_channel_logo_right_percent = models.PositiveSmallIntegerField(default=4, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Mobile logo right offset percent.")
+    mobile_channel_logo_top_percent = models.PositiveSmallIntegerField(default=4, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Mobile logo top offset percent.")
+    mobile_channel_logo_bottom_percent = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Mobile logo bottom offset percent. Leave blank to use top.")
+    render_channel_logo_left_percent = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Rendered video logo left offset percent. Leave blank to use right.")
+    render_channel_logo_right_percent = models.PositiveSmallIntegerField(default=2, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Rendered video logo right offset percent.")
+    render_channel_logo_top_percent = models.PositiveSmallIntegerField(default=4, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Rendered video logo top offset percent.")
+    render_channel_logo_bottom_percent = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Rendered video logo bottom offset percent. Leave blank to use top.")
     web_live_location_size_percent = models.PositiveSmallIntegerField(
         default=100,
         help_text="Web Live location badge size in percent (40-200).",
@@ -626,6 +638,23 @@ class LiveTVSetting(models.Model):
         default=100,
         help_text="Rendered video location badge size in percent (40-200).",
         validators=[MinValueValidator(40), MaxValueValidator(200)],
+    )
+    web_live_location_left_percent = models.PositiveSmallIntegerField(default=3, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Web location left offset percent.")
+    web_live_location_right_percent = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Web location right offset percent. Leave blank to use left.")
+    web_live_location_top_percent = models.PositiveSmallIntegerField(default=4, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Web location top offset percent.")
+    web_live_location_bottom_percent = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Web location bottom offset percent. Leave blank to use top.")
+    mobile_live_location_left_percent = models.PositiveSmallIntegerField(default=4, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Mobile location left offset percent.")
+    mobile_live_location_right_percent = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Mobile location right offset percent. Leave blank to use left.")
+    mobile_live_location_top_percent = models.PositiveSmallIntegerField(default=5, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Mobile location top offset percent.")
+    mobile_live_location_bottom_percent = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Mobile location bottom offset percent. Leave blank to use top.")
+    render_location_left_percent = models.PositiveSmallIntegerField(default=2, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Rendered video location left offset percent.")
+    render_location_right_percent = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Rendered video location right offset percent. Leave blank to use left.")
+    render_location_top_percent = models.PositiveSmallIntegerField(default=4, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Rendered video location top offset percent.")
+    render_location_bottom_percent = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)], help_text="Rendered video location bottom offset percent. Leave blank to use top.")
+    live_video_retention_hours = models.PositiveIntegerField(
+        default=48,
+        validators=[MinValueValidator(1), MaxValueValidator(720)],
+        help_text="Uploaded Live TV/video source cleanup retention in hours (1-720). Rendered outputs are preserved.",
     )
     default_lower_third_label = models.CharField(max_length=60, null=True,blank=True)
     default_headline = models.CharField(max_length=180, null=True,blank=True)
