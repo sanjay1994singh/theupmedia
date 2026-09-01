@@ -1958,6 +1958,7 @@ def normalize_duplicate_processing_render_jobs(active_job_id):
 
 LIVE_BROADCAST_VISUAL_SNAPSHOT_KEYS = (
     "headline",
+    "location_label",
     "headline_label",
     "lower_third_label",
     "ticker_label",
@@ -2021,7 +2022,7 @@ def live_broadcast_visual_snapshot(snapshot):
 def duplicate_completed_render_for(job):
     if not job or not job.source_video_id:
         return None
-    return (
+    queryset = (
         SocialRenderedVideo.objects.filter(
         source_video_id=job.source_video_id,
         frame_category="live_broadcast",
@@ -2032,8 +2033,16 @@ def duplicate_completed_render_for(job):
         .exclude(pk=job.pk)
         .exclude(rendered_video="")
         .order_by("completed_at", "created_at", "pk")
-        .first()
     )
+    if job.render_key:
+        exact = queryset.filter(render_key=job.render_key).first()
+        if exact:
+            return exact
+    wanted_snapshot = live_broadcast_visual_snapshot(job.snapshot or {})
+    for candidate in queryset[:25]:
+        if live_broadcast_visual_snapshot(candidate.snapshot or {}) == wanted_snapshot:
+            return candidate
+    return None
 
 
 def skip_duplicate_render_job(job, canonical_job):
@@ -2126,6 +2135,7 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
         return max(0, min(max(0, total_size - overlay_size), position))
 
     live_label = snapshot.get("live_label") or "LIVE"
+    location_label = snapshot.get("location_label") or ""
     lower_label = snapshot.get("lower_third_label") or snapshot.get("headline_label") or ""
     headline = snapshot.get("headline") or ""
     headlines = [str(item).strip() for item in (snapshot.get("headlines") or []) if str(item).strip()]
@@ -2148,7 +2158,7 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
         )
 
     location_name = (
-        str(snapshot.get("location_name") or "").strip()
+        str(snapshot.get("location_label") or snapshot.get("location_name") or "").strip()
         or ", ".join(
             part for part in [
                 str(snapshot.get("city_name") or "").strip(),
@@ -2157,19 +2167,25 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
         )
     )
     if location_name:
-        location_file = add_text_file(location_name, "broadcast-location")
-        location_font_arg = ffmpeg_font_arg_for_text(location_name, devanagari_font, latin_font)
-        pin_file = add_text_file("●", "broadcast-location-pin")
-        pin_font_arg = ffmpeg_font_arg_for_text("●", devanagari_font, latin_font)
         try:
             location_scale = max(0.4, min(2.0, float(snapshot.get("render_location_size_percent") or 100) / 100))
         except (TypeError, ValueError):
             location_scale = 1.0
         location_font_size = max(18, min(54, round(30 * location_scale)))
-        pin_font_size = max(14, min(38, round(20 * location_scale)))
         location_height = max(44, min(92, round(56 * location_scale)))
-        text_width = round(len(location_name) * location_font_size * 0.62)
-        location_width = min(input_width - 48, max(round(230 * location_scale), text_width + round(90 * location_scale)))
+        location_file, location_text_width = make_text_png(
+            location_name,
+            "broadcast-location",
+            location_font_size,
+            (255, 255, 255, 255),
+            location_height,
+            padding_x=0,
+            max_width=max(120, input_width - 140),
+        )
+        location_width = min(
+            input_width - 48,
+            max(round(230 * location_scale), location_text_width + round(90 * location_scale)),
+        )
         location_x = overlay_axis_position(
             snapshot.get("render_location_left_percent"),
             snapshot.get("render_location_right_percent"),
@@ -2185,15 +2201,19 @@ def build_broadcast_live_tv_filter(job, snapshot, text_files, input_width=1920, 
             default_start=4,
         )
         pin_x = location_x + max(16, round(22 * location_scale))
-        pin_y = location_y + max(12, round(16 * location_scale))
         text_x = location_x + max(44, round(52 * location_scale))
-        text_y = location_y + max(10, round(13 * location_scale))
-        add_filter(
-            f"drawbox=x={location_x}:y={location_y}:w={location_width}:h={location_height}:color=black@0.58:t=fill,"
-            f"drawbox=x={location_x}:y={location_y}:w={location_width}:h={location_height}:color=white@0.18:t=2,"
-            f"drawtext=textfile='{ffmpeg_path(pin_file)}'{pin_font_arg}:x={pin_x}:y={pin_y}:fontsize={pin_font_size}:fontcolor=white,"
-            f"drawtext=textfile='{ffmpeg_path(location_file)}'{location_font_arg}:x={text_x}:y={text_y}:fontsize={location_font_size}:fontcolor=white"
-        )
+        if location_file:
+            text_files.append(location_file)
+            location_input = add_overlay_input(location_file)
+            next_label = f"v{overlay_index}"
+            filters.append(
+                f"[{current}]drawbox=x={location_x}:y={location_y}:w={location_width}:h={location_height}:color=black@0.58:t=fill,"
+                f"drawbox=x={location_x}:y={location_y}:w={location_width}:h={location_height}:color=white@0.18:t=2,"
+                f"drawbox=x={pin_x}:y={location_y + round(location_height / 2) - 4}:w=8:h=8:color=white@1:t=fill[vlocationbg];"
+                f"[vlocationbg][{location_input}:v]overlay=x={text_x}:y={location_y}:shortest=0:repeatlast=1[{next_label}]"
+            )
+            current = next_label
+            overlay_index += 1
 
     show_logo = bool_snapshot(snapshot, "show_channel_logo")
     logo_path = media_storage_path(snapshot.get("channel_logo"))

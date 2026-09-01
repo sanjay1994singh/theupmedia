@@ -365,6 +365,12 @@ def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
     headlines = expanded_video_headlines(video, setting.maximum_headline_characters)
     headline = headlines[0] if headlines else ""
     lower_label = video.lower_third_label or ""
+    location_parts = []
+    if video.city_id and video.city:
+        location_parts.append(video.city.name)
+    if video.state_id and video.state:
+        location_parts.append(video.state.name)
+    location_label = ", ".join(part for part in location_parts if part)
     title = headline or video.title or f"{channel.title} {timezone.localtime().strftime('%Y-%m-%d %H:%M')}"
     ticker_time_offset = playlist_item_start_offset_seconds(cycle_item)
     city = getattr(video, "city", None) or getattr(channel, "city", None)
@@ -374,6 +380,7 @@ def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
     location_name = ", ".join(part for part in [city_name, state_name] if part)
     return {
         "title": title,
+        "location_label": location_label,
         "headline": headline,
         "headlines": headlines,
         "headline_change_seconds": max(1, min(60, int(video.headline_change_seconds or 2))),
@@ -441,6 +448,7 @@ def broadcast_snapshot_for(video, channel, playlist_item, cycle_item):
 
 LIVE_BROADCAST_VISUAL_SNAPSHOT_KEYS = (
     "headline",
+    "location_label",
     "headlines",
     "headline_change_seconds",
     "repeat_headlines",
@@ -504,7 +512,7 @@ def live_broadcast_visual_snapshot(snapshot):
 def live_broadcast_render_identity(channel, video, playlist_item, snapshot):
     # A source upload is rendered only once, regardless of later playlist
     # cycles, ticker changes, channel changes, rebuilds, or retries.
-    return f"live:source:v3:{video.pk}"
+    return f"live:source:v4:{video.pk}"
 
 
 def same_live_broadcast_render_jobs(channel, video, playlist_item):
@@ -535,7 +543,7 @@ def completed_live_broadcast_render_job(channel, video, playlist_item, snapshot,
         .filter(status__in=[SocialRenderedVideo.Status.COMPLETED, SocialRenderedVideo.Status.DONE])
         .exclude(rendered_video="")
     )
-    return queryset.order_by("completed_at", "created_at", "pk").first()
+    return matching_live_broadcast_render_job(queryset, snapshot, render_key)
 
 
 def queueable_live_broadcast_render_job(channel, video, playlist_item, snapshot, render_key):
@@ -571,6 +579,8 @@ def create_broadcast_render_job(cycle_item):
             "cycle__channel",
             "playlist_item",
             "video",
+            "video__city",
+            "video__state",
         )
         .get(pk=cycle_item.pk)
     )
