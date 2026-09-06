@@ -212,9 +212,9 @@ class LiveTVChannel(models.Model):
         if self.source_type != self.SourceType.PLAYLIST:
             if not self.category_id:
                 errors["category"] = "Category is required."
-            if not self.state_id:
+            if self.source_type != self.SourceType.DIRECT and not self.state_id:
                 errors["state"] = "State is required."
-            if not self.city_id:
+            if self.source_type != self.SourceType.DIRECT and not self.city_id:
                 errors["city"] = "City is required."
         if self.city_id and self.state_id and self.city and self.city.state_id != self.state_id:
             errors["city"] = "City must belong to selected state."
@@ -818,11 +818,7 @@ class ShortsVideo(models.Model):
         errors = {}
         if not self.category_id:
             errors["category"] = "Category is required."
-        if not self.state_id:
-            errors["state"] = "State is required."
-        if not self.city_id:
-            errors["city"] = "City is required."
-        elif self.state_id and self.city and self.city.state_id != self.state_id:
+        if self.city_id and self.state_id and self.city and self.city.state_id != self.state_id:
             errors["city"] = "City must belong to selected state."
         if errors:
             raise ValidationError(errors)

@@ -45,9 +45,9 @@ class LiveTVChannelForm(forms.ModelForm):
         if source_type != LiveTVChannel.SourceType.PLAYLIST:
             if not category:
                 self.add_error("category", "Category is required.")
-            if not state:
+            if source_type != LiveTVChannel.SourceType.DIRECT and not state:
                 self.add_error("state", "State is required.")
-            if not city:
+            if source_type != LiveTVChannel.SourceType.DIRECT and not city:
                 self.add_error("city", "City is required.")
         if state and city and city.state_id != state.pk:
             self.add_error("city", "City must belong to selected state.")

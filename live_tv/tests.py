@@ -418,7 +418,7 @@ class RequiredVideoTaxonomyTests(TestCase):
         self.state = LiveTVState.objects.create(name="Uttar Pradesh", slug="uttar-pradesh")
         self.city = LiveTVCity.objects.create(name="Lucknow", slug="lucknow", state=self.state)
 
-    def test_direct_video_requires_category_state_and_city(self):
+    def test_direct_video_requires_category_but_location_is_optional(self):
         video = LiveTVChannel(
             title="Upload",
             slug="upload",
@@ -428,8 +428,43 @@ class RequiredVideoTaxonomyTests(TestCase):
         with self.assertRaises(ValidationError) as context:
             video.full_clean()
         self.assertIn("category", context.exception.message_dict)
-        self.assertIn("state", context.exception.message_dict)
-        self.assertIn("city", context.exception.message_dict)
+        self.assertNotIn("state", context.exception.message_dict)
+        self.assertNotIn("city", context.exception.message_dict)
+        video.category = self.category
+        video.full_clean()
+
+    def test_admin_upload_forms_accept_missing_location(self):
+        from django.contrib.admin.sites import AdminSite
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import RequestFactory
+        from .admin import LiveTVChannelAdmin, ShortsVideoAdmin
+
+        request = RequestFactory().get("/admin/")
+        for model, admin_class in (
+            (LiveTVChannel, LiveTVChannelAdmin),
+            (ShortsVideo, ShortsVideoAdmin),
+        ):
+            with self.subTest(model=model.__name__):
+                form_class = admin_class(model, AdminSite()).get_form(request)
+                data = {name: field.initial for name, field in form_class.base_fields.items()
+                        if field.initial is not None and not callable(field.initial)}
+                data.update(title="Upload", slug="upload", category=self.category.pk,
+                            source_type=LiveTVChannel.SourceType.DIRECT)
+                form = form_class(data=data, files={
+                    "video_file": SimpleUploadedFile("upload.mp4", b"video", content_type="video/mp4"),
+                })
+                self.assertTrue(form.is_valid(), form.errors)
+
+    def test_optional_location_still_rejects_mismatched_city(self):
+        other_state = LiveTVState.objects.create(name="Bihar", slug="bihar")
+        for model in (LiveTVChannel, ShortsVideo):
+            with self.subTest(model=model.__name__):
+                video = model(category=self.category, state=other_state, city=self.city)
+                if model is LiveTVChannel:
+                    video.source_type = LiveTVChannel.SourceType.DIRECT
+                with self.assertRaises(ValidationError) as context:
+                    video.clean()
+                self.assertIn("city", context.exception.message_dict)
 
     def test_shorts_requires_category(self):
         short = ShortsVideo(
